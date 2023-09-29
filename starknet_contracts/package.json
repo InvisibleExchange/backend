@@ -1,8 +1,0 @@
-{
-  "dependencies": {
-    "chai": "^4.3.7",
-    "mocha": "^10.1.0",
-    "starknet": "^4.9.0",
-    "string-hex": "^1.0.0"
-  }
-}

@@ -1,4 +1,0 @@
-forge test --fork-url https://goerli.infura.io/v3/083de4ff46a746c2b1e37ce1c6a305ed
-
-
-anvil -a 5 --fork-url https://goerli.infura.io/v3/083de4ff46a746c2b1e37ce1c6a305ed

@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "@openzeppelin/contracts": "^4.8.0",
-    "ethers": "^5.7.2",
-    "starknet-storage-proof-solidity": "github:Kelvyne/starknet-storage-proof-solidity"
-  }
-}
