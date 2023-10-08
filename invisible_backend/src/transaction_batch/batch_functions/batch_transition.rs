@@ -159,7 +159,7 @@ pub fn _transition_state(
     );
 
     // Todo: This is for testing only ----------------------------
-    let path = Path::new("../cairo_contracts/transaction_batch/tx_batch_input.json");
+    let path = Path::new("../../cairo_code/cairo_contracts/transaction_batch/tx_batch_input.json");
     std::fs::write(path, serde_json::to_string(&output_json).unwrap()).unwrap();
     // Todo: This is for testing only ----------------------------
 

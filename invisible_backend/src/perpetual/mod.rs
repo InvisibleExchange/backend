@@ -28,30 +28,30 @@ pub enum PositionEffectType {
 pub static LEVERAGE_BOUNDS_PER_ASSET: phf::Map<&'static str, [f32; 2]> = phf_map! {
 "12345" => [1.5, 30.0], // BTC
 "54321" => [15.0, 150.0], // ETH
-"66666" => [1_000_000_000.0, 140_000_000_000.0], // PEPE
+"66666" => [1000.0, 10_000.0], // SOL
 };
 pub const MAX_LEVERAGE: f64 = 15.0;
 
 // BTC - 12345
 // ETH - 54321
 // USDC - 55555
-// PEPE - 66666
+// SOL - 66666
 pub static ASSETS: [u32; 4] = [12345, 54321, 55555, 66666];
 pub static SYNTHETIC_ASSETS: [u32; 3] = [12345, 54321, 66666];
 pub const COLLATERAL_TOKEN: u32 = 55555;
 
 pub static DECIMALS_PER_ASSET: phf::Map<&'static str, u8> = phf_map! {
-"12345" => 9, // BTC
-"54321" => 9, // ETH
+"12345" => 8, // BTC
+"54321" => 8, // ETH
 "55555" => 6, // USDC
-"66666" => 0, // PEPE
+"66666" => 8, // SOL
 };
 // Minimum amount that is worth acknowledging
 pub static DUST_AMOUNT_PER_ASSET: phf::Map<&'static str, u64> = phf_map! {
-"12345" => 2500, // BTC ~ 5c
-"54321" => 25000, // ETH ~ 5c
-"55555" => 50000, // USDC ~ 5c
-"66666" => 50000, // PEPE ~ 5c
+"12345" => 250, // BTC ~ 5c
+"54321" => 2500, // ETH ~ 5c
+"55555" => 50_000, // USDC ~ 5c
+"66666" => 250_000, // SOL ~ 5c
 };
 
 // ? ------------------  SYNTHETIC_ASSETS ------------------ //
@@ -59,13 +59,13 @@ pub static DUST_AMOUNT_PER_ASSET: phf::Map<&'static str, u64> = phf_map! {
 pub static PRICE_DECIMALS_PER_ASSET: phf::Map<&'static str, u8> = phf_map! {
 "12345" => 6, // BTC
 "54321" => 6, // ETH
-"66666" => 10, // PEPE
+"66666" => 6, // SOL
 };
 
 pub static IMPACT_NOTIONAL_PER_ASSET: phf::Map<&'static str, u64> = phf_map! {
-"12345" => 200_000_000, // BTC
-"54321" => 2_000_000_000, // ETH
-"66666" => 1_500_000_000, // PEPE
+"12345" => 20_000_000, // BTC
+"54321" => 200_000_000, // ETH
+"66666" => 7_500_000_000, // SOL
 
 };
 
@@ -73,7 +73,7 @@ pub static IMPACT_NOTIONAL_PER_ASSET: phf::Map<&'static str, u64> = phf_map! {
 pub static MIN_PARTIAL_LIQUIDATION_SIZE: phf::Map<&'static str, u64> = phf_map! {
 "12345" => 50_000_000, // BTC
 "54321" => 500_000_000, // ETH
-"66666" => 350_000_000, // PEPE
+"66666" => 350_000_000, // SOL
 };
 
 pub const LEVERAGE_DECIMALS: u8 = 4; // 6 decimals for leverage

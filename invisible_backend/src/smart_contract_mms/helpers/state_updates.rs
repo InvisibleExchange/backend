@@ -42,6 +42,9 @@ pub fn onchain_register_mm_state_updates(
         );
     }
 
+    println!("vlp_note: {:?}", vlp_note);
+    println!("order_tab: {:?}", order_tab);
+
     drop(state_tree_m);
     drop(updated_state_hashes_m);
 }

@@ -40,7 +40,8 @@ impl MainStorage {
             .path("./storage/transaction_data/".to_string() + &batch_index.to_string());
         let tx_db = config.open().unwrap();
 
-        let config = Config::new().path("./storage/price_data".to_string());
+        let config =
+            Config::new().path("./storage/price_data/".to_string() + &batch_index.to_string());
         let price_db = config.open().unwrap();
 
         let config = Config::new().path("./storage/funding_info".to_string());
@@ -305,22 +306,9 @@ impl MainStorage {
             .path("./storage/transaction_data/".to_string() + &new_batch_index.to_string());
         let tx_db = config.open().unwrap();
 
-        // ? Store all the the values at the end of the batch
-        let price_data = self.read_price_data();
-        self.price_db
-            .insert(
-                self.latest_batch.to_string(),
-                serde_json::to_vec(&price_data).unwrap(),
-            )
-            .unwrap();
-
-        let funding_info = self.read_funding_info().ok();
-        self.funding_db
-            .insert(
-                self.latest_batch.to_string(),
-                serde_json::to_vec(&funding_info).unwrap(),
-            )
-            .unwrap();
+        // Todo: We could store funding and pricing info in the db
+        // let price_data = self.read_price_data();
+        // let funding_info = self.read_funding_info().ok();
 
         self.tx_db = tx_db;
         self.latest_batch = new_batch_index;

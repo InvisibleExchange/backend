@@ -1,6 +1,12 @@
 // Import the functions you need from the SDKs you need
 const { initializeApp } = require("firebase/app");
-const { getFirestore } = require("firebase/firestore/lite");
+const {
+  getFirestore,
+  getDoc,
+  updateDoc,
+  setDoc,
+  doc,
+} = require("firebase/firestore/lite");
 
 const {
   collection,
@@ -53,6 +59,20 @@ async function getLastDayTrades(isPerp) {
   return { token24hVolumes, token24hTrades };
 }
 
+async function storeOnchainDeposit(depositObject) {
+  console.log("depositObject: ", depositObject);
+
+  let depositDoc = doc(db, "deposits", depositObject.depositId.toString());
+  let depositData = await getDoc(depositDoc);
+
+  if (depositData.exists()) {
+    await updateDoc(depositDoc, depositObject);
+  } else {
+    await setDoc(depositDoc, depositObject);
+  }
+}
+
 module.exports = {
   getLastDayTrades,
+  storeOnchainDeposit,
 };

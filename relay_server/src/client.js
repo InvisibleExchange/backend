@@ -8,7 +8,7 @@ const {
   storeSpotOrder,
   storePerpOrder,
   initLiquidity,
-} = require("./helpers/helpers");
+} = require("./helpers/localStorage");
 
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
@@ -91,7 +91,6 @@ app.post("/execute_deposit", (req, res) => {
     if (err) {
       console.log(err);
     } else {
-      console.log(response);
       res.send({ response: response });
     }
   });
@@ -342,5 +341,5 @@ app.post("/update_index_price", (req, res) => {
 // ===================================================================
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`Relay server listening on port ${port}`);
 });

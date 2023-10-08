@@ -22,6 +22,7 @@ pub struct ProgramOutput {
     pub accumulated_hashes: Vec<AccumulatedHashesOutput>,
     pub deposit_outputs: Vec<DepositOutput>,
     pub withdrawal_outputs: Vec<WithdrawalOutput>,
+    pub mm_registrations: Vec<MMRegistrationOutput>,
     pub note_outputs: Vec<NoteOutput>,
     pub position_outputs: Vec<PerpPositionOutput>,
     pub tab_outputs: Vec<OrderTabOutput>,
@@ -34,6 +35,7 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
     // 1: accumulated_hashes
     // 1.1: deposits
     // 1.2: withdrawals
+    // 1.3: MM registrations
     // 2: notes
     // 3: positions
     // 4: order_tabs
@@ -54,11 +56,14 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
     let (deposit_outputs, cairo_output) =
         parse_deposit_outputs(cairo_output, dex_state.program_input_counts.n_deposits);
 
-    println!("deposit_outputs: {:?}", deposit_outputs);
-
     // ? Parse withdrawals
     let (withdrawal_outputs, cairo_output) =
         parse_withdrawal_outputs(&cairo_output, dex_state.program_input_counts.n_withdrawals);
+
+    let (mm_registrations, cairo_output) = parse_mm_registration_outputs(
+        &cairo_output,
+        dex_state.program_input_counts.n_mm_registrations,
+    );
 
     // ? Parse notes
     let (note_outputs, cairo_output) =
@@ -84,6 +89,7 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
         accumulated_hashes,
         deposit_outputs,
         withdrawal_outputs,
+        mm_registrations,
         note_outputs,
         position_outputs,
         tab_outputs,
@@ -382,6 +388,55 @@ fn parse_withdrawal_outputs(
     let shifted_output = &output[2 * num_wthdrawals as usize..];
 
     return (withdrawals, shifted_output);
+}
+
+// * =====================================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MMRegistrationOutput {
+    pub is_perp: bool,
+    pub vlp_token: u32,
+    pub max_vlp_supply: u64,
+    pub address: String,
+}
+
+fn parse_mm_registration_outputs(
+    output: &[BigUint],
+    num_registrations: u32,
+) -> (Vec<MMRegistrationOutput>, &[BigUint]) {
+    // & address
+    // & batched_registration_info format: | is_perp (1 bits) | vlp_token (32 bits) | max_vlp_supply (64 bits) |
+
+    let mut mm_registrations: Vec<MMRegistrationOutput> = Vec::new();
+
+    for i in 0..num_registrations {
+        let batch_registrations_info = output[(i * 2) as usize].clone();
+
+        // 20703416456491290441237729280 0 1122334455 1000000000000
+
+        let split_vec = split_by_bytes(&batch_registrations_info, vec![1, 32, 64]);
+
+        println!("batch_registrations_info: {:?}", batch_registrations_info);
+
+        let is_perp = split_vec[0].to_u8().unwrap() == 1;
+        let vlp_token = split_vec[1].to_u32().unwrap();
+        let max_vlp_supply = split_vec[2].to_u64().unwrap();
+
+        let address = output[(i * 2 + 1) as usize].to_string();
+
+        let registration = MMRegistrationOutput {
+            is_perp,
+            vlp_token,
+            max_vlp_supply,
+            address,
+        };
+
+        mm_registrations.push(registration);
+    }
+
+    let shifted_output = &output[2 * num_registrations as usize..];
+
+    return (mm_registrations, shifted_output);
 }
 
 // * =====================================================================================

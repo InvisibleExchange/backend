@@ -3,7 +3,11 @@ const amqp = require("amqplib/callback_api");
 
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
-const { initDb, storeSpotOrder, storePerpOrder } = require("./helpers/helpers");
+const {
+  initDb,
+  storeSpotOrder,
+  storePerpOrder,
+} = require("./helpers/localStorage");
 
 const path = require("path");
 const protoPath = path.join(
