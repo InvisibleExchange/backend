@@ -264,6 +264,5 @@ Object.defineProperty(Array.prototype, "equals", { enumerable: false });
 module.exports = {
   listenToLiquidityUpdates,
   compileLiqUpdateMessage,
-
   initOrderBooks,
 };

@@ -5,7 +5,8 @@ const port = 4000;
 const amqp = require("amqplib/callback_api");
 
 const cors = require("cors");
-const { initDb, initLiquidity } = require("./helpers/helpers");
+
+const { initDb, initLiquidity } = require("./helpers/localStorage");
 const { initServer, initFundingInfoInterval } = require("./helpers/initServer");
 
 const corsOptions = {
