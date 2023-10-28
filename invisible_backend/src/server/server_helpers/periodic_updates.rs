@@ -10,8 +10,8 @@ use crate::perpetual::IMPACT_NOTIONAL_PER_ASSET;
 use crate::server::grpc::{FundingUpdateMessage, GrpcMessage, GrpcTxResponse, MessageType};
 use crate::server::server_helpers::broadcast_message;
 use crate::trees::superficial_tree::SuperficialTree;
-use crate::utils::firestore::{create_session, retry_failed_updates};
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::firestore::{create_session, retry_failed_updates};
+use crate::utils::storage::local_storage::BackupStorage;
 
 use firestore_db_and_auth::ServiceSession;
 

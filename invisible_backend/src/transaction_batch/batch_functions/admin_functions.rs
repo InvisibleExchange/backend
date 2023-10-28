@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use error_stack::Result;
 
 use crate::trees::superficial_tree::SuperficialTree;
-use crate::utils::storage::MainStorage;
+use crate::utils::storage::local_storage::MainStorage;
 use crate::{
     perpetual::SYNTHETIC_ASSETS,
     transaction_batch::tx_batch_helpers::{

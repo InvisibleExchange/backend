@@ -15,7 +15,7 @@ use super::super::{
     server_helpers::engine_helpers::store_output_json,
 };
 use crate::utils::errors::{send_close_tab_error_reply, send_open_tab_error_reply};
-use crate::{matching_engine::orderbook::OrderBook, utils::storage::MainStorage};
+use crate::{matching_engine::orderbook::OrderBook, utils::storage::local_storage::MainStorage};
 
 use tokio::sync::{
     mpsc::Sender as MpscSender,

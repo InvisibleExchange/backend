@@ -17,7 +17,7 @@ use crate::server::grpc::engine_proto::{
 use crate::utils::errors::{
     send_add_liq_tab_error_reply, send_regster_mm_error_reply, send_remove_liq_tab_error_reply,
 };
-use crate::{matching_engine::orderbook::OrderBook, utils::storage::MainStorage};
+use crate::{matching_engine::orderbook::OrderBook, utils::storage::local_storage::MainStorage};
 
 use tokio::sync::{
     mpsc::Sender as MpscSender,

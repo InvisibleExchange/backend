@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::{crypto_utils::pedersen_on_vec, firestore::upload_file_to_storage};
+use super::{crypto_utils::pedersen_on_vec, storage::firestore::upload_file_to_storage};
 
 use serde::Deserialize;
 use serde::Serialize;

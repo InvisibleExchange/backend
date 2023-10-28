@@ -39,7 +39,7 @@ use crate::perpetual::perp_helpers::perp_rollback::PerpRollbackInfo;
 use crate::{
     matching_engine::orderbook::OrderBook,
     trees::superficial_tree::SuperficialTree,
-    utils::storage::{BackupStorage, MainStorage},
+    utils::storage::local_storage::{BackupStorage, MainStorage},
 };
 
 use crate::transactions::transaction_helpers::rollbacks::RollbackInfo;

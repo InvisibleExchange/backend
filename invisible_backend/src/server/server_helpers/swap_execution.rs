@@ -28,7 +28,7 @@ use crate::transactions::{
 
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::TransactionExecutionError;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 
 use tokio::sync::{mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender};
 
@@ -422,7 +422,7 @@ type SwapExecutionResultMessage = (
     Option<SwapErrorInfo>,
 );
 
-pub async fn await_swap_handles(
+pub async fn handle_swap_execution_results(
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
     messages: Vec<SwapExecutionResultMessage>,
@@ -556,7 +556,7 @@ pub async fn retry_failed_swaps(
         };
 
         let retry_messages;
-        match await_swap_handles(
+        match handle_swap_execution_results(
             ws_connections,
             privileged_ws_connections,
             new_results,

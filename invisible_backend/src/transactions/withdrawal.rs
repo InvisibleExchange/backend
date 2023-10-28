@@ -13,7 +13,7 @@ use crate::utils::errors::{
     send_withdrawal_error, TransactionExecutionError, WithdrawalThreadExecutionError,
 };
 
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 use crossbeam::thread;
 use error_stack::{Report, Result};
 use num_bigint::BigUint;

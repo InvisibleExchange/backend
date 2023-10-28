@@ -42,13 +42,8 @@ async function listenForDeposits(db) {
   let processedDepositIds = [];
 
   getProcessedDeposits(db, (err, pending_, processed_) => {
-    if (err) {
-      console.log("error: ", err);
-      throw err;
-    } else {
-      pendingDepositIds = pending_ ?? [];
-      processedDepositIds = processed_ ?? [];
-    }
+    pendingDepositIds = pending_ ?? [];
+    processedDepositIds = processed_ ?? [];
   });
 
   invisibleL1Contract.on(

@@ -1,6 +1,6 @@
 use super::perp_swap_execution::{process_and_execute_perp_swaps, retry_failed_perp_swaps};
 use super::swap_execution::{
-    await_swap_handles, process_and_execute_spot_swaps, retry_failed_swaps,
+    handle_swap_execution_results, process_and_execute_spot_swaps, retry_failed_swaps,
 };
 
 use std::thread::ThreadId;
@@ -23,7 +23,7 @@ use crate::transactions::limit_order::LimitOrder;
 use crate::transactions::transaction_helpers::rollbacks::RollbackInfo;
 
 use crate::utils::crypto_utils::Signature;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 
 use tokio::sync::{mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender};
 
@@ -67,7 +67,9 @@ pub async fn execute_spot_swaps_after_amend_order(
     };
 
     let retry_messages;
-    match await_swap_handles(ws_connections, privileged_ws_connections, handles, user_id).await {
+    match handle_swap_execution_results(ws_connections, privileged_ws_connections, handles, user_id)
+        .await
+    {
         Ok(rm) => retry_messages = rm,
         Err(e) => return Err(e),
     };

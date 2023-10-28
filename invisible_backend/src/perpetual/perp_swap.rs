@@ -36,7 +36,7 @@ use crate::transaction_batch::LeafNodeType;
 use crate::transactions::transaction_helpers::swap_helpers::unblock_order;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 use crate::utils::{
     errors::{send_perp_swap_error, PerpSwapExecutionError},
     notes::Note,

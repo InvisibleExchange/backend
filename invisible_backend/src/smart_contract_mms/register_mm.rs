@@ -12,7 +12,7 @@ use crate::{
     server::grpc::engine_proto::OnChainRegisterMmReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{notes::Note, storage::BackupStorage},
+    utils::{notes::Note, storage::local_storage::BackupStorage},
 };
 
 use crate::utils::crypto_utils::Signature;

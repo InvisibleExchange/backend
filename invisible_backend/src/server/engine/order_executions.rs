@@ -22,14 +22,15 @@ use super::super::{
             process_and_execute_perp_swaps, process_perp_order_request, retry_failed_perp_swaps,
         },
         swap_execution::{
-            await_swap_handles, process_and_execute_spot_swaps, process_limit_order_request,
-            retry_failed_swaps,
+            handle_swap_execution_results, process_and_execute_spot_swaps,
+            process_limit_order_request, retry_failed_swaps,
         },
         WsConnectionsMap, PERP_MARKET_IDS,
     },
 };
 
 use crate::perpetual::{perp_helpers::perp_rollback::PerpRollbackInfo, perp_order::PerpOrder};
+use crate::server::server_helpers::engine_helpers::verify_tab_existence;
 use crate::{
     matching_engine::{domain::OrderSide as OBOrderSide, orderbook::OrderBook},
     perpetual::{
@@ -42,7 +43,7 @@ use crate::{
     trees::superficial_tree::SuperficialTree,
     utils::{
         errors::{send_liquidation_order_error_reply, PerpSwapExecutionError},
-        storage::{BackupStorage, MainStorage},
+        storage::local_storage::{BackupStorage, MainStorage},
     },
 };
 
@@ -135,13 +136,15 @@ pub async fn submit_limit_order_inner(
         }
 
         // ? Verify the order tab exist in the state tree
-        // if let Err(err_msg) =
-        //     verify_tab_existence(&limit_order.order_tab.as_ref().unwrap(), &tab_state_tree)
-        // {
-        //     return send_order_error_reply(err_msg);
-        // }
+        if let Err(err_msg) =
+            verify_tab_existence(&limit_order.order_tab.as_ref().unwrap(), &state_tree)
+        {
+            return send_order_error_reply(err_msg);
+        }
     }
 
+    // ? ------------------------------------------------------------------------------------
+    // ? Insert the order into the orderbook and see if there is a hit
     let mut processed_res = process_limit_order_request(
         order_books.get(&market_id).clone().unwrap(),
         limit_order.clone(),
@@ -156,7 +159,8 @@ pub async fn submit_limit_order_inner(
     )
     .await;
 
-    // This matches the orders and creates the swaps that can be executed
+    // ? ------------------------------------------------------------------------------------
+    // ? If there are any hits, process and execute the swaps
     let reults;
     let new_order_id;
     match process_and_execute_spot_swaps(
@@ -178,16 +182,25 @@ pub async fn submit_limit_order_inner(
         }
     };
 
-    // this executes the swaps in parallel
+    // ? ------------------------------------------------------------------------------------
+    // ? Handle the result of the swap executions
     let retry_messages;
-    match await_swap_handles(&ws_connections, &privileged_ws_connections, reults, user_id).await {
+    match handle_swap_execution_results(
+        &ws_connections,
+        &privileged_ws_connections,
+        reults,
+        user_id,
+    )
+    .await
+    {
         Ok(rm) => retry_messages = rm,
         Err(e) => {
             return send_order_error_reply(e);
         }
     };
 
-
+    // ? ------------------------------------------------------------------------------------
+    // ? Retry the order in case it fails
     if retry_messages.len() > 0 {
         if let Err(e) = retry_failed_swaps(
             &mpsc_tx,
@@ -210,7 +223,6 @@ pub async fn submit_limit_order_inner(
             return send_order_error_reply(e);
         }
     }
-
 
     store_output_json(&swap_output_json, &main_storage);
 

@@ -138,34 +138,6 @@ impl PerpPosition {
         let average_entry_price =
             (prev_nominal_usd + added_nominal_usd) / (self.position_size + added_size) as u128;
 
-        // // & bankruptcy_price = entry_price +/- margin/(amount+new_amount)
-        // // & liquidation_price = bankruptcy_price -/+ maintnance_margin/(amount+new_amount)
-        // let new_bankruptcy_price: u64 = _get_bankruptcy_price(
-        //     average_entry_price as u64,
-        //     self.margin + added_margin as u64,
-        //     self.position_size + added_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        // );
-        // let new_liquidation_price: u64 = _get_liquidation_price(
-        //     average_entry_price as u64,
-        //     self.margin + added_margin as u64,
-        //     self.position_size + added_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        //     self.position_header.allow_partial_liquidations,
-        // );
-
-        // let new_hash: BigUint = _hash_position(
-        //     &self.position_header.hash,
-        //     &self.order_side,
-        //     self.position_size + added_size,
-        //     average_entry_price as u64,
-        //     new_liquidation_price,
-        //     self.last_funding_idx,
-        //     self.vlp_supply,
-        // );
-
         // ? Make updates to the position
         self.position_size += added_size as u64;
         self.margin += added_margin as u64;
@@ -194,34 +166,6 @@ impl PerpPosition {
         // & average open = (amount*entry_price + added_amount*added_entry_price) / (amount+added_amount)
         let average_entry_price =
             (prev_nominal_usd + added_nominal_usd) / (self.position_size + added_size) as u128;
-
-        // // & bankruptcy_price = entry_price +/- margin/(amount+added_amount)
-        // // & liquidation_price = bankruptcy_price -/+ maintnance_margin/(amount+added_amount)
-        // let new_bankruptcy_price: u64 = _get_bankruptcy_price(
-        //     average_entry_price as u64,
-        //     self.margin - fee_taken,
-        //     self.position_size + added_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        // );
-        // let new_liquidation_price: u64 = _get_liquidation_price(
-        //     average_entry_price as u64,
-        //     self.margin - fee_taken,
-        //     self.position_size + added_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        //     self.position_header.allow_partial_liquidations,
-        // );
-
-        // let new_hash: BigUint = _hash_position(
-        //     &self.position_header.hash,
-        //     &self.order_side,
-        //     self.position_size + added_size,
-        //     average_entry_price as u64,
-        //     new_liquidation_price,
-        //     funding_idx,
-        //     self.vlp_supply,
-        // );
 
         // ? Make updates to the position
         self.position_size += added_size;

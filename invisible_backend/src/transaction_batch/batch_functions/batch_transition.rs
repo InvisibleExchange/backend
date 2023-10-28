@@ -8,14 +8,14 @@ use error_stack::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::trees::{superficial_tree::SuperficialTree, Tree};
-use crate::utils::storage::MainStorage;
+use crate::utils::storage::local_storage::MainStorage;
 use crate::{
     transaction_batch::{
         tx_batch_helpers::{get_funding_info, split_hashmap},
         tx_batch_structs::{get_price_info, GlobalConfig, ProgramInputCounts},
         LeafNodeType,
     },
-    utils::firestore::upload_file_to_storage,
+    utils::storage::firestore::upload_file_to_storage,
 };
 
 use crate::utils::errors::BatchFinalizationError;
@@ -37,6 +37,7 @@ pub struct BatchTransitionInfo {
     pub funding_info: FundingInfo,
     pub price_info_json: Value,
     pub updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)>,
+    pub exchange_state_storage: Map<String, Value>,
 }
 
 /// Gets all the relevant info for this batch and stores it in a struct
@@ -47,6 +48,7 @@ pub fn _finalize_batch_inner(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
     main_storage: &Arc<Mutex<MainStorage>>,
+    insurance_fund: &Arc<Mutex<i64>>,
     funding_rates: &mut HashMap<u32, Vec<i64>>,
     funding_prices: &mut HashMap<u32, Vec<u64>>,
     min_funding_idxs: &Arc<Mutex<HashMap<u32, u32>>>,
@@ -110,12 +112,31 @@ pub fn _finalize_batch_inner(
     // ? Reset the batch
     reset_batch(min_funding_idxs, min_index_price_data, max_index_price_data);
 
+    let mut exchange_state_storage = serde_json::Map::new(); // This should be stored in the database
+    let insurance_fund_m = insurance_fund.lock();
+    let insurance_fund_value = insurance_fund_m.clone();
+    drop(insurance_fund_m);
+
+    exchange_state_storage.insert(
+        String::from("funding_rates"),
+        serde_json::to_value(&funding_rates).unwrap_or_default(),
+    );
+    exchange_state_storage.insert(
+        String::from("funding_prices"),
+        serde_json::to_value(&funding_prices).unwrap_or_default(),
+    );
+    exchange_state_storage.insert(
+        String::from("insurance_fund"),
+        serde_json::to_value(insurance_fund_value).unwrap_or_default(),
+    );
+
     BatchTransitionInfo {
         current_batch_index,
         program_input_counts,
         funding_info,
         price_info_json,
         updated_state_hashes,
+        exchange_state_storage,
     }
 }
 
@@ -158,16 +179,33 @@ pub fn _transition_state(
         preimage_json,
     );
 
+    // & Write transaction batch json to database
+
     // Todo: This is for testing only ----------------------------
-    let path = Path::new("../../cairo_code/cairo_contracts/transaction_batch/tx_batch_input.json");
+    let path =
+        Path::new("../../prover_contracts/cairo_contracts/transaction_batch/tx_batch_input.json");
     std::fs::write(path, serde_json::to_string(&output_json).unwrap()).unwrap();
     // Todo: This is for testing only ----------------------------
 
-    // & Write transaction batch json to database
-    let serialized_data = to_vec(&output_json).expect("Serialization failed");
     let _handle = tokio::spawn(async move {
+        // ? Store the transactions
+        let serialized_data = to_vec(&output_json).expect("Serialization failed");
         if let Err(e) = upload_file_to_storage(
             "tx_batches/".to_string() + &batch_transition_info.current_batch_index.to_string(),
+            serialized_data,
+        )
+        .await
+        {
+            println!("Error uploading file to storage: {:?}", e);
+        }
+
+        // ? store other relevant state info
+        let serialized_data =
+            to_vec(&batch_transition_info.exchange_state_storage).expect("Serialization failed");
+        if let Err(e) = upload_file_to_storage(
+            "tx_batches/".to_string()
+                + &batch_transition_info.current_batch_index.to_string()
+                + "_state_info",
             serialized_data,
         )
         .await
@@ -248,7 +286,7 @@ fn tree_partition_update(
 
     let new_root = batch_init_tree.root.clone();
 
-    // ? Store the current tree to disk as a backup
+    // ? Store the new tree to disk
     batch_init_tree
         .store_to_disk(tree_index, false)
         .map_err(|e| {

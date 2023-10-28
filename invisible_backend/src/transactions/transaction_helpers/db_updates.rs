@@ -7,12 +7,12 @@ use crate::{
     order_tab::OrderTab,
     transactions::limit_order::LimitOrder,
     utils::{
-        firestore::{
+        notes::Note,
+        storage::firestore::{
             start_add_fill_thread, start_add_note_thread, start_add_order_tab_thread,
             start_delete_note_thread,
         },
-        notes::Note,
-        storage::BackupStorage,
+        storage::local_storage::BackupStorage,
     },
 };
 

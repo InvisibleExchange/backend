@@ -23,16 +23,18 @@ use crate::{
     server::grpc::{OrderTabActionMessage, OrderTabActionResponse},
     transactions::Transaction,
 };
-use crate::{server::grpc::RollbackMessage, utils::storage::MainStorage};
-use crate::{trees::superficial_tree::SuperficialTree, utils::storage::BackupStorage};
+use crate::{server::grpc::RollbackMessage, utils::storage::local_storage::MainStorage};
+use crate::{
+    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
+};
 
 use crate::utils::{
     errors::{
         BatchFinalizationError, OracleUpdateError, PerpSwapExecutionError,
         TransactionExecutionError,
     },
-    firestore::create_session,
     notes::Note,
+    storage::firestore::create_session,
 };
 
 use crate::transactions::{swap::SwapResponse, transaction_helpers::rollbacks::RollbackInfo};
@@ -484,6 +486,7 @@ impl TransactionBatch {
             &self.updated_state_hashes,
             &self.swap_output_json,
             &self.main_storage,
+            &self.insurance_fund,
             &mut self.funding_rates,
             &mut self.funding_prices,
             &mut self.min_funding_idxs,

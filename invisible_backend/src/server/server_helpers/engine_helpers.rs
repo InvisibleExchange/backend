@@ -25,7 +25,7 @@ use crate::{
             send_margin_change_error_reply, send_split_notes_error_reply,
             send_withdrawal_error_reply, TransactionExecutionError,
         },
-        storage::MainStorage,
+        storage::local_storage::MainStorage,
     },
 };
 use tokio::sync::Mutex as TokioMutex;

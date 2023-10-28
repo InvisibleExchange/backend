@@ -11,7 +11,7 @@ use crate::{
     transactions::transaction_helpers::transaction_output::{FillInfo, PerpFillInfo},
 };
 
-use super::notes::Note;
+use super::super::notes::Note;
 
 /// The main storage struct that stores all the data on disk.
 pub struct MainStorage {

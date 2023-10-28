@@ -10,7 +10,7 @@ use crate::server::{
     grpc::{GrpcMessage, GrpcTxResponse, MessageType},
     server_helpers::engine_helpers::{handle_deposit_repsonse, handle_withdrawal_repsonse},
 };
-use crate::utils::storage::MainStorage;
+use crate::utils::storage::local_storage::MainStorage;
 
 use crate::transactions::{deposit::Deposit, withdrawal::Withdrawal};
 use crate::utils::errors::{send_deposit_error_reply, send_withdrawal_error_reply};

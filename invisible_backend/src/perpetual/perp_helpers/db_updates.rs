@@ -9,11 +9,11 @@ use crate::{
         db_updates::DbNoteUpdater, transaction_output::PerpFillInfo,
     },
     utils::{
-        firestore::{
+        notes::Note,
+        storage::firestore::{
             start_add_perp_fill_thread, start_add_position_thread, start_delete_position_thread,
         },
-        notes::Note,
-        storage::BackupStorage,
+        storage::local_storage::BackupStorage,
     },
 };
 

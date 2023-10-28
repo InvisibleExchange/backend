@@ -723,8 +723,6 @@ fn hash_tree_level(
         .take(STRIDE)
         .collect::<Vec<&BigUint>>();
 
-    // println!("inp_array: {:?}", inp_array);
-
     if inp_array.len() > 0 {
         rayon::join(
             || {

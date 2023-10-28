@@ -8,7 +8,7 @@ use super::super::{
     grpc::engine_proto::{MarginChangeReq, MarginChangeRes, SplitNotesReq, SplitNotesRes},
     server_helpers::engine_helpers::{handle_margin_change_repsonse, handle_split_notes_repsonse},
 };
-use crate::{matching_engine::orderbook::OrderBook, utils::storage::MainStorage};
+use crate::{matching_engine::orderbook::OrderBook, utils::storage::local_storage::MainStorage};
 
 use crate::utils::{
     errors::{send_margin_change_error_reply, send_split_notes_error_reply},

@@ -12,7 +12,7 @@ use crate::utils::errors::{
 };
 
 use crate::utils::crypto_utils::{pedersen_on_vec, verify, Signature};
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 use num_bigint::BigUint;
 use serde_json::Value;
 

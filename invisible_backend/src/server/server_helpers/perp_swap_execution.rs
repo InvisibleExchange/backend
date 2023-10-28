@@ -30,7 +30,7 @@ use crate::perpetual::{
 use crate::transactions::transaction_helpers::rollbacks::initiate_rollback;
 
 use crate::utils::crypto_utils::Signature;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 use crate::utils::{errors::PerpSwapExecutionError, notes::Note};
 
 use tokio::sync::{mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender};

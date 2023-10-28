@@ -9,7 +9,9 @@ use serde_json::Value;
 use crate::{
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{errors::TransactionExecutionError, notes::Note, storage::BackupStorage},
+    utils::{
+        errors::TransactionExecutionError, notes::Note, storage::local_storage::BackupStorage,
+    },
 };
 
 use self::{swap::SwapResponse, transaction_helpers::rollbacks::RollbackInfo};

@@ -26,7 +26,7 @@ use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{send_swap_error, SwapThreadExecutionError, TransactionExecutionError};
 use crate::utils::notes::Note;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 
 #[derive(Debug)]
 pub struct Swap {

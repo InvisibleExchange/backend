@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     trees::superficial_tree::SuperficialTree,
-    utils::{notes::Note, storage::MainStorage},
+    utils::{notes::Note, storage::local_storage::MainStorage},
 };
 
 use self::{

@@ -29,7 +29,7 @@ use crate::{
     },
     utils::{
         errors::send_amend_order_error_reply,
-        storage::{BackupStorage, MainStorage},
+        storage::local_storage::{BackupStorage, MainStorage},
     },
 };
 

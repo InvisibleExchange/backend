@@ -81,11 +81,6 @@ pub fn check_tab_order_validity(
     let leaf_hash = state_tree_.get_leaf_by_index(order_tab.tab_idx as u64);
 
     if leaf_hash != order_tab.hash {
-        println!(
-            "order_tab.hash: {:?} - {:?}",
-            order_tab.hash, order_tab.tab_idx
-        );
-
         return Err(send_swap_error(
             "order_tab hash does not exist in the state".to_string(),
             Some(order.order_id),
