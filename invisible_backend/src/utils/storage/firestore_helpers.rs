@@ -388,3 +388,8 @@ pub fn delete_order_tab(
     let delete_path = format!("addr2idx/addresses/{}/{}", pub_key, idx);
     let _r = documents::delete(session, delete_path.as_str(), true);
 }
+
+
+
+
+

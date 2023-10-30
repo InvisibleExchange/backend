@@ -44,12 +44,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tx_batch.init();
 
     // TODO: TESTING ==========================================================
-    println!("\nstate tree: {:?}", tx_batch.state_tree.lock().leaf_nodes);
+    // println!("\nstate tree: {:?}", tx_batch.state_tree.lock().leaf_nodes);
 
     // println!("zero indexes: {:?}", tx_batch.state_tree.lock().zero_idxs);
 
     // let state_root = build_tree(TREE_DEPTH, &tx_batch.state_tree.lock().leaf_nodes, 0);
     // println!("state root: {:?}", state_root);
+
+    println!("funding rates: {:?}", tx_batch.funding_rates);
+    println!("funding prices: {:?}", tx_batch.funding_prices);
+    println!("current_funding_idx: {:?}", tx_batch.current_funding_idx);
 
     // TODO: TESTING ==========================================================
 

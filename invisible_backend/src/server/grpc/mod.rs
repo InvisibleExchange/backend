@@ -54,7 +54,7 @@ pub struct GrpcTxResponse {
     pub margin_change_response: Option<(Option<MarginChangeResponse>, String)>, //
     pub order_tab_action_response: Option<JoinHandle<OrderTabActionResponse>>,
     pub new_idxs: Option<std::result::Result<Vec<u64>, String>>, // For deposit orders
-    pub funding_info: Option<(HashMap<u32, Vec<i64>>, HashMap<u32, Vec<u64>>)>,
+    pub funding_info: Option<(HashMap<u32, Vec<i64>>, HashMap<u32, Vec<u64>>)>, // (funding_rates, funding_prices, latest_funding_idx)
     pub successful: bool,
 }
 

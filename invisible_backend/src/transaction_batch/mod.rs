@@ -103,8 +103,6 @@ pub struct TransactionBatch {
 
     pub funding_rates: HashMap<u32, Vec<i64>>, // maps asset id to an array of funding rates (not reset at new batch)
     pub funding_prices: HashMap<u32, Vec<u64>>, // maps asset id to an array of funding prices (corresponding to the funding rates) (not reset at new batch)
-    pub current_funding_idx: u32, // the current index of the funding rates and prices arrays
-    pub funding_idx_shift: HashMap<u32, u32>, // maps asset id to an funding idx shift
     pub min_funding_idxs: Arc<Mutex<HashMap<u32, u32>>>, // the min funding index of a position being updated in this batch for each asset
     //
     pub rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>, // used to rollback the state in case of errors
@@ -144,7 +142,6 @@ impl TransactionBatch {
         let mut funding_rates: HashMap<u32, Vec<i64>> = HashMap::new();
         let mut funding_prices: HashMap<u32, Vec<u64>> = HashMap::new();
         let mut min_funding_idxs: HashMap<u32, u32> = HashMap::new();
-        let mut funding_idx_shift: HashMap<u32, u32> = HashMap::new();
 
         let session = create_session();
         let session = Arc::new(Mutex::new(session));
@@ -156,7 +153,6 @@ impl TransactionBatch {
         _init_empty_tokens_map::<i64>(&mut running_funding_tick_sums);
         _init_empty_tokens_map::<Vec<i64>>(&mut funding_rates);
         _init_empty_tokens_map::<Vec<u64>>(&mut funding_prices);
-        _init_empty_tokens_map::<u32>(&mut funding_idx_shift);
         _init_empty_tokens_map::<u32>(&mut min_funding_idxs);
 
         // TODO: For testing only =================================================
@@ -185,8 +181,6 @@ impl TransactionBatch {
             current_funding_count: 0,
             funding_rates,
             funding_prices,
-            current_funding_idx: 0,
-            funding_idx_shift,
             min_funding_idxs: Arc::new(Mutex::new(min_funding_idxs)),
             //
             rollback_safeguard,
@@ -208,8 +202,6 @@ impl TransactionBatch {
             &mut self.main_storage,
             &mut self.funding_rates,
             &mut self.funding_prices,
-            &mut self.current_funding_idx,
-            &mut self.funding_idx_shift,
             &mut self.min_funding_idxs,
             &mut self.latest_index_price,
             &mut self.min_index_price_data,
@@ -297,8 +289,6 @@ impl TransactionBatch {
         let swap_funding_info = SwapFundingInfo::new(
             &self.funding_rates,
             &self.funding_prices,
-            self.current_funding_idx,
-            &self.funding_idx_shift,
             transaction.order_a.synthetic_token,
             &transaction.order_a.position,
             &transaction.order_b.position,
@@ -346,8 +336,6 @@ impl TransactionBatch {
         let swap_funding_info = SwapFundingInfo::new(
             &self.funding_rates,
             &self.funding_prices,
-            self.current_funding_idx,
-            &self.funding_idx_shift,
             liquidation_transaction.liquidation_order.synthetic_token,
             &Some(liquidation_transaction.liquidation_order.position.clone()),
             &None,
@@ -524,7 +512,6 @@ impl TransactionBatch {
             &mut self.current_funding_count,
             &mut self.funding_rates,
             &mut self.funding_prices,
-            &mut self.current_funding_idx,
             &self.min_funding_idxs,
             &self.main_storage,
             funding_update,

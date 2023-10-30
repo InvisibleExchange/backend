@@ -10,7 +10,7 @@ use crate::{
         notes::Note,
         storage::firestore::{
             start_add_fill_thread, start_add_note_thread, start_add_order_tab_thread,
-            start_delete_note_thread,
+            start_delete_deposit_thread, start_delete_note_thread,
         },
         storage::local_storage::BackupStorage,
     },
@@ -133,6 +133,7 @@ pub fn update_db_after_deposit(
     backup_storage: &Arc<Mutex<BackupStorage>>,
     new_notes: Vec<Note>,
     zero_indexes: &Vec<u64>,
+    deposit_id: u64,
 ) {
     let mut _handles = Vec::new();
 
@@ -141,6 +142,9 @@ pub fn update_db_after_deposit(
         let handle = start_add_note_thread(note.clone(), session, backup_storage);
         _handles.push(handle);
     }
+
+    let h = start_delete_deposit_thread(deposit_id, session);
+    _handles.push(h);
 }
 
 // WITHDRAWAL ----------------------------------------------------

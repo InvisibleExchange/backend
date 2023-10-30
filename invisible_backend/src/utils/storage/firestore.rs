@@ -160,6 +160,11 @@ fn store_new_perp_fill(
     }
 }
 
+fn delete_pending_deposit(session: &ServiceSession, deposit_id: u64) {
+    let delete_path = format!("deposits/{}", deposit_id);
+    let _r = documents::delete(session, delete_path.as_str(), true);
+}
+
 // * PUBLIC FUNCTIONS ===============================================================
 
 // NOTES
@@ -304,6 +309,24 @@ pub fn start_add_perp_fill_thread(
 
         store_new_perp_fill(&session_, &backup, &fill_info);
         drop(session_);
+    });
+
+    return handle;
+}
+
+// DEPOSITS
+
+pub fn start_delete_deposit_thread(
+    deposit_id: u64,
+    session: &Arc<Mutex<ServiceSession>>,
+) -> JoinHandle<()> {
+    let s = Arc::clone(&session);
+
+    let handle = spawn(move || {
+        let session_: &ServiceSession = &s.lock();
+
+        let delete_path = format!("deposits/{}", deposit_id);
+        let _r = documents::delete(session_, delete_path.as_str(), true);
     });
 
     return handle;

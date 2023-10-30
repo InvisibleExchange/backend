@@ -52,10 +52,15 @@ impl Deposit {
     ) -> Result<Vec<u64>, DepositThreadExecutionError> {
         //
 
+        let deposit_id = self.deposit_id;
         let new_notes = self.notes.clone();
 
         let deposit_handle = thread::scope(move |_s| {
+            // TODO: Verify the deposit was registered (made onchain)
+            // TODO: Verify the deposit_id (64 bit) is of the format | chain_id (32 bit) | identifier (32 bit) |
+
             let mut tree = tree_m.lock();
+
             let mut zero_idxs: Vec<u64> = Vec::new();
             for _ in 0..self.notes.len() {
                 let idx = tree.first_zero_idx();
@@ -84,8 +89,6 @@ impl Deposit {
                     None,
                 ));
             }
-
-            // TODO: Verify the deposit_id (64 bit) is of the format | chain_id (32 bit) | identifier (32 bit) |
 
             // ? verify Signature
             self.verify_deposit_signature()?;
@@ -130,7 +133,7 @@ impl Deposit {
             })?;
 
         // ? Update the datatbase
-        update_db_after_deposit(&session, backup_storage, new_notes, &zero_idxs);
+        update_db_after_deposit(&session, backup_storage, new_notes, &zero_idxs, deposit_id);
 
         return Ok(zero_idxs);
     }

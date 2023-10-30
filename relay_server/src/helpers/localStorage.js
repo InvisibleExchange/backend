@@ -205,6 +205,9 @@ function updateStoredDepositIds(db, pendingDepositIds, processedDepositIds) {
   const stmt = db.prepare(
     "INSERT OR REPLACE INTO processedDeposits (id, pending, processed) VALUES (?, ?, ?)"
   );
+
+  console.log("---storgin pendingDepositIds: ", pendingDepositIds);
+  console.log("---storgin processedDepositIds: ", processedDepositIds);
   stmt.run(
     1,
     JSON.stringify(pendingDepositIds),

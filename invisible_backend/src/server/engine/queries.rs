@@ -7,6 +7,7 @@ use super::super::grpc::engine_proto::{
 };
 use super::super::grpc::{GrpcMessage, GrpcTxResponse, MessageType};
 
+use crate::server::grpc::engine_proto::{EmptyReq, IndexPriceRes};
 use crate::{
     matching_engine::{
         domain::{Order, OrderSide as OBOrderSide},
@@ -304,7 +305,7 @@ pub async fn get_state_info_inner(
     tokio::task::yield_now().await;
 
     let state_tree = state_tree.lock();
-    let spot_tree_leaves = state_tree
+    let state_tree_leaves = state_tree
         .leaf_nodes
         .iter()
         .map(|x| x.to_string())
@@ -312,8 +313,19 @@ pub async fn get_state_info_inner(
     drop(state_tree);
 
     let reply = StateInfoRes {
-        state_tree: spot_tree_leaves,
+        state_tree: state_tree_leaves,
     };
+
+    return Ok(Response::new(reply));
+}
+
+pub async fn get_index_prices_inner(
+    state_tree: &Arc<Mutex<SuperficialTree>>,
+    _: Request<EmptyReq>,
+) -> Result<Response<IndexPriceRes>, Status> {
+    tokio::task::yield_now().await;
+
+    // TODO: !!!!
 
     return Ok(Response::new(reply));
 }

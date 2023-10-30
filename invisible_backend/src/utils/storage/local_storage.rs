@@ -216,21 +216,13 @@ impl MainStorage {
 
     // pub funding_rates: HashMap<u64, Vec<i64>>, // maps asset id to an array of funding rates (not reset at new batch)
     // pub funding_prices: HashMap<u64, Vec<u64>>, // maps asset id to an array of funding prices (corresponding to the funding rates) (not reset at new batch)
-    // pub current_funding_idx: u32, // the current index of the funding rates and prices arrays
     // pub min_funding_idxs: Arc<Mutex<HashMap<u64, u32>>>,
     pub fn store_funding_info(
         &self,
         funding_rates: &HashMap<u32, Vec<i64>>,
         funding_prices: &HashMap<u32, Vec<u64>>,
-        current_funding_idx: &u32,
         min_funding_idx: &HashMap<u32, u32>,
     ) {
-        self.funding_db
-            .insert(
-                "current_funding_idx",
-                serde_json::to_vec(&current_funding_idx).unwrap(),
-            )
-            .unwrap();
         self.funding_db
             .insert("funding_rates", serde_json::to_vec(&funding_rates).unwrap())
             .unwrap();
@@ -254,7 +246,6 @@ impl MainStorage {
         (
             HashMap<u32, Vec<i64>>,
             HashMap<u32, Vec<u64>>,
-            u32,
             HashMap<u32, u32>,
         ),
         String,
@@ -269,11 +260,6 @@ impl MainStorage {
             .get("funding_prices")
             .unwrap()
             .ok_or("funding prices  not found in storage")?;
-        let current_funding_idx = self
-            .funding_db
-            .get("current_funding_idx")
-            .unwrap()
-            .ok_or("current funding index  not found in storage")?;
         let min_funding_idx = self
             .funding_db
             .get("min_funding_idx")
@@ -284,17 +270,10 @@ impl MainStorage {
             serde_json::from_slice(&funding_rates.to_vec()).unwrap();
         let funding_prices: HashMap<u32, Vec<u64>> =
             serde_json::from_slice(&funding_prices.to_vec()).unwrap();
-        let current_funding_idx: u32 =
-            serde_json::from_slice(&current_funding_idx.to_vec()).unwrap();
         let min_funding_idx: HashMap<u32, u32> =
             serde_json::from_slice(&min_funding_idx.to_vec()).unwrap();
 
-        Ok((
-            funding_rates,
-            funding_prices,
-            current_funding_idx,
-            min_funding_idx,
-        ))
+        Ok((funding_rates, funding_prices, min_funding_idx))
     }
 
     /// Clears the storage to make room for the next batch.

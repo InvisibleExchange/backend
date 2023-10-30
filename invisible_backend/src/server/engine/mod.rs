@@ -16,19 +16,20 @@ use self::{
     order_interactions::{amend_order_inner, cancel_order_inner},
     order_tabs::{close_order_tab_inner, open_order_tab_inner},
     queries::{
-        get_funding_info_inner, get_liquidity_inner, get_orders_inner, get_state_info_inner,
+        get_funding_info_inner, get_index_prices_inner, get_liquidity_inner, get_orders_inner,
+        get_state_info_inner,
     },
 };
 
 use super::grpc::engine_proto::{
     AddLiqOrderTabRes, AmendOrderRequest, AmendOrderResponse, CancelOrderMessage,
     CancelOrderResponse, CloseOrderTabReq, DepositMessage, DepositResponse, EmptyReq,
-    FinalizeBatchResponse, FundingReq, FundingRes, LimitOrderMessage, LiquidationOrderMessage,
-    LiquidationOrderResponse, LiquidityReq, LiquidityRes, MarginChangeReq, MarginChangeRes,
-    OnChainAddLiqTabReq, OnChainRegisterMmReq, OnChainRegisterMmRes, OnChainRemoveLiqTabReq,
-    OpenOrderTabReq, OracleUpdateReq, OrderResponse, OrdersReq, OrdersRes, PerpOrderMessage,
-    RemoveLiqOrderTabRes, RestoreOrderBookMessage, SplitNotesReq, SplitNotesRes, StateInfoReq,
-    StateInfoRes, SuccessResponse, WithdrawalMessage,
+    FinalizeBatchResponse, FundingReq, FundingRes, IndexPriceRes, LimitOrderMessage,
+    LiquidationOrderMessage, LiquidationOrderResponse, LiquidityReq, LiquidityRes, MarginChangeReq,
+    MarginChangeRes, OnChainAddLiqTabReq, OnChainRegisterMmReq, OnChainRegisterMmRes,
+    OnChainRemoveLiqTabReq, OpenOrderTabReq, OracleUpdateReq, OrderResponse, OrdersReq, OrdersRes,
+    PerpOrderMessage, RemoveLiqOrderTabRes, RestoreOrderBookMessage, SplitNotesReq, SplitNotesRes,
+    StateInfoReq, StateInfoRes, SuccessResponse, WithdrawalMessage,
 };
 use super::grpc::{GrpcMessage, GrpcTxResponse};
 use super::{
@@ -305,25 +306,6 @@ impl Engine for EngineService {
     // * ===================================================================================================================================
     //
 
-    // async fn modify_order_tab(
-    //     &self,
-    //     req: Request<ModifyOrderTabReq>,
-    // ) -> Result<Response<ModifyOrderTabRes>, Status> {
-    //     return modify_order_tab_inner(
-    //         &self.mpsc_tx,
-    //         &self.main_storage,
-    //         &self.swap_output_json,
-    //         &self.semaphore,
-    //         &self.is_paused,
-    //         req,
-    //     )
-    //     .await;
-    // }
-
-    //
-    // * ===================================================================================================================================
-    //
-
     async fn close_order_tab(
         &self,
         req: Request<CloseOrderTabReq>,
@@ -456,6 +438,14 @@ impl Engine for EngineService {
             request,
         )
         .await;
+    }
+
+    // rpc get_index_prices (EmptyReq) returns (IndexPriceRes);
+    async fn get_index_prices(
+        &self,
+        req: Request<EmptyReq>,
+    ) -> Result<Response<IndexPriceRes>, Status> {
+        return get_index_prices_inner(&self.state_tree, req).await;
     }
 
     async fn get_state_info(
