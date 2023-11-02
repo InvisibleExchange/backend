@@ -1,31 +1,23 @@
-use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
 use super::super::grpc::engine_proto::{
     ActiveOrder, ActivePerpOrder, BookEntry, FundingInfo, FundingReq, FundingRes, GrpcNote,
     GrpcOrderTab, LiquidityReq, LiquidityRes, OrdersReq, OrdersRes, StateInfoReq, StateInfoRes,
 };
-use super::super::grpc::{GrpcMessage, GrpcTxResponse, MessageType};
 
 use crate::server::grpc::engine_proto::{EmptyReq, IndexPriceRes};
+use crate::transaction_batch::TransactionBatch;
 use crate::{
     matching_engine::{
         domain::{Order, OrderSide as OBOrderSide},
         orderbook::OrderBook,
     },
     perpetual::PositionEffectType,
-    trees::superficial_tree::SuperficialTree,
-    utils::errors::send_funding_error_reply,
 };
 
 use crate::utils::{errors::send_liquidity_error_reply, notes::Note};
 
-use tokio::sync::{
-    mpsc::Sender as MpscSender,
-    oneshot::{self, Sender as OneshotSender},
-    Mutex as TokioMutex,
-};
-use tokio::task::JoinHandle as TokioJoinHandle;
+use tokio::sync::Mutex as TokioMutex;
 use tonic::{Request, Response, Status};
 
 pub async fn get_liquidity_inner(
@@ -96,10 +88,9 @@ pub async fn get_liquidity_inner(
 }
 
 pub async fn get_orders_inner(
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
-    partial_fill_tracker: &Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
-    perpetual_partial_fill_tracker: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
     //
     request: Request<OrdersReq>,
 ) -> Result<Response<OrdersRes>, Status> {
@@ -107,10 +98,14 @@ pub async fn get_orders_inner(
 
     let req: OrdersReq = request.into_inner();
 
+    let tx_batch_m = tx_batch.lock().await;
+    let partial_fill_tracker = Arc::clone(&tx_batch_m.partial_fill_tracker);
+    let perpetual_partial_fill_tracker = Arc::clone(&tx_batch_m.perpetual_partial_fill_tracker);
+    drop(tx_batch_m);
+
     let mut bad_order_ids: Vec<u64> = Vec::new();
     let mut active_orders: Vec<ActiveOrder> = Vec::new();
     let mut pfr_notes: Vec<Note> = Vec::new();
-
     for order_id in req.order_ids {
         let market_id = order_id as u16;
 
@@ -299,10 +294,14 @@ pub async fn get_orders_inner(
 }
 
 pub async fn get_state_info_inner(
-    state_tree: &Arc<Mutex<SuperficialTree>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     _: Request<StateInfoReq>,
 ) -> Result<Response<StateInfoRes>, Status> {
     tokio::task::yield_now().await;
+
+    let tx_batch_m = tx_batch.lock().await;
+    let state_tree = Arc::clone(&tx_batch_m.state_tree);
+    drop(tx_batch_m);
 
     let state_tree = state_tree.lock();
     let state_tree_leaves = state_tree
@@ -320,71 +319,61 @@ pub async fn get_state_info_inner(
 }
 
 pub async fn get_index_prices_inner(
-    state_tree: &Arc<Mutex<SuperficialTree>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     _: Request<EmptyReq>,
 ) -> Result<Response<IndexPriceRes>, Status> {
     tokio::task::yield_now().await;
 
-    // TODO: !!!!
+    let mut tokens = vec![];
+    let mut index_prices = vec![];
+    let tx_batch_m = tx_batch.lock().await;
+    tx_batch_m
+        .latest_index_price
+        .iter()
+        .for_each(|(token, price)| {
+            tokens.push(*token);
+            index_prices.push(*price);
+        });
+    drop(tx_batch_m);
+
+    let reply = IndexPriceRes {
+        tokens,
+        index_prices,
+    };
 
     return Ok(Response::new(reply));
 }
 
 pub async fn get_funding_info_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     _: Request<FundingReq>,
 ) -> Result<Response<FundingRes>, Status> {
     tokio::task::yield_now().await;
 
-    let control_mpsc_tx = mpsc_tx.clone();
+    let tx_batch_m = tx_batch.lock().await;
+    let funding_rates = tx_batch_m.funding_rates.clone();
+    let funding_prices = tx_batch_m.funding_prices.clone();
+    drop(tx_batch_m);
 
-    let handle: TokioJoinHandle<GrpcTxResponse> = tokio::spawn(async move {
-        let (resp_tx, resp_rx) = oneshot::channel();
+    let mut fundings = Vec::new();
+    for token in funding_rates.keys() {
+        let rates = funding_rates.get(token).unwrap();
+        let prices = funding_prices.get(token).unwrap();
 
-        let mut grpc_message = GrpcMessage::new();
-        grpc_message.msg_type = MessageType::FundingUpdate;
+        let funding_info = FundingInfo {
+            token: *token,
+            funding_rates: rates.clone(),
+            funding_prices: prices.clone(),
+        };
 
-        control_mpsc_tx
-            .send((grpc_message, resp_tx))
-            .await
-            .ok()
-            .unwrap();
-
-        return resp_rx.await.unwrap();
-    });
-
-    if let Ok(grpc_res) = handle.await {
-        match grpc_res.funding_info {
-            Some((funding_rates, funding_prices)) => {
-                let mut fundings = Vec::new();
-                for token in funding_rates.keys() {
-                    let rates = funding_rates.get(token).unwrap();
-                    let prices = funding_prices.get(token).unwrap();
-
-                    let funding_info = FundingInfo {
-                        token: *token,
-                        funding_rates: rates.clone(),
-                        funding_prices: prices.clone(),
-                    };
-
-                    fundings.push(funding_info);
-                }
-
-                let reply = FundingRes {
-                    successful: true,
-                    fundings,
-                    error_message: "".to_string(),
-                };
-
-                return Ok(Response::new(reply));
-            }
-            None => {
-                return send_funding_error_reply("failed to get funding info".to_string());
-            }
-        }
-    } else {
-        println!("Unknown error in get funding info");
-
-        return send_funding_error_reply("failed to get funding info".to_string());
+        fundings.push(funding_info);
     }
+
+    let reply = FundingRes {
+        successful: true,
+        fundings,
+        error_message: "".to_string(),
+    };
+
+    return Ok(Response::new(reply));
 }

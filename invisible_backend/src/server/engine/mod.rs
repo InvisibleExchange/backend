@@ -1,7 +1,4 @@
-use firestore_db_and_auth::ServiceSession;
-use parking_lot::Mutex;
-use serde_json::Value;
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
 use self::{
     admin::{finalize_batch_inner, restore_orderbook_inner, update_index_price_inner},
@@ -31,25 +28,17 @@ use super::grpc::engine_proto::{
     PerpOrderMessage, RemoveLiqOrderTabRes, RestoreOrderBookMessage, SplitNotesReq, SplitNotesRes,
     StateInfoReq, StateInfoRes, SuccessResponse, WithdrawalMessage,
 };
-use super::grpc::{GrpcMessage, GrpcTxResponse};
 use super::{
     grpc::engine_proto::{engine_server::Engine, CloseOrderTabRes, OpenOrderTabRes},
     server_helpers::WsConnectionsMap,
 };
-use crate::perpetual::perp_helpers::perp_rollback::PerpRollbackInfo;
+use crate::transaction_batch::TransactionBatch;
 use crate::{
     matching_engine::orderbook::OrderBook,
-    trees::superficial_tree::SuperficialTree,
-    utils::storage::local_storage::{BackupStorage, MainStorage},
+    utils::errors::{send_deposit_error_reply, send_oracle_update_error_reply},
 };
 
-use crate::transactions::transaction_helpers::rollbacks::RollbackInfo;
-
-use crate::utils::notes::Note;
-
-use tokio::sync::{
-    mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender, Mutex as TokioMutex, Semaphore,
-};
+use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
 
 mod admin;
@@ -61,24 +50,9 @@ mod order_interactions;
 mod order_tabs;
 mod queries;
 
-// TODO: ALL OPERATIONS SHOULD START A THREAD INCASE SOMETHING FAILS WE CAN CONTINUE ON
-
 // #[derive(Debug)]
 pub struct EngineService {
-    pub mpsc_tx: MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    pub session: Arc<Mutex<ServiceSession>>,
-    //
-    pub main_storage: Arc<Mutex<MainStorage>>,
-    pub backup_storage: Arc<Mutex<BackupStorage>>,
-    pub swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-    //
-    pub state_tree: Arc<Mutex<SuperficialTree>>,
-    //
-    pub partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
-    pub perpetual_partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
-    //
-    pub rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-    pub perp_rollback_safeguard: Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
+    pub transaction_batch: Arc<TokioMutex<TransactionBatch>>,
     //
     pub order_books: HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     pub perp_order_books: HashMap<u16, Arc<TokioMutex<OrderBook>>>,
@@ -98,13 +72,7 @@ impl Engine for EngineService {
         request: Request<LimitOrderMessage>,
     ) -> Result<Response<OrderResponse>, Status> {
         return submit_limit_order_inner(
-            &self.mpsc_tx,
-            &self.session,
-            &self.main_storage,
-            &self.backup_storage,
-            &self.swap_output_json,
-            &self.state_tree,
-            &self.rollback_safeguard,
+            &self.transaction_batch,
             &self.order_books,
             &self.ws_connections,
             &self.privileged_ws_connections,
@@ -124,13 +92,7 @@ impl Engine for EngineService {
         request: Request<PerpOrderMessage>,
     ) -> Result<Response<OrderResponse>, Status> {
         return submit_perpetual_order_inner(
-            &self.mpsc_tx,
-            &self.session,
-            &self.main_storage,
-            &self.backup_storage,
-            &self.swap_output_json,
-            &self.state_tree,
-            &self.perp_rollback_safeguard,
+            &self.transaction_batch,
             &self.perp_order_books,
             &self.ws_connections,
             &self.privileged_ws_connections,
@@ -150,9 +112,7 @@ impl Engine for EngineService {
         request: Request<LiquidationOrderMessage>,
     ) -> Result<Response<LiquidationOrderResponse>, Status> {
         return submit_liquidation_order_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.perp_order_books,
             &self.semaphore,
             &self.is_paused,
@@ -170,8 +130,7 @@ impl Engine for EngineService {
         request: Request<CancelOrderMessage>,
     ) -> Result<Response<CancelOrderResponse>, Status> {
         return cancel_order_inner(
-            &self.partial_fill_tracker,
-            &self.perpetual_partial_fill_tracker,
+            &self.transaction_batch,
             &self.order_books,
             &self.perp_order_books,
             request,
@@ -188,13 +147,7 @@ impl Engine for EngineService {
         request: Request<AmendOrderRequest>,
     ) -> Result<Response<AmendOrderResponse>, Status> {
         return amend_order_inner(
-            &self.mpsc_tx,
-            &self.session,
-            &self.main_storage,
-            &self.backup_storage,
-            &self.swap_output_json,
-            &self.rollback_safeguard,
-            &self.perp_rollback_safeguard,
+            &self.transaction_batch,
             &self.order_books,
             &self.perp_order_books,
             &self.ws_connections,
@@ -212,10 +165,17 @@ impl Engine for EngineService {
         &self,
         request: Request<DepositMessage>,
     ) -> Result<Response<DepositResponse>, Status> {
+        // ? Only call the server from the same network (onyl as fallback)
+        if request.remote_addr().unwrap().ip()
+            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
+        {
+            return send_deposit_error_reply(
+                "execute deposit can only be called from the same network".to_string(),
+            );
+        }
+
         return execute_deposit_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.semaphore,
             &self.is_paused,
             request,
@@ -232,9 +192,7 @@ impl Engine for EngineService {
         request: Request<WithdrawalMessage>,
     ) -> Result<Response<SuccessResponse>, Status> {
         return execute_withdrawal_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.semaphore,
             &self.is_paused,
             request,
@@ -251,9 +209,7 @@ impl Engine for EngineService {
         req: Request<SplitNotesReq>,
     ) -> Result<Response<SplitNotesRes>, Status> {
         return split_notes_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.semaphore,
             &self.is_paused,
             req,
@@ -270,9 +226,7 @@ impl Engine for EngineService {
         req: Request<MarginChangeReq>,
     ) -> Result<Response<MarginChangeRes>, Status> {
         return change_position_margin_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.perp_order_books,
             &self.ws_connections,
             &self.semaphore,
@@ -291,9 +245,7 @@ impl Engine for EngineService {
         req: Request<OpenOrderTabReq>,
     ) -> Result<Response<OpenOrderTabRes>, Status> {
         return open_order_tab_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.order_books,
             &self.semaphore,
             &self.is_paused,
@@ -311,9 +263,7 @@ impl Engine for EngineService {
         req: Request<CloseOrderTabReq>,
     ) -> Result<Response<CloseOrderTabRes>, Status> {
         return close_order_tab_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.semaphore,
             &self.is_paused,
             req,
@@ -331,9 +281,7 @@ impl Engine for EngineService {
         req: Request<OnChainRegisterMmReq>,
     ) -> Result<Response<OnChainRegisterMmRes>, Status> {
         return onchain_register_mm_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.order_books,
             &self.perp_order_books,
             &self.semaphore,
@@ -352,9 +300,7 @@ impl Engine for EngineService {
         req: Request<OnChainAddLiqTabReq>,
     ) -> Result<Response<AddLiqOrderTabRes>, Status> {
         return add_liquidity_mm_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.order_books,
             &self.perp_order_books,
             &self.semaphore,
@@ -373,9 +319,7 @@ impl Engine for EngineService {
         req: Request<OnChainRemoveLiqTabReq>,
     ) -> Result<Response<RemoveLiqOrderTabRes>, Status> {
         return remove_liquidity_mm_inner(
-            &self.mpsc_tx,
-            &self.main_storage,
-            &self.swap_output_json,
+            &self.transaction_batch,
             &self.order_books,
             &self.perp_order_books,
             &self.semaphore,
@@ -391,9 +335,22 @@ impl Engine for EngineService {
 
     async fn finalize_batch(
         &self,
-        req: Request<EmptyReq>,
+        request: Request<EmptyReq>,
     ) -> Result<Response<FinalizeBatchResponse>, Status> {
-        return finalize_batch_inner(&self.mpsc_tx, &self.semaphore, &self.is_paused, req).await;
+        // ? Only call the server from the same network (onyl as fallback)
+        if request.remote_addr().unwrap().ip()
+            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
+        {
+            return Ok(Response::new(FinalizeBatchResponse {}));
+        }
+
+        return finalize_batch_inner(
+            &self.transaction_batch,
+            &self.semaphore,
+            &self.is_paused,
+            request,
+        )
+        .await;
     }
 
     //
@@ -404,7 +361,16 @@ impl Engine for EngineService {
         &self,
         request: Request<OracleUpdateReq>,
     ) -> Result<Response<SuccessResponse>, Status> {
-        return update_index_price_inner(&self.mpsc_tx, request).await;
+        // ? Only call the server from the same network (onyl as fallback)
+        if request.remote_addr().unwrap().ip()
+            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
+        {
+            return send_oracle_update_error_reply(format!(
+                "update_index_price can only be called from the same network"
+            ));
+        }
+
+        return update_index_price_inner(&self.transaction_batch, request).await;
     }
 
     //
@@ -415,6 +381,19 @@ impl Engine for EngineService {
         &self,
         request: Request<RestoreOrderBookMessage>,
     ) -> Result<Response<SuccessResponse>, Status> {
+        // ? Only call the server from the same network (onyl as fallback)
+        if request.remote_addr().unwrap().ip()
+            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
+        {
+            let reply = SuccessResponse {
+                successful: false,
+                error_message: "restore_orderbook can only be called from the same network"
+                    .to_string(),
+            };
+
+            return Ok(Response::new(reply));
+        }
+
         return restore_orderbook_inner(&self.order_books, &self.perp_order_books, request).await;
     }
 
@@ -431,10 +410,9 @@ impl Engine for EngineService {
 
     async fn get_orders(&self, request: Request<OrdersReq>) -> Result<Response<OrdersRes>, Status> {
         return get_orders_inner(
+            &self.transaction_batch,
             &self.order_books,
             &self.perp_order_books,
-            &self.partial_fill_tracker,
-            &self.perpetual_partial_fill_tracker,
             request,
         )
         .await;
@@ -445,21 +423,21 @@ impl Engine for EngineService {
         &self,
         req: Request<EmptyReq>,
     ) -> Result<Response<IndexPriceRes>, Status> {
-        return get_index_prices_inner(&self.state_tree, req).await;
+        return get_index_prices_inner(&self.transaction_batch, req).await;
     }
 
     async fn get_state_info(
         &self,
         req: Request<StateInfoReq>,
     ) -> Result<Response<StateInfoRes>, Status> {
-        return get_state_info_inner(&self.state_tree, req).await;
+        return get_state_info_inner(&self.transaction_batch, req).await;
     }
 
     async fn get_funding_info(
         &self,
         req: Request<FundingReq>,
     ) -> Result<Response<FundingRes>, Status> {
-        return get_funding_info_inner(&self.mpsc_tx, req).await;
+        return get_funding_info_inner(&self.transaction_batch, req).await;
     }
 
     //

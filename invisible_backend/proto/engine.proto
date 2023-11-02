@@ -516,8 +516,8 @@ message FundingInfo {
 
 
 message IndexPriceRes {
-    repeated uint32 token = 1;
-    repeated uint32 index_price = 2;
+    repeated uint32 tokens = 1;
+    repeated uint64 index_prices = 2;
 }
 
 

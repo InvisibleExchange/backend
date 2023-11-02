@@ -4,7 +4,6 @@ use parking_lot::Mutex;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::thread::ThreadId;
 
 use crossbeam::thread;
 
@@ -15,9 +14,6 @@ use super::order_execution::open_order::{
 };
 use super::order_execution::verify_position_existence;
 use super::perp_helpers::db_updates::update_db_after_perp_swap;
-use super::perp_helpers::perp_rollback::{
-    save_close_order_rollback_info, save_open_order_rollback_info, PerpRollbackInfo,
-};
 use super::perp_helpers::perp_state_updates::{
     return_collateral_on_position_close, update_perpetual_state,
     update_state_after_swap_first_fill, update_state_after_swap_later_fills,
@@ -101,7 +97,6 @@ impl PerpSwap {
         min_funding_idxs: Arc<Mutex<HashMap<u32, u32>>>,
         swap_funding_info: SwapFundingInfo,
         //
-        perp_rollback_safeguard: Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
         session: Arc<Mutex<ServiceSession>>,
         backup_storage: Arc<Mutex<BackupStorage>>,
     ) -> Result<PerpSwapResponse, PerpSwapExecutionError> {
@@ -118,7 +113,6 @@ impl PerpSwap {
 
         // ? Execute orders in parallel ===========================================================
 
-        let thread_id: ThreadId = std::thread::current().id();
         let current_funding_idx = swap_funding_info.current_funding_idx;
 
         let blocked_perp_order_ids_c = blocked_perp_order_ids.clone();
@@ -488,26 +482,12 @@ impl PerpSwap {
             let perpetual_partial_fill_tracker__ = perpetual_partial_fill_tracker.clone();
             let partialy_filled_positions__ = partialy_filled_positions.clone();
             let blocked_perp_order_ids__ = blocked_perp_order_ids.clone();
-            let perp_rollback_safeguard__ = perp_rollback_safeguard.clone();
 
             let update_handle_a = s.spawn(move |_| {
                 let execution_output_a_clone = execution_output_a.clone();
 
                 if self.order_a.position_effect_type == PositionEffectType::Open {
                     let new_pfr_note = &execution_output_a_clone.new_pfr_info.0;
-
-                    //  ===============================
-                    save_open_order_rollback_info(
-                        true,
-                        &perp_rollback_safeguard__,
-                        thread_id,
-                        self.order_a.order_id,
-                        new_pfr_note,
-                        &execution_output_a_clone.prev_pfr_note,
-                        execution_output_a.position_index,
-                        &execution_output_a.prev_position,
-                    );
-                    //  ===============================
 
                     if execution_output_a_clone.prev_pfr_note.is_none() {
                         update_state_after_swap_first_fill(
@@ -529,16 +509,6 @@ impl PerpSwap {
                     let mut tree = state_tree__.lock();
                     let idx = tree.first_zero_idx();
                     drop(tree);
-
-                    //  =====================================
-                    save_close_order_rollback_info(
-                        true,
-                        &perp_rollback_safeguard__,
-                        thread_id,
-                        idx,
-                        &execution_output_a.prev_position,
-                    );
-                    //  ====================================
 
                     let return_collateral_note: Note = return_collateral_on_position_close(
                         &state_tree__,
@@ -605,26 +575,12 @@ impl PerpSwap {
             let perpetual_partial_fill_tracker__ = perpetual_partial_fill_tracker.clone();
             let partialy_filled_positions__ = partialy_filled_positions.clone();
             let blocked_perp_order_ids__ = blocked_perp_order_ids.clone();
-            let perp_rollback_safeguard__ = perp_rollback_safeguard.clone();
 
             let update_handle_b = s.spawn(move |_| {
                 let execution_output_b_clone = execution_output_b.clone();
 
                 if self.order_b.position_effect_type == PositionEffectType::Open {
                     let new_pfr_note = &execution_output_b_clone.new_pfr_info.0;
-
-                    //  ===============================
-                    save_open_order_rollback_info(
-                        false,
-                        &perp_rollback_safeguard__,
-                        thread_id,
-                        self.order_b.order_id,
-                        new_pfr_note,
-                        &execution_output_b_clone.prev_pfr_note,
-                        execution_output_b.position_index,
-                        &execution_output_b.prev_position,
-                    );
-                    //  ===============================
 
                     if execution_output_b_clone.prev_pfr_note.is_none() {
                         update_state_after_swap_first_fill(
@@ -646,16 +602,6 @@ impl PerpSwap {
                     let mut tree = state_tree__.lock();
                     let idx = tree.first_zero_idx();
                     drop(tree);
-
-                    //  =====================================
-                    save_close_order_rollback_info(
-                        false,
-                        &perp_rollback_safeguard__,
-                        thread_id,
-                        idx,
-                        &execution_output_b.prev_position,
-                    );
-                    //  ====================================
 
                     let return_collateral_note_: Note = return_collateral_on_position_close(
                         &state_tree__,

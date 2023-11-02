@@ -62,7 +62,7 @@ async function getLastDayTrades(isPerp) {
 async function storeOnchainDeposit(depositObject) {
   console.log("depositObject: ", depositObject);
 
-  let depositDoc = doc(db, "deposits", depositObject.depositId.toString());
+  let depositDoc = doc(db, "deposits", depositObject.deposit_id.toString());
   let depositData = await getDoc(depositDoc);
 
   if (depositData.exists()) {

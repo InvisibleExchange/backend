@@ -1,6 +1,6 @@
 //
 
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 use num_bigint::BigUint;
@@ -11,11 +11,8 @@ use crate::{
     transaction_batch::LeafNodeType,
     transactions::{
         limit_order::LimitOrder,
-        transaction_helpers::{
-            rollbacks::RollbackInfo,
-            state_updates::{
-                update_state_after_swap_first_fill, update_state_after_swap_later_fills,
-            },
+        transaction_helpers::state_updates::{
+            update_state_after_swap_first_fill, update_state_after_swap_later_fills,
         },
     },
     trees::superficial_tree::SuperficialTree,
@@ -218,15 +215,11 @@ pub fn execute_non_tab_order_modifications(
 pub fn update_state_after_non_tab_order(
     tree: &Arc<Mutex<SuperficialTree>>,
     updated_note_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-    thread_id: ThreadId,
     is_first_fill: bool,
-    order_id: u64,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
     swap_note: &Note,
     new_partial_fill_info: &Option<(Option<Note>, u64)>,
-    prev_partial_refund_note: &Option<Note>,
 ) {
     let mut new_partial_refund_note: Option<Note> = None;
     if let Some(new_pfr_note) = new_partial_fill_info.as_ref() {
@@ -238,9 +231,6 @@ pub fn update_state_after_non_tab_order(
         update_state_after_swap_first_fill(
             tree,
             updated_note_hashes,
-            rollback_safeguard,
-            thread_id,
-            order_id,
             notes_in,
             refund_note,
             &swap_note,
@@ -250,10 +240,6 @@ pub fn update_state_after_non_tab_order(
         update_state_after_swap_later_fills(
             tree,
             updated_note_hashes,
-            rollback_safeguard,
-            thread_id,
-            order_id,
-            prev_partial_refund_note.as_ref().unwrap(),
             swap_note,
             &new_partial_refund_note.as_ref(),
         );

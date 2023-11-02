@@ -1,8 +1,6 @@
-use firestore_db_and_auth::ServiceSession;
-use parking_lot::Mutex;
-use serde_json::Value;
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
+use super::super::server_helpers::engine_helpers::verify_signature_format;
 use super::super::server_helpers::WsConnectionsMap;
 use super::super::{
     grpc::engine_proto::{
@@ -15,39 +13,25 @@ use super::super::{
         engine_helpers::{handle_cancel_order_repsonse, store_output_json},
     },
 };
-use super::super::{
-    grpc::{GrpcMessage, GrpcTxResponse},
-    server_helpers::engine_helpers::verify_signature_format,
-};
-use crate::{
-    matching_engine::orders::limit_order_cancel_request,
-    perpetual::perp_helpers::perp_rollback::PerpRollbackInfo,
-};
+use crate::matching_engine::orders::limit_order_cancel_request;
+use crate::transaction_batch::TransactionBatch;
+use crate::utils::crypto_utils::Signature;
+use crate::utils::errors::send_cancel_order_error_reply;
 use crate::{
     matching_engine::{
         domain::OrderSide as OBOrderSide, orderbook::OrderBook, orders::new_amend_order,
     },
-    utils::{
-        errors::send_amend_order_error_reply,
-        storage::local_storage::{BackupStorage, MainStorage},
-    },
+    utils::errors::send_amend_order_error_reply,
 };
 
-use crate::transactions::transaction_helpers::rollbacks::RollbackInfo;
-use crate::utils::crypto_utils::Signature;
-use crate::utils::{errors::send_cancel_order_error_reply, notes::Note};
-
-use tokio::sync::{
-    mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender, Mutex as TokioMutex,
-};
+use tokio::sync::Mutex as TokioMutex;
 use tonic::{Request, Response, Status};
 
 // * ===================================================================================================================================
 //
 
 pub async fn cancel_order_inner(
-    partial_fill_tracker: &Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
-    perpetual_partial_fill_tracker: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     request: Request<CancelOrderMessage>,
@@ -87,6 +71,11 @@ pub async fn cancel_order_inner(
 
     let res = order_book.process_order(cancel_request);
 
+    let tx_batch_m = tx_batch.lock().await;
+    let partial_fill_tracker = Arc::clone(&tx_batch_m.partial_fill_tracker);
+    let perpetual_partial_fill_tracker = Arc::clone(&tx_batch_m.perpetual_partial_fill_tracker);
+    drop(tx_batch_m);
+
     return handle_cancel_order_repsonse(
         &res[0],
         req.is_perp,
@@ -101,13 +90,7 @@ pub async fn cancel_order_inner(
 //
 
 pub async fn amend_order_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    session: &Arc<Mutex<ServiceSession>>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-    perp_rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
@@ -166,13 +149,15 @@ pub async fn amend_order_inner(
     let mut processed_res = order_book.process_order(amend_request);
     drop(order_book);
 
+    let tx_batch_m = tx_batch.lock().await;
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    drop(tx_batch_m);
+
     if req.is_perp {
         if let Err(e) = execute_perp_swaps_after_amend_order(
-            &mpsc_tx,
-            &perp_rollback_safeguard,
+            &tx_batch,
             &order_book_m,
-            &session,
-            &backup_storage,
             &ws_connections,
             &privileged_ws_connections,
             &mut processed_res,
@@ -187,11 +172,8 @@ pub async fn amend_order_inner(
         }
     } else {
         if let Err(e) = execute_spot_swaps_after_amend_order(
-            &mpsc_tx,
-            &rollback_safeguard,
+            &tx_batch,
             &order_book_m,
-            &session,
-            &backup_storage,
             processed_res,
             &ws_connections,
             &privileged_ws_connections,

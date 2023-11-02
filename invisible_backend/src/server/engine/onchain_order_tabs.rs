@@ -1,36 +1,25 @@
-use parking_lot::Mutex;
-use serde_json::Value;
-use std::{collections::HashMap, sync::Arc, thread::JoinHandle};
+use std::{collections::HashMap, sync::Arc};
 
+use super::super::grpc::engine_proto::GrpcOrderTab;
 use super::super::grpc::OrderTabActionMessage;
-use super::super::grpc::{engine_proto::GrpcOrderTab, OrderTabActionResponse};
-use super::super::{
-    grpc::{GrpcMessage, GrpcTxResponse, MessageType},
-    server_helpers::engine_helpers::store_output_json,
-};
+use super::super::server_helpers::engine_helpers::store_output_json;
+use crate::matching_engine::orderbook::OrderBook;
 use crate::perpetual::COLLATERAL_TOKEN;
 use crate::server::grpc::engine_proto::{
     AddLiqOrderTabRes, GrpcNote, GrpcPerpPosition, OnChainAddLiqTabReq, OnChainRegisterMmReq,
     OnChainRegisterMmRes, OnChainRemoveLiqTabReq, PositionRemoveLiqRes, RemoveLiqOrderTabRes,
     TabRemoveLiqRes,
 };
+use crate::transaction_batch::TransactionBatch;
 use crate::utils::errors::{
     send_add_liq_tab_error_reply, send_regster_mm_error_reply, send_remove_liq_tab_error_reply,
 };
-use crate::{matching_engine::orderbook::OrderBook, utils::storage::local_storage::MainStorage};
 
-use tokio::sync::{
-    mpsc::Sender as MpscSender,
-    oneshot::{self, Sender as OneshotSender},
-    Mutex as TokioMutex, Semaphore,
-};
-use tokio::task::JoinHandle as TokioJoinHandle;
+use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
 
 pub async fn onchain_register_mm_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     semaphore: &Semaphore,
@@ -109,32 +98,23 @@ pub async fn onchain_register_mm_inner(
         );
     }
 
-    let transaction_mpsc_tx = mpsc_tx.clone();
+    let tx_batch_m = tx_batch.lock().await;
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    drop(tx_batch_m);
 
-    let handle: TokioJoinHandle<JoinHandle<OrderTabActionResponse>> = tokio::spawn(async move {
-        let (resp_tx, resp_rx) = oneshot::channel();
+    let tab_action_message = OrderTabActionMessage {
+        open_order_tab_req: None,
+        close_order_tab_req: None,
+        onchain_add_liq_req: None,
+        onchain_register_mm_req: Some(req),
+        onchain_remove_liq_req: None,
+    };
 
-        let mut grpc_message = GrpcMessage::new();
-        grpc_message.msg_type = MessageType::OrderTabAction;
-        grpc_message.order_tab_action_message = Some(OrderTabActionMessage {
-            open_order_tab_req: None,
-            close_order_tab_req: None,
-            onchain_add_liq_req: None,
-            onchain_register_mm_req: Some(req),
-            onchain_remove_liq_req: None,
-        });
+    let mut tx_batch_m = tx_batch.lock().await;
+    let order_action_handle = tx_batch_m.execute_order_tab_modification(tab_action_message);
+    drop(tx_batch_m);
 
-        transaction_mpsc_tx
-            .send((grpc_message, resp_tx))
-            .await
-            .ok()
-            .unwrap();
-        let res = resp_rx.await.unwrap();
-
-        return res.order_tab_action_response.unwrap();
-    });
-
-    let order_action_handle = handle.await.unwrap();
     let order_action_response = order_action_handle.join();
 
     match order_action_response {
@@ -174,9 +154,7 @@ pub async fn onchain_register_mm_inner(
 }
 
 pub async fn add_liquidity_mm_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     semaphore: &Semaphore,
@@ -274,32 +252,23 @@ pub async fn add_liquidity_mm_inner(
         );
     }
 
-    let transaction_mpsc_tx = mpsc_tx.clone();
+    let tx_batch_m = tx_batch.lock().await;
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    drop(tx_batch_m);
 
-    let handle: TokioJoinHandle<JoinHandle<OrderTabActionResponse>> = tokio::spawn(async move {
-        let (resp_tx, resp_rx) = oneshot::channel();
+    let tab_action_message = OrderTabActionMessage {
+        open_order_tab_req: None,
+        close_order_tab_req: None,
+        onchain_add_liq_req: Some(req),
+        onchain_register_mm_req: None,
+        onchain_remove_liq_req: None,
+    };
 
-        let mut grpc_message = GrpcMessage::new();
-        grpc_message.msg_type = MessageType::OrderTabAction;
-        grpc_message.order_tab_action_message = Some(OrderTabActionMessage {
-            open_order_tab_req: None,
-            close_order_tab_req: None,
-            onchain_add_liq_req: Some(req),
-            onchain_register_mm_req: None,
-            onchain_remove_liq_req: None,
-        });
+    let mut tx_batch_m = tx_batch.lock().await;
+    let order_action_handle = tx_batch_m.execute_order_tab_modification(tab_action_message);
+    drop(tx_batch_m);
 
-        transaction_mpsc_tx
-            .send((grpc_message, resp_tx))
-            .await
-            .ok()
-            .unwrap();
-        let res = resp_rx.await.unwrap();
-
-        return res.order_tab_action_response.unwrap();
-    });
-
-    let order_action_handle = handle.await.unwrap();
     let order_action_response = order_action_handle.join();
 
     match order_action_response {
@@ -339,9 +308,7 @@ pub async fn add_liquidity_mm_inner(
 }
 
 pub async fn remove_liquidity_mm_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     semaphore: &Semaphore,
@@ -436,32 +403,23 @@ pub async fn remove_liquidity_mm_inner(
         );
     }
 
-    let transaction_mpsc_tx = mpsc_tx.clone();
+    let tx_batch_m = tx_batch.lock().await;
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    drop(tx_batch_m);
 
-    let handle: TokioJoinHandle<JoinHandle<OrderTabActionResponse>> = tokio::spawn(async move {
-        let (resp_tx, resp_rx) = oneshot::channel();
+    let tab_action_message = OrderTabActionMessage {
+        open_order_tab_req: None,
+        close_order_tab_req: None,
+        onchain_add_liq_req: None,
+        onchain_register_mm_req: None,
+        onchain_remove_liq_req: Some(req),
+    };
 
-        let mut grpc_message = GrpcMessage::new();
-        grpc_message.msg_type = MessageType::OrderTabAction;
-        grpc_message.order_tab_action_message = Some(OrderTabActionMessage {
-            open_order_tab_req: None,
-            close_order_tab_req: None,
-            onchain_add_liq_req: None,
-            onchain_register_mm_req: None,
-            onchain_remove_liq_req: Some(req),
-        });
+    let mut tx_batch_m = tx_batch.lock().await;
+    let order_action_handle = tx_batch_m.execute_order_tab_modification(tab_action_message);
+    drop(tx_batch_m);
 
-        transaction_mpsc_tx
-            .send((grpc_message, resp_tx))
-            .await
-            .ok()
-            .unwrap();
-        let res = resp_rx.await.unwrap();
-
-        return res.order_tab_action_response.unwrap();
-    });
-
-    let order_action_handle = handle.await.unwrap();
     let order_action_response = order_action_handle.join();
 
     match order_action_response {

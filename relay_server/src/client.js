@@ -13,6 +13,10 @@ const {
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
 const { initServer, initFundingInfo } = require("./helpers/initServer");
+const {
+  isDepositValid,
+  depositProcessedCallback,
+} = require("./helpers/depositListener");
 
 const corsOptions = {
   origin: "*",
@@ -86,11 +90,28 @@ initFundingInfo(client, updateFundingInfo);
 /// =============================================================================
 
 // * EXECUTE DEPOSIT -----------------------------------------------------------------
-app.post("/execute_deposit", (req, res) => {
+app.post("/execute_deposit", async (req, res) => {
+  let isValid = await isDepositValid(req.body, db);
+
+  if (!isValid) {
+    res.send({
+      response: { successful: false, error_message: "Invalid deposit" },
+    });
+    return;
+  }
+
+
   client.execute_deposit(req.body, function (err, response) {
     if (err) {
       console.log(err);
     } else {
+      console.log("response: ", response);
+
+      if (response.successful) {
+        console.log("deposit processed", req.body.deposit_id);
+        depositProcessedCallback(db, req.body.deposit_id);
+      }
+
       res.send({ response: response });
     }
   });

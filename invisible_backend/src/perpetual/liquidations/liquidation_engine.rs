@@ -73,6 +73,7 @@ impl LiquidationSwap {
 
         // TODO: This is only for testing purposes -- remove after
         let index_price = self.market_price;
+        // TODO: This is only for testing purposes -- remove after
 
         // ? Execute orders in parallel ===========================================================
 

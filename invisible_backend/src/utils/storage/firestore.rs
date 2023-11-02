@@ -160,11 +160,6 @@ fn store_new_perp_fill(
     }
 }
 
-fn delete_pending_deposit(session: &ServiceSession, deposit_id: u64) {
-    let delete_path = format!("deposits/{}", deposit_id);
-    let _r = documents::delete(session, delete_path.as_str(), true);
-}
-
 // * PUBLIC FUNCTIONS ===============================================================
 
 // NOTES

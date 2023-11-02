@@ -201,37 +201,53 @@ function initLiquidity(db) {
   }
 }
 
-function updateStoredDepositIds(db, pendingDepositIds, processedDepositIds) {
+function updateStoredDepositIds(db, pendingDeposits, processedDepositIds) {
   const stmt = db.prepare(
     "INSERT OR REPLACE INTO processedDeposits (id, pending, processed) VALUES (?, ?, ?)"
   );
 
-  console.log("---storgin pendingDepositIds: ", pendingDepositIds);
-  console.log("---storgin processedDepositIds: ", processedDepositIds);
   stmt.run(
     1,
-    JSON.stringify(pendingDepositIds),
+    JSON.stringify(pendingDeposits),
     JSON.stringify(processedDepositIds)
   );
   stmt.finalize();
 }
 
-function getProcessedDeposits(db, callback) {
+async function getProcessedDeposits(db) {
+  let fetching = true;
+  let result = null;
   db.get(
     "SELECT pending, processed FROM processedDeposits WHERE id = ?",
     1,
     (err, row) => {
       if (err) {
-        return callback(err);
+        console.error(err.message);
+        result = { pendingDeposits: [], processedDepositIds: [] };
+        fetching = false;
+        return result;
       }
       if (row) {
         const pendingArray = JSON.parse(row.pending);
         const processedArray = JSON.parse(row.processed);
-        return callback(null, pendingArray, processedArray);
+
+        result = {
+          pendingDeposits: [...new Set(pendingArray)],
+          processedDepositIds: [...new Set(processedArray)],
+        };
+        fetching = false;
       }
-      return callback(null, []);
+
+      fetching = false;
     }
   );
+
+  while (fetching) {
+    // sleep for 5 ms
+    await new Promise((r) => setTimeout(r, 5));
+  }
+
+  return result;
 }
 
 module.exports = {

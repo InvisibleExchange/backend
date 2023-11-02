@@ -29,7 +29,7 @@ pub fn _init_inner(
 ) {
     let storage = main_storage.lock();
     if !storage.funding_db.is_empty() {
-        if let Ok((funding_rates_, funding_prices_, funding_idxs, min_funding_idxs_)) =
+        if let Ok((funding_rates_, funding_prices_, min_funding_idxs_)) =
             storage.read_funding_info()
         {
             *funding_rates = funding_rates_;

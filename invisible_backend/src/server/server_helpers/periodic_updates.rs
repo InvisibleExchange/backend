@@ -1,4 +1,3 @@
-use parking_lot::Mutex;
 use serde_json::json;
 use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
@@ -7,38 +6,33 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::matching_engine::orderbook::OrderBook;
 use crate::perpetual::IMPACT_NOTIONAL_PER_ASSET;
-use crate::server::grpc::{FundingUpdateMessage, GrpcMessage, GrpcTxResponse, MessageType};
+use crate::server::grpc::FundingUpdateMessage;
 use crate::server::server_helpers::broadcast_message;
-use crate::trees::superficial_tree::SuperficialTree;
+use crate::transaction_batch::TransactionBatch;
 use crate::utils::storage::firestore::{create_session, retry_failed_updates};
-use crate::utils::storage::local_storage::BackupStorage;
 
-use firestore_db_and_auth::ServiceSession;
-
-use tokio::sync::{
-    mpsc::Sender as MpscSender,
-    oneshot::{self, Sender as OneshotSender},
-    Mutex as TokioMutex,
-};
-use tokio::task::JoinHandle as TokioJoinHandle;
+use tokio::sync::Mutex as TokioMutex;
 use tokio::time;
 
 use super::WsConnectionsMap;
 
 pub async fn start_periodic_updates(
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    session: &Arc<Mutex<ServiceSession>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
-    state_tree: &Arc<Mutex<SuperficialTree>>,
 ) {
     let perp_order_books_ = perp_order_books.clone();
-    let mpsc_tx = mpsc_tx.clone();
+
+    let tx_batch_m = tx_batch.lock().await;
+    let session = Arc::clone(&tx_batch_m.firebase_session);
+    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
+    let state_tree = Arc::clone(&tx_batch_m.state_tree);
+    drop(tx_batch_m);
 
     // * UPDATE FUNDING RATES EVERY 60 SECONDS
+    let tx_batch_c = Arc::clone(&tx_batch);
     let mut interval = time::interval(time::Duration::from_secs(60));
     tokio::spawn(async move {
         'outer: loop {
@@ -66,37 +60,10 @@ pub async fn start_periodic_updates(
                 continue 'outer;
             }
 
-            let transaction_mpsc_tx = mpsc_tx.clone();
-
-            let handle: TokioJoinHandle<
-                Result<GrpcTxResponse, tokio::sync::oneshot::error::RecvError>,
-            > = tokio::spawn(async move {
-                let (resp_tx, resp_rx) = oneshot::channel();
-
-                let mut grpc_message = GrpcMessage::new();
-                grpc_message.msg_type = MessageType::FundingUpdate;
-                grpc_message.funding_update_message = Some(FundingUpdateMessage { impact_prices });
-
-                transaction_mpsc_tx
-                    .send((grpc_message, resp_tx))
-                    .await
-                    .ok()
-                    .unwrap();
-
-                return resp_rx.await;
-            });
-
-            if let Ok(grpc_res) = handle.await {
-                if let Ok(grpc_res) = grpc_res {
-                    if !grpc_res.successful {
-                        println!("Failed applying funding update\n");
-                    }
-                } else {
-                    println!("Failed applying funding update\n");
-                }
-            } else {
-                println!("Failed applying funding update\n");
-            }
+            let mut tx_batch_m = tx_batch_c.lock().await;
+            let funding_update_msg = FundingUpdateMessage { impact_prices };
+            tx_batch_m.per_minute_funding_updates(funding_update_msg);
+            drop(tx_batch_m);
         }
     });
 

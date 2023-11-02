@@ -1,13 +1,11 @@
-use std::thread::{JoinHandle, ThreadId};
+use std::sync::Arc;
 use std::time::SystemTime;
-use std::{collections::HashMap, sync::Arc};
 
 use async_recursion::async_recursion;
 use firestore_db_and_auth::ServiceSession;
 use serde_json::json;
-use tokio::sync::{oneshot, Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 
-use error_stack::Result;
 use parking_lot::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -21,23 +19,13 @@ use crate::perpetual::perp_helpers::db_updates::store_perp_fill;
 use crate::perpetual::perp_helpers::perp_swap_outptut::PerpOrderFillResponse;
 use crate::perpetual::perp_position::PerpPosition;
 use crate::perpetual::{get_cross_price, scale_up_price, PositionEffectType, COLLATERAL_TOKEN};
-use crate::perpetual::{
-    perp_helpers::{perp_rollback::PerpRollbackInfo, perp_swap_outptut::PerpSwapResponse},
-    perp_order::PerpOrder,
-    perp_swap::PerpSwap,
-    OrderSide,
-};
-use crate::transactions::transaction_helpers::rollbacks::initiate_rollback;
+use crate::perpetual::{perp_order::PerpOrder, perp_swap::PerpSwap, OrderSide};
+use crate::transaction_batch::TransactionBatch;
 
 use crate::utils::crypto_utils::Signature;
 use crate::utils::storage::local_storage::BackupStorage;
 use crate::utils::{errors::PerpSwapExecutionError, notes::Note};
 
-use tokio::sync::{mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender};
-
-use tokio::task::JoinHandle as TokioJoinHandle;
-
-use super::super::grpc::{GrpcMessage, GrpcTxResponse, MessageType, RollbackMessage};
 use super::{
     broadcast_message, proccess_perp_matching_result, send_direct_message, send_to_relay_server,
     WsConnectionsMap,
@@ -47,12 +35,11 @@ type SwapErrorInfo = (Option<u64>, u64, u64, String);
 
 pub async fn execute_perp_swap(
     perp_swap: PerpSwap,
-    transaction_mpsc_tx: MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    perp_rollback_safeguard: Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
-    perp_order_book: Arc<TokioMutex<OrderBook>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
+    perp_order_book: &Arc<TokioMutex<OrderBook>>,
     user_id_pair: (u64, u64),
-    session: Arc<Mutex<ServiceSession>>,
-    backup_storage: Arc<Mutex<BackupStorage>>,
+    session: &Arc<Mutex<ServiceSession>>,
+    backup_storage: &Arc<Mutex<BackupStorage>>,
 ) -> (
     Option<(
         (Message, Message),
@@ -102,25 +89,9 @@ pub async fn execute_perp_swap(
     let price = scale_up_price(p, perp_swap.order_a.synthetic_token);
     let synthetic_token = perp_swap.order_a.synthetic_token;
 
-    // ? Send the transaction to be executed
-    let tx_mpsc_tx = transaction_mpsc_tx.clone();
-    let handle: TokioJoinHandle<JoinHandle<Result<PerpSwapResponse, PerpSwapExecutionError>>> =
-        tokio::spawn(async move {
-            let (resp_tx, resp_rx) = oneshot::channel();
-
-            let mut grpc_message = GrpcMessage::new();
-            grpc_message.msg_type = MessageType::PerpSwapMessage;
-            grpc_message.perp_swap_message = Some(perp_swap);
-
-            tx_mpsc_tx.send((grpc_message, resp_tx)).await.ok().unwrap();
-            let res = resp_rx.await.unwrap();
-
-            return res.perp_tx_handle.unwrap();
-        });
-
-    let perp_swap_handle = handle.await.unwrap();
-
-    let thread_id = perp_swap_handle.thread().id();
+    let mut tx_batch_m = tx_batch.lock().await;
+    let perp_swap_handle = tx_batch_m.execute_perpetual_transaction(perp_swap);
+    drop(tx_batch_m);
 
     let perp_swap_response = perp_swap_handle.join();
 
@@ -263,19 +234,6 @@ pub async fn execute_perp_swap(
             }
         },
         Err(_) => {
-            let should_rollback = perp_rollback_safeguard.lock().contains_key(&thread_id);
-            if should_rollback {
-                // ? Get the input notes if there were any before initiating the rollback
-                let (notes_in_a, notes_in_b) = _get_notes_in(&order_a_clone, &order_b_clone);
-
-                let rollback_message = RollbackMessage {
-                    tx_type: "perp_swap".to_string(),
-                    notes_in_a,
-                    notes_in_b,
-                };
-                initiate_rollback(transaction_mpsc_tx, thread_id, rollback_message).await;
-            }
-
             if maker_side == OrderSide::Long {
                 book.bid_queue
                     .restore_pending_order(Order::Perp(maker_order), qty);
@@ -298,8 +256,7 @@ pub async fn execute_perp_swap(
 }
 
 pub async fn process_and_execute_perp_swaps(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    perp_rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     perp_order_book: &Arc<TokioMutex<OrderBook>>,
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -326,17 +283,10 @@ pub async fn process_and_execute_perp_swaps(
 
             let (swap, user_id_a, user_id_b) = swaps.pop().unwrap();
 
-            let mpsc_tx = mpsc_tx.clone();
-            let perp_rollback_safeguard_clone = perp_rollback_safeguard.clone();
-            let perp_order_book = perp_order_book.clone();
-            let session = session.clone();
-            let backup_storage = backup_storage.clone();
-
             // let handle = tokio::spawn(execute_perp_swap(
             let res = execute_perp_swap(
                 swap,
-                mpsc_tx,
-                perp_rollback_safeguard_clone,
+                tx_batch,
                 perp_order_book,
                 (user_id_a, user_id_b),
                 session,
@@ -527,8 +477,7 @@ pub async fn await_perp_handle(
 
 #[async_recursion]
 pub async fn retry_failed_perp_swaps(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    perp_rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     perp_order_book: &Arc<TokioMutex<OrderBook>>,
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -572,8 +521,7 @@ pub async fn retry_failed_perp_swaps(
         .await;
 
         match process_and_execute_perp_swaps(
-            mpsc_tx,
-            perp_rollback_safeguard,
+            tx_batch,
             perp_order_book,
             session,
             backup_storage,
@@ -595,8 +543,7 @@ pub async fn retry_failed_perp_swaps(
 
     if new_retry_messages.len() > 0 {
         retry_failed_perp_swaps(
-            mpsc_tx,
-            perp_rollback_safeguard,
+            tx_batch,
             perp_order_book,
             session,
             backup_storage,

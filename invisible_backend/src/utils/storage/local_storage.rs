@@ -18,9 +18,10 @@ pub struct MainStorage {
     pub tx_db: sled::Db,
     pub price_db: sled::Db,
     pub funding_db: sled::Db,
-    pub latest_batch: u32,  // every transaction batch stores data separately
-    pub n_deposits: u32,    // the number of deposits in the current batch
-    pub n_withdrawals: u32, // the number of withdrawals in the current batch
+    pub processed_deposits_db: sled::Db, // Deposit ids of all the deposits that were processed so far
+    pub latest_batch: u32,               // every transaction batch stores data separately
+    pub n_deposits: u32,                 // the number of deposits in the current batch
+    pub n_withdrawals: u32,              // the number of withdrawals in the current batch
 }
 
 impl MainStorage {
@@ -47,14 +48,14 @@ impl MainStorage {
         let config = Config::new().path("./storage/funding_info".to_string());
         let funding_db = config.open().unwrap();
 
-        // let config =
-        //     Config::new().path("./storage/backups".to_string());
-        // let backups_db = config.open().unwrap();
+        let config = Config::new().path("./storage/processed_deposits".to_string());
+        let processed_deposits_db = config.open().unwrap();
 
         MainStorage {
             tx_db,
             price_db,
             funding_db,
+            processed_deposits_db,
             latest_batch: batch_index as u32,
             n_deposits: 0,
             n_withdrawals: 0,
@@ -155,7 +156,7 @@ impl MainStorage {
         json_result
     }
 
-    // PRICE DATA
+    // * PRICE DATA ————————————————————————————————————————————————————————————————————- //
 
     pub fn store_price_data(
         &self,
@@ -212,7 +213,7 @@ impl MainStorage {
         ))
     }
 
-    // FUNDING INFO
+    // * FUNDING INFO ————————————————————————————————————————————————————————————————————- //
 
     // pub funding_rates: HashMap<u64, Vec<i64>>, // maps asset id to an array of funding rates (not reset at new batch)
     // pub funding_prices: HashMap<u64, Vec<u64>>, // maps asset id to an array of funding prices (corresponding to the funding rates) (not reset at new batch)
@@ -275,6 +276,34 @@ impl MainStorage {
 
         Ok((funding_rates, funding_prices, min_funding_idx))
     }
+
+    // * PROCESSED DEPOSITS ——————————————————————————————————————————————————————————————- //
+
+    /// Store a deposit id of a deposit that was processed to make sure it doesn't get executed twice
+    pub fn store_processed_deposit_id(&self, deposit_id: u64) {
+        self.processed_deposits_db
+            .insert(deposit_id.to_string(), serde_json::to_vec(&true).unwrap())
+            .unwrap();
+
+        // println!(
+        //     "stored_val new after deposit: {:?}",
+        //     self.processed_deposits_db.iter().for_each(|val| {
+        //         println!("{:?}", val);
+        //     })
+        // );
+    }
+
+    pub fn is_deposit_already_processed(&self, deposit_id: u64) -> bool {
+        let is_processsed: bool = self
+            .processed_deposits_db
+            .get(deposit_id.to_string())
+            .unwrap_or_default()
+            .is_some();
+
+        is_processsed
+    }
+
+    // * BATCH TRANSITION ————————————————————————————————————————————————————————————————- //
 
     /// Clears the storage to make room for the next batch.
     ///

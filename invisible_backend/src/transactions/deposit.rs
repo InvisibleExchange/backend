@@ -3,7 +3,6 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::thread::ThreadId;
 
 use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
@@ -12,7 +11,7 @@ use crate::utils::errors::{
 };
 
 use crate::utils::crypto_utils::{pedersen_on_vec, verify, Signature};
-use crate::utils::storage::local_storage::BackupStorage;
+use crate::utils::storage::local_storage::{BackupStorage, MainStorage};
 use num_bigint::BigUint;
 use serde_json::Value;
 
@@ -24,7 +23,6 @@ use crate::utils::notes::Note;
 
 use super::swap::SwapResponse;
 use super::transaction_helpers::db_updates::update_db_after_deposit;
-use super::transaction_helpers::rollbacks::RollbackInfo;
 use super::transaction_helpers::state_updates::update_state_after_deposit;
 use super::Transaction;
 //
@@ -46,8 +44,8 @@ impl Deposit {
         tree_m: Arc<Mutex<SuperficialTree>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-        rollback_safeguard_m: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
         session: &Arc<Mutex<ServiceSession>>,
+        main_storage: &Arc<Mutex<MainStorage>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<Vec<u64>, DepositThreadExecutionError> {
         //
@@ -56,9 +54,6 @@ impl Deposit {
         let new_notes = self.notes.clone();
 
         let deposit_handle = thread::scope(move |_s| {
-            // TODO: Verify the deposit was registered (made onchain)
-            // TODO: Verify the deposit_id (64 bit) is of the format | chain_id (32 bit) | identifier (32 bit) |
-
             let mut tree = tree_m.lock();
 
             let mut zero_idxs: Vec<u64> = Vec::new();
@@ -93,14 +88,26 @@ impl Deposit {
             // ? verify Signature
             self.verify_deposit_signature()?;
 
+            // ? Verify the deposit has not been processed yet
+            let main_storage_m = main_storage.lock();
+
+            let is_already_processed = main_storage_m.is_deposit_already_processed(deposit_id);
+            if is_already_processed {
+                return Err(send_deposit_error(
+                    "deposit has already been processed".to_string(),
+                    None,
+                ));
+            }
+
+            // ? store the deposit_id as processed
+            main_storage_m.store_processed_deposit_id(deposit_id);
+            drop(main_storage_m);
+
+            // * After the deposit is verified to be valid update the state ================ //
+
             // ? Update the state
             let mut tree = tree_m.lock();
-            update_state_after_deposit(
-                &mut tree,
-                &updated_state_hashes_m,
-                &rollback_safeguard_m,
-                &self.notes,
-            )?;
+            update_state_after_deposit(&mut tree, &updated_state_hashes_m, &self.notes);
             drop(tree);
 
             let mut json_map = serde_json::map::Map::new();
@@ -182,12 +189,12 @@ impl Transaction for Deposit {
     fn execute_transaction(
         &mut self,
         tree_m: Arc<Mutex<SuperficialTree>>,
-        _: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
+        _partial_fill_tracker_m: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-        _: Arc<Mutex<HashMap<u64, bool>>>,
-        rollback_safeguard_m: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+        _blocked_order_ids_m: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
+        main_storage: &Arc<Mutex<MainStorage>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(Option<SwapResponse>, Option<Vec<u64>>), TransactionExecutionError> {
         let zero_idxs = self
@@ -195,8 +202,8 @@ impl Transaction for Deposit {
                 tree_m,
                 updated_state_hashes_m,
                 swap_output_json_m,
-                rollback_safeguard_m,
                 session,
+                main_storage,
                 backup_storage,
             )
             .or_else(|err: Report<DepositThreadExecutionError>| {
