@@ -2,10 +2,7 @@ pub mod engine_proto {
     tonic::include_proto!("engine");
 }
 
-use std::{
-    collections::HashMap,
-    thread::{JoinHandle, ThreadId},
-};
+use std::{collections::HashMap, thread::JoinHandle};
 
 use error_stack::Result;
 use serde::Serialize;
@@ -13,21 +10,12 @@ use serde::Serialize;
 use crate::{
     order_tab::OrderTab,
     perpetual::{
-        liquidations::{
-            liquidation_engine::LiquidationSwap, liquidation_output::LiquidationResponse,
-        },
-        perp_helpers::perp_swap_outptut::PerpSwapResponse,
-        perp_order::CloseOrderFields,
+        liquidations::liquidation_output::LiquidationResponse,
+        perp_helpers::perp_swap_outptut::PerpSwapResponse, perp_order::CloseOrderFields,
         perp_position::PerpPosition,
-        perp_swap::PerpSwap,
     },
     smart_contract_mms::remove_liquidity::RemoveLiqRes,
-    transaction_batch::tx_batch_structs::OracleUpdate,
-    transactions::{
-        deposit::Deposit,
-        swap::{Swap, SwapResponse},
-        withdrawal::Withdrawal,
-    },
+    transactions::swap::SwapResponse,
     utils::crypto_utils::Signature,
     utils::{
         errors::{PerpSwapExecutionError, TransactionExecutionError},
@@ -54,7 +42,7 @@ pub struct GrpcTxResponse {
     pub margin_change_response: Option<(Option<MarginChangeResponse>, String)>, //
     pub order_tab_action_response: Option<JoinHandle<OrderTabActionResponse>>,
     pub new_idxs: Option<std::result::Result<Vec<u64>, String>>, // For deposit orders
-    pub funding_info: Option<(HashMap<u32, Vec<i64>>, HashMap<u32, Vec<u64>>)>,
+    pub funding_info: Option<(HashMap<u32, Vec<i64>>, HashMap<u32, Vec<u64>>)>, // (funding_rates, funding_prices, latest_funding_idx)
     pub successful: bool,
 }
 
@@ -76,57 +64,6 @@ pub struct MarginChangeResponse {
 }
 
 // * ===================================================================================
-
-pub enum MessageType {
-    DepositMessage,
-    SwapMessage,
-    WithdrawalMessage,
-    PerpSwapMessage,
-    LiquidationMessage,
-    SplitNotes,
-    MarginChange,
-    OrderTabAction,
-    Rollback,
-    FundingUpdate,
-    IndexPriceUpdate,
-    Undefined,
-    FinalizeBatch,
-}
-
-impl Default for MessageType {
-    fn default() -> MessageType {
-        MessageType::Undefined
-    }
-}
-
-#[derive(Default)]
-pub struct GrpcMessage {
-    pub msg_type: MessageType,
-    pub deposit_message: Option<Deposit>,
-    pub swap_message: Option<Swap>,
-    pub withdrawal_message: Option<Withdrawal>,
-    pub perp_swap_message: Option<PerpSwap>,
-    pub liquidation_message: Option<LiquidationSwap>,
-    pub split_notes_message: Option<(Vec<Note>, Note, Option<Note>)>,
-    pub change_margin_message: Option<ChangeMarginMessage>,
-    pub order_tab_action_message: Option<OrderTabActionMessage>,
-    pub rollback_info_message: Option<(ThreadId, RollbackMessage)>,
-    pub funding_update_message: Option<FundingUpdateMessage>,
-    pub price_update_message: Option<Vec<OracleUpdate>>,
-}
-
-impl GrpcMessage {
-    pub fn new() -> Self {
-        GrpcMessage::default()
-    }
-}
-
-#[derive(Clone)]
-pub struct RollbackMessage {
-    pub tx_type: String,
-    pub notes_in_a: (u64, Option<Vec<Note>>),
-    pub notes_in_b: (u64, Option<Vec<Note>>),
-}
 
 #[derive(Clone)]
 pub struct FundingUpdateMessage {

@@ -4,7 +4,6 @@ use firestore_db_and_auth::ServiceSession;
 use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
 use std::sync::Arc;
-use std::thread::ThreadId;
 
 use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
@@ -13,7 +12,7 @@ use crate::utils::errors::{
     send_withdrawal_error, TransactionExecutionError, WithdrawalThreadExecutionError,
 };
 
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::{BackupStorage, MainStorage};
 use crossbeam::thread;
 use error_stack::{Report, Result};
 use num_bigint::BigUint;
@@ -21,7 +20,6 @@ use num_traits::{FromPrimitive, Zero};
 use serde_json::Value;
 
 use super::transaction_helpers::db_updates::update_db_after_withdrawal;
-use super::transaction_helpers::rollbacks::RollbackInfo;
 use super::transaction_helpers::state_updates::update_state_after_withdrawal;
 use super::Transaction;
 //
@@ -46,7 +44,6 @@ impl Withdrawal {
         tree_m: Arc<Mutex<SuperficialTree>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-        rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
         session: &Arc<Mutex<ServiceSession>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(), WithdrawalThreadExecutionError> {
@@ -87,7 +84,6 @@ impl Withdrawal {
             update_state_after_withdrawal(
                 &mut tree,
                 &mut updated_state_hashes,
-                &rollback_safeguard,
                 &self.notes_in,
                 &self.refund_note,
             )?;
@@ -195,19 +191,18 @@ impl Transaction for Withdrawal {
     fn execute_transaction(
         &mut self,
         tree: Arc<Mutex<SuperficialTree>>,
-        _: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
+        _partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-        _: Arc<Mutex<HashMap<u64, bool>>>,
-        rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+        _blocked_order_ids: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
+        _main_storage: &Arc<Mutex<MainStorage>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(Option<SwapResponse>, Option<Vec<u64>>), TransactionExecutionError> {
         self.execute_withdrawal(
             tree,
             updated_state_hashes,
             swap_output_json,
-            rollback_safeguard,
             session,
             backup_storage,
         )

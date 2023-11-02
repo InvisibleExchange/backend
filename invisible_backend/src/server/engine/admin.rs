@@ -4,24 +4,19 @@ use super::super::grpc::engine_proto::{
     EmptyReq, FinalizeBatchResponse, OracleUpdateReq, RestoreOrderBookMessage,
     SpotOrderRestoreMessage, SuccessResponse,
 };
-use super::super::grpc::{GrpcMessage, GrpcTxResponse, MessageType};
 
+use crate::transaction_batch::TransactionBatch;
 use crate::{
     matching_engine::orderbook::OrderBook, transaction_batch::tx_batch_structs::OracleUpdate,
 };
 
 use crate::utils::errors::send_oracle_update_error_reply;
 
-use tokio::sync::{
-    mpsc::Sender as MpscSender,
-    oneshot::{self, Sender as OneshotSender},
-    Mutex as TokioMutex, Semaphore,
-};
-use tokio::task::JoinHandle as TokioJoinHandle;
+use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
 
 pub async fn finalize_batch_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     semaphore: &Semaphore,
     is_paused: &Arc<TokioMutex<bool>>,
     //
@@ -31,122 +26,67 @@ pub async fn finalize_batch_inner(
 
     let lock = is_paused.lock().await;
 
-    let now = Instant::now();
-
     tokio::task::yield_now().await;
 
-    let transaction_mpsc_tx = mpsc_tx.clone();
-    let handle = tokio::spawn(async move {
-        let res: TokioJoinHandle<GrpcTxResponse> = tokio::spawn(async move {
-            let (resp_tx, resp_rx) = oneshot::channel();
+    let now = Instant::now();
 
-            let mut grpc_message = GrpcMessage::new();
-            grpc_message.msg_type = MessageType::FinalizeBatch;
+    let mut tx_batch_m = tx_batch.lock().await;
+    let success = tx_batch_m.finalize_batch().is_ok();
+    drop(tx_batch_m);
 
-            transaction_mpsc_tx
-                .send((grpc_message, resp_tx))
-                .await
-                .ok()
-                .unwrap();
-            let res = resp_rx.await.unwrap();
+    println!("time: {:?}", now.elapsed());
 
-            return res;
-        });
-
-        println!("time: {:?}", now.elapsed());
-
-        if let Ok(res) = res.await {
-            if res.successful {
-                // OK
-
-                println!("batch finalized sucessfuly");
-            } else {
-                println!("batch finalization failed");
-            }
-        } else {
-            println!("batch finalization failed");
-        }
-    });
+    if success {
+        println!("batch finalized sucessfuly");
+    } else {
+        println!("batch finalization failed");
+    }
 
     drop(lock);
 
-    match handle.await {
-        Ok(_) => {
-            return Ok(Response::new(FinalizeBatchResponse {}));
-        }
-        Err(_e) => {
-            return Ok(Response::new(FinalizeBatchResponse {}));
-        }
-    }
+    return Ok(Response::new(FinalizeBatchResponse {}));
 }
 
 pub async fn update_index_price_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     //
     request: Request<OracleUpdateReq>,
 ) -> Result<Response<SuccessResponse>, Status> {
     tokio::task::yield_now().await;
 
-    let transaction_mpsc_tx = mpsc_tx.clone();
-    let handle = tokio::spawn(async move {
-        let req: OracleUpdateReq = request.into_inner();
+    let req: OracleUpdateReq = request.into_inner();
 
-        let mut oracle_updates: Vec<OracleUpdate> = Vec::new();
-        for update in req.oracle_price_updates {
-            match OracleUpdate::try_from(update) {
-                Ok(oracle_update) => oracle_updates.push(oracle_update),
-                Err(err) => {
-                    return send_oracle_update_error_reply(format!(
-                        "Error occurred while parsing the oracle update: {:?}",
-                        err.current_context()
-                    ));
-                }
+    let mut oracle_updates: Vec<OracleUpdate> = Vec::new();
+    for update in req.oracle_price_updates {
+        match OracleUpdate::try_from(update) {
+            Ok(oracle_update) => oracle_updates.push(oracle_update),
+            Err(err) => {
+                return send_oracle_update_error_reply(format!(
+                    "Error occurred while parsing the oracle update: {:?}",
+                    err.current_context()
+                ));
             }
         }
+    }
 
-        let execution_handle: TokioJoinHandle<GrpcTxResponse> = tokio::spawn(async move {
-            let (resp_tx, resp_rx) = oneshot::channel();
+    let mut tx_batch_m = tx_batch.lock().await;
+    let updated_prices = tx_batch_m.update_index_prices(oracle_updates);
+    drop(tx_batch_m);
 
-            let mut grpc_message = GrpcMessage::new();
-            grpc_message.msg_type = MessageType::IndexPriceUpdate;
-            grpc_message.price_update_message = Some(oracle_updates);
-
-            transaction_mpsc_tx
-                .send((grpc_message, resp_tx))
-                .await
-                .ok()
-                .unwrap();
-
-            return resp_rx.await.unwrap();
-        });
-
-        let grpc_res = execution_handle.await.unwrap();
-        if grpc_res.successful {
+    match updated_prices {
+        Ok(_) => {
             let reply = SuccessResponse {
                 successful: true,
                 error_message: "".to_string(),
             };
 
             return Ok(Response::new(reply));
-        } else {
-            println!("Error updating the index price");
-
-            return send_oracle_update_error_reply(
-                "Error occurred while updating index price ".to_string(),
-            );
         }
-    });
-
-    match handle.await {
-        Ok(res) => {
-            return res;
-        }
-        Err(_e) => {
-            println!("Unknown Error in update index price");
-
-            return send_oracle_update_error_reply(
-                "Unknown Error occurred while updating index price".to_string(),
-            );
+        Err(err) => {
+            return send_oracle_update_error_reply(format!(
+                "Error occurred while updating the index price: {:?}",
+                err.current_context()
+            ));
         }
     }
 }

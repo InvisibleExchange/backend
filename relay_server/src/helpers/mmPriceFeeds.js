@@ -37,7 +37,7 @@ async function priceUpdate(PRICE_FEEDS, MM_CONFIG) {
       try {
         await _priceUpdateInner(PRICE_FEEDS, MM_CONFIG, (randIdx + 4) % 5);
       } catch (error) {
-        console.log("Error fetching prices:", error);
+        // console.log("Error fetching prices:", error);
       }
     }
   }
@@ -73,8 +73,8 @@ async function fetchCoinmarketCapPrices(PRICE_FEEDS) {
 
   let response = await axios
     .get(url, { headers, params })
-    .then((r) => r.data.data)
-    .catch((e) => console.log(e));
+    .then((r) => r.data.data);
+  // .catch((e) => console.log(e));
 
   for (let cmId of coinmarketcapIds) {
     let assetRes = response[cmId];
@@ -108,10 +108,8 @@ async function fetchCoinGeckoPrices(PRICE_FEEDS) {
     Accept: "application/json",
   };
 
-  let response = await axios
-    .get(url, { headers })
-    .then((r) => r.data)
-    .catch((e) => console.log(e));
+  let response = await axios.get(url, { headers }).then((r) => r.data);
+  // .catch((e) => console.log(e));
 
   for (let assetRes of response) {
     let price = Number(assetRes.current_price);
@@ -143,8 +141,8 @@ async function fetchCoinCapPrices(PRICE_FEEDS) {
 
   let response = await axios
     .get(url, { headers, params })
-    .then((r) => r.data.data)
-    .catch((e) => console.log(e));
+    .then((r) => r.data.data);
+  // .catch((e) => console.log(e));
 
   for (let assetRes of response) {
     let price = Number(assetRes.priceUsd);

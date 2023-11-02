@@ -7,9 +7,9 @@ use crate::{
     perpetual::perp_position::PerpPosition,
     transactions::transaction_helpers::db_updates::DbNoteUpdater,
     utils::{
-        firestore::{start_add_position_thread, start_delete_position_thread},
         notes::Note,
-        storage::BackupStorage,
+        storage::firestore::{start_add_position_thread, start_delete_position_thread},
+        storage::local_storage::BackupStorage,
     },
 };
 

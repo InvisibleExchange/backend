@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 use num_bigint::BigUint;
@@ -29,7 +29,6 @@ use super::{
                 update_state_after_tab_order,
             },
         },
-        rollbacks::RollbackInfo,
         swap_helpers::{block_until_prev_fill_finished, NoteInfoExecutionOutput},
     },
 };
@@ -173,9 +172,6 @@ fn check_order_validity(
 pub fn update_state_after_order(
     tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-    thread_id: ThreadId,
-    order: &LimitOrder,
     spot_note_info: &Option<SpotNotesInfo>,
     note_info_output: &Option<NoteInfoExecutionOutput>,
     updated_order_tab: &Option<OrderTab>,
@@ -195,15 +191,11 @@ pub fn update_state_after_order(
         update_state_after_non_tab_order(
             tree,
             updated_state_hashes,
-            rollback_safeguard,
-            thread_id,
             is_first_fill,
-            order.order_id,
             notes_in,
             refund_note,
             swap_note,
             new_partial_fill_info,
-            prev_partial_refund_note,
         )
     } else {
         let updated_order_tab = updated_order_tab.as_ref().unwrap();

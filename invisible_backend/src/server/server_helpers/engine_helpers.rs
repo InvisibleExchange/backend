@@ -1,3 +1,4 @@
+use error_stack::Report;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use parking_lot::Mutex;
@@ -16,20 +17,19 @@ use crate::{
             CancelOrderResponse, DepositResponse, GrpcNote, MarginChangeRes,
             Signature as GrpcSignature, SplitNotesRes, SuccessResponse,
         },
-        ChangeMarginMessage, GrpcTxResponse,
+        ChangeMarginMessage,
     },
+    transactions::swap::SwapResponse,
     trees::superficial_tree::SuperficialTree,
     utils::{
         errors::{
-            send_cancel_order_error_reply, send_deposit_error_reply,
-            send_margin_change_error_reply, send_split_notes_error_reply,
+            send_cancel_order_error_reply, send_deposit_error_reply, send_split_notes_error_reply,
             send_withdrawal_error_reply, TransactionExecutionError,
         },
-        storage::MainStorage,
+        storage::local_storage::MainStorage,
     },
 };
 use tokio::sync::Mutex as TokioMutex;
-use tokio::task::JoinHandle as TokioJoinHandle;
 
 use crate::utils::crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature};
 
@@ -218,211 +218,155 @@ pub fn store_output_json(
 // * HANDLE GRPC_TX RESPONSE
 
 pub async fn handle_split_notes_repsonse(
-    handle: TokioJoinHandle<GrpcTxResponse>,
+    zero_idxs: Result<Vec<u64>, String>,
     swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
     main_storage: &Arc<Mutex<MainStorage>>,
 ) -> Result<Response<SplitNotesRes>, Status> {
-    if let Ok(grpc_res) = handle.await {
-        match grpc_res.new_idxs.unwrap() {
-            Ok(zero_idxs) => {
-                store_output_json(swap_output_json, main_storage);
+    match zero_idxs {
+        Ok(zero_idxs) => {
+            store_output_json(swap_output_json, main_storage);
 
-                let reply = SplitNotesRes {
-                    successful: true,
-                    error_message: "".to_string(),
-                    zero_idxs,
-                };
+            let reply = SplitNotesRes {
+                successful: true,
+                error_message: "".to_string(),
+                zero_idxs,
+            };
 
-                return Ok(Response::new(reply));
-            }
-            Err(e) => {
-                return send_split_notes_error_reply(e.to_string());
-            }
+            return Ok(Response::new(reply));
         }
-    } else {
-        return send_split_notes_error_reply(
-            "Unexpected error occured splitting notes".to_string(),
-        );
+        Err(e) => {
+            return send_split_notes_error_reply(e.to_string());
+        }
     }
 }
 
 // & MARGIN CHANGE  ——————————————————————————————————————————————————————————-
 pub async fn handle_margin_change_repsonse(
-    handle: TokioJoinHandle<GrpcTxResponse>,
+    margin_change_response: (u64, crate::perpetual::perp_position::PerpPosition),
     user_id: u64,
     swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
     main_storage: &Arc<Mutex<MainStorage>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
 ) -> Result<Response<MarginChangeRes>, Status> {
-    if let Ok(grpc_res) = handle.await {
-        match grpc_res.margin_change_response {
-            Some((margin_change_response_, err_msg)) => {
-                let reply: MarginChangeRes;
-                if let Some(margin_change_response) = margin_change_response_ {
-                    //
+    let reply: MarginChangeRes;
 
-                    let market_id = PERP_MARKET_IDS
-                        .get(
-                            &margin_change_response
-                                .position
-                                .position_header
-                                .synthetic_token
-                                .to_string(),
-                        )
-                        .unwrap();
-                    let mut perp_book = perp_order_books.get(market_id).unwrap().lock().await;
-                    perp_book.update_order_positions(
-                        user_id,
-                        &Some(margin_change_response.position.clone()),
-                    );
-                    drop(perp_book);
+    let position = margin_change_response.1;
 
-                    store_output_json(&swap_output_json, &main_storage);
+    let market_id = PERP_MARKET_IDS
+        .get(&position.position_header.synthetic_token.to_string())
+        .unwrap();
+    let mut perp_book = perp_order_books.get(market_id).unwrap().lock().await;
+    perp_book.update_order_positions(user_id, &Some(position.clone()));
+    drop(perp_book);
 
-                    let pos = Some((
-                        margin_change_response
-                            .position
-                            .position_header
-                            .position_address
-                            .to_string(),
-                        margin_change_response.position.index,
-                        margin_change_response
-                            .position
-                            .position_header
-                            .synthetic_token,
-                        margin_change_response.position.order_side == OrderSide::Long,
-                        margin_change_response.position.liquidation_price,
-                    ));
-                    let msg = json!({
-                        "message_id": "NEW_POSITIONS",
-                        "position1":  pos,
-                        "position2":  null
-                    });
-                    let msg = Message::Text(msg.to_string());
+    store_output_json(&swap_output_json, &main_storage);
 
-                    if let Err(_) = send_to_relay_server(ws_connections, msg).await {
-                        println!("Error sending perp swap fill update message")
-                    };
+    // TODO: Is this necessary (sending all positions to the relay server)?
+    let pos = Some((
+        position.position_header.position_address.to_string(),
+        position.index,
+        position.position_header.synthetic_token,
+        position.order_side == OrderSide::Long,
+        position.liquidation_price,
+    ));
+    let msg = json!({
+        "message_id": "NEW_POSITIONS",
+        "position1":  pos,
+        "position2":  null
+    });
+    let msg = Message::Text(msg.to_string());
 
-                    reply = MarginChangeRes {
-                        successful: true,
-                        error_message: "".to_string(),
-                        return_collateral_index: margin_change_response.new_note_idx,
-                    };
-                } else {
-                    reply = MarginChangeRes {
-                        successful: false,
-                        error_message: err_msg,
-                        return_collateral_index: 0,
-                    };
-                }
+    if let Err(_) = send_to_relay_server(ws_connections, msg).await {
+        println!("Error sending perp swap fill update message")
+    };
 
-                return Ok(Response::new(reply));
-            }
-            None => {
-                return send_margin_change_error_reply(
-                    "Unknown error in split_notes, this should have been bypassed".to_string(),
-                );
-            }
-        }
-    } else {
-        return send_margin_change_error_reply(
-            "Unexpected error occured updating margin".to_string(),
-        );
-    }
+    reply = MarginChangeRes {
+        successful: true,
+        error_message: "".to_string(),
+        return_collateral_index: margin_change_response.0,
+    };
+
+    return Ok(Response::new(reply));
 }
 
 // & WITHDRAWALS ——————————————————————————————————————————————————————————-
 pub async fn handle_withdrawal_repsonse(
-    handle: TokioJoinHandle<GrpcTxResponse>,
+    withdrawal_response: Result<
+        (Option<SwapResponse>, Option<Vec<u64>>),
+        Report<TransactionExecutionError>,
+    >,
     swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
     main_storage: &Arc<Mutex<MainStorage>>,
 ) -> Result<Response<SuccessResponse>, Status> {
-    let withdrawl_handle = handle.await.unwrap();
-
-    let withdrawal_response = withdrawl_handle.tx_handle.unwrap().join();
-
     match withdrawal_response {
-        Ok(res) => match res {
-            Ok(_res) => {
-                store_output_json(&swap_output_json, &main_storage);
+        Ok(_res) => {
+            store_output_json(&swap_output_json, &main_storage);
 
-                let reply = SuccessResponse {
-                    successful: true,
-                    error_message: "".to_string(),
-                };
+            let reply = SuccessResponse {
+                successful: true,
+                error_message: "".to_string(),
+            };
 
-                return Ok(Response::new(reply));
+            return Ok(Response::new(reply));
+        }
+        Err(err) => {
+            println!("\n{:?}", err);
+
+            // let should_rollback =
+            //  self.rollback_safeguard.lock().contains_key(&thread_id);
+
+            let error_message_response: String;
+            if let TransactionExecutionError::Withdrawal(withdrawal_execution_error) =
+                err.current_context()
+            {
+                error_message_response = withdrawal_execution_error.err_msg.clone();
+            } else {
+                error_message_response = err.current_context().to_string();
             }
-            Err(err) => {
-                println!("\n{:?}", err);
 
-                // let should_rollback =
-                //  self.rollback_safeguard.lock().contains_key(&thread_id);
-
-                let error_message_response: String;
-                if let TransactionExecutionError::Withdrawal(withdrawal_execution_error) =
-                    err.current_context()
-                {
-                    error_message_response = withdrawal_execution_error.err_msg.clone();
-                } else {
-                    error_message_response = err.current_context().to_string();
-                }
-
-                return send_withdrawal_error_reply(error_message_response);
-            }
-        },
-        Err(_e) => {
-            return send_withdrawal_error_reply(
-                "Unknown Error occured in the withdrawal execution".to_string(),
-            );
+            return send_withdrawal_error_reply(error_message_response);
         }
     }
 }
 
 // & DEPOSITS  ——————————————————————————————————————————————————————————-
 pub async fn handle_deposit_repsonse(
-    handle: TokioJoinHandle<GrpcTxResponse>,
+    deposit_response: Result<
+        (
+            Option<crate::transactions::swap::SwapResponse>,
+            Option<Vec<u64>>,
+        ),
+        error_stack::Report<crate::utils::errors::TransactionExecutionError>,
+    >,
     swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
     main_storage: &Arc<Mutex<MainStorage>>,
 ) -> Result<Response<DepositResponse>, Status> {
-    let deposit_handle = handle.await.unwrap();
-
-    let deposit_response = deposit_handle.tx_handle.unwrap().join();
-
     match deposit_response {
-        Ok(res1) => match res1 {
-            Ok(response) => {
-                store_output_json(&swap_output_json, &main_storage);
+        Ok(response) => {
+            store_output_json(&swap_output_json, &main_storage);
 
-                let reply = DepositResponse {
-                    successful: true,
-                    zero_idxs: response.1.unwrap(),
-                    error_message: "".to_string(),
-                };
+            let reply = DepositResponse {
+                successful: true,
+                zero_idxs: response.1.unwrap(),
+                error_message: "".to_string(),
+            };
 
-                return Ok(Response::new(reply));
+            return Ok(Response::new(reply));
+        }
+        Err(err) => {
+            println!("\n{:?}", err);
+
+            let error_message_response: String;
+            if let TransactionExecutionError::Deposit(deposit_execution_error) =
+                err.current_context()
+            {
+                error_message_response = deposit_execution_error.err_msg.clone();
+            } else {
+                error_message_response = err.current_context().to_string();
             }
-            Err(err) => {
-                println!("\n{:?}", err);
 
-                let error_message_response: String;
-                if let TransactionExecutionError::Deposit(deposit_execution_error) =
-                    err.current_context()
-                {
-                    error_message_response = deposit_execution_error.err_msg.clone();
-                } else {
-                    error_message_response = err.current_context().to_string();
-                }
-
-                return send_deposit_error_reply(error_message_response);
-            }
-        },
-        Err(_e) => {
-            return send_deposit_error_reply(
-                "Unknown Error occured in the deposit execution".to_string(),
-            );
+            return send_deposit_error_reply(error_message_response);
         }
     }
 }

@@ -22,9 +22,11 @@ use crate::{
     },
     transaction_batch::LeafNodeType,
     transactions::transaction_helpers::db_updates::{update_db_after_note_split, DbNoteUpdater},
-    utils::firestore::{start_add_note_thread, start_add_position_thread},
+    utils::storage::firestore::{start_add_note_thread, start_add_position_thread},
 };
-use crate::{trees::superficial_tree::SuperficialTree, utils::storage::BackupStorage};
+use crate::{
+    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
+};
 
 use crate::utils::notes::Note;
 

@@ -1,19 +1,12 @@
-use firestore_db_and_auth::ServiceSession;
-use parking_lot::Mutex;
-use serde_json::Value;
-use std::thread::JoinHandle;
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
 use super::super::server_helpers::engine_helpers::{
     verify_notes_existence, verify_position_existence, verify_signature_format,
 };
 use super::super::{
-    grpc::{
-        engine_proto::{
-            GrpcPerpPosition, LimitOrderMessage, LiquidationOrderMessage, LiquidationOrderResponse,
-            OrderResponse, PerpOrderMessage,
-        },
-        GrpcMessage, GrpcTxResponse, MessageType,
+    grpc::engine_proto::{
+        GrpcPerpPosition, LimitOrderMessage, LiquidationOrderMessage, LiquidationOrderResponse,
+        OrderResponse, PerpOrderMessage,
     },
     server_helpers::{
         engine_helpers::store_output_json,
@@ -22,41 +15,30 @@ use super::super::{
             process_and_execute_perp_swaps, process_perp_order_request, retry_failed_perp_swaps,
         },
         swap_execution::{
-            await_swap_handles, process_and_execute_spot_swaps, process_limit_order_request,
-            retry_failed_swaps,
+            handle_swap_execution_results, process_and_execute_spot_swaps,
+            process_limit_order_request, retry_failed_swaps,
         },
         WsConnectionsMap, PERP_MARKET_IDS,
     },
 };
 
-use crate::perpetual::{perp_helpers::perp_rollback::PerpRollbackInfo, perp_order::PerpOrder};
+use crate::perpetual::perp_order::PerpOrder;
+use crate::server::server_helpers::engine_helpers::verify_tab_existence;
+use crate::transaction_batch::TransactionBatch;
 use crate::{
     matching_engine::{domain::OrderSide as OBOrderSide, orderbook::OrderBook},
     perpetual::{
-        liquidations::{
-            liquidation_engine::LiquidationSwap, liquidation_order::LiquidationOrder,
-            liquidation_output::LiquidationResponse,
-        },
+        liquidations::{liquidation_engine::LiquidationSwap, liquidation_order::LiquidationOrder},
         PositionEffectType,
     },
-    trees::superficial_tree::SuperficialTree,
-    utils::{
-        errors::{send_liquidation_order_error_reply, PerpSwapExecutionError},
-        storage::{BackupStorage, MainStorage},
-    },
+    utils::errors::send_liquidation_order_error_reply,
 };
 
-use crate::transactions::{limit_order::LimitOrder, transaction_helpers::rollbacks::RollbackInfo};
+use crate::transactions::limit_order::LimitOrder;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::send_order_error_reply;
 
-use error_stack::Report;
-use tokio::sync::{
-    mpsc::Sender as MpscSender,
-    oneshot::{self, Sender as OneshotSender},
-    Mutex as TokioMutex, Semaphore,
-};
-use tokio::task::JoinHandle as TokioJoinHandle;
+use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
 
 //
@@ -64,13 +46,7 @@ use tonic::{Request, Response, Status};
 // * EXECUTE LIMIT ORDER
 
 pub async fn submit_limit_order_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    session: &Arc<Mutex<ServiceSession>>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-    state_tree: &Arc<Mutex<SuperficialTree>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
@@ -85,7 +61,13 @@ pub async fn submit_limit_order_inner(
 
     tokio::task::yield_now().await;
 
-    // let now = Instant::now();
+    let tx_batch_m = tx_batch.lock().await;
+    let state_tree = Arc::clone(&tx_batch_m.state_tree);
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let firebase_session = Arc::clone(&tx_batch_m.firebase_session);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
+    drop(tx_batch_m);
 
     let req: LimitOrderMessage = request.into_inner();
 
@@ -135,13 +117,15 @@ pub async fn submit_limit_order_inner(
         }
 
         // ? Verify the order tab exist in the state tree
-        // if let Err(err_msg) =
-        //     verify_tab_existence(&limit_order.order_tab.as_ref().unwrap(), &tab_state_tree)
-        // {
-        //     return send_order_error_reply(err_msg);
-        // }
+        if let Err(err_msg) =
+            verify_tab_existence(&limit_order.order_tab.as_ref().unwrap(), &state_tree)
+        {
+            return send_order_error_reply(err_msg);
+        }
     }
 
+    // ? ------------------------------------------------------------------------------------
+    // ? Insert the order into the orderbook and see if there is a hit
     let mut processed_res = process_limit_order_request(
         order_books.get(&market_id).clone().unwrap(),
         limit_order.clone(),
@@ -156,14 +140,14 @@ pub async fn submit_limit_order_inner(
     )
     .await;
 
-    // This matches the orders and creates the swaps that can be executed
+    // ? ------------------------------------------------------------------------------------
+    // ? If there are any hits, process and execute the swaps
     let reults;
     let new_order_id;
     match process_and_execute_spot_swaps(
-        &mpsc_tx,
-        &rollback_safeguard,
+        &tx_batch,
         order_books.get(&market_id).clone().unwrap(),
-        &session,
+        &firebase_session,
         &backup_storage,
         &mut processed_res,
     )
@@ -178,22 +162,30 @@ pub async fn submit_limit_order_inner(
         }
     };
 
-    // this executes the swaps in parallel
+    // ? ------------------------------------------------------------------------------------
+    // ? Handle the result of the swap executions
     let retry_messages;
-    match await_swap_handles(&ws_connections, &privileged_ws_connections, reults, user_id).await {
+    match handle_swap_execution_results(
+        &ws_connections,
+        &privileged_ws_connections,
+        reults,
+        user_id,
+    )
+    .await
+    {
         Ok(rm) => retry_messages = rm,
         Err(e) => {
             return send_order_error_reply(e);
         }
     };
 
-
+    // ? ------------------------------------------------------------------------------------
+    // ? Retry the order in case it fails
     if retry_messages.len() > 0 {
         if let Err(e) = retry_failed_swaps(
-            &mpsc_tx,
-            &rollback_safeguard,
+            &tx_batch,
             order_books.get(&market_id).clone().unwrap(),
-            &session,
+            &firebase_session,
             &backup_storage,
             limit_order,
             side,
@@ -210,7 +202,6 @@ pub async fn submit_limit_order_inner(
             return send_order_error_reply(e);
         }
     }
-
 
     store_output_json(&swap_output_json, &main_storage);
 
@@ -229,13 +220,7 @@ pub async fn submit_limit_order_inner(
 // * EXECUTE PERPETUAL ORDER
 
 pub async fn submit_perpetual_order_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    session: &Arc<Mutex<ServiceSession>>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-    state_tree: &Arc<Mutex<SuperficialTree>>,
-    perp_rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
@@ -251,6 +236,14 @@ pub async fn submit_perpetual_order_inner(
     tokio::task::yield_now().await;
 
     let req: PerpOrderMessage = request.into_inner();
+
+    let tx_batch_m = tx_batch.lock().await;
+    let state_tree = Arc::clone(&tx_batch_m.state_tree);
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let firebase_session = Arc::clone(&tx_batch_m.firebase_session);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
+    drop(tx_batch_m);
 
     let user_id = req.user_id;
     let is_market: bool = req.is_market;
@@ -319,10 +312,9 @@ pub async fn submit_perpetual_order_inner(
     let retry_messages;
     let new_order_id;
     match process_and_execute_perp_swaps(
-        &mpsc_tx,
-        &perp_rollback_safeguard,
+        &tx_batch,
         perp_order_books.get(&market.unwrap()).clone().unwrap(),
-        &session,
+        &firebase_session,
         &backup_storage,
         &ws_connections,
         &privileged_ws_connections,
@@ -341,10 +333,9 @@ pub async fn submit_perpetual_order_inner(
     };
 
     if let Err(e) = retry_failed_perp_swaps(
-        &mpsc_tx,
-        &perp_rollback_safeguard,
+        &tx_batch,
         perp_order_books.get(&market.unwrap()).clone().unwrap(),
-        &session,
+        &firebase_session,
         &backup_storage,
         perp_order,
         side,
@@ -378,9 +369,7 @@ pub async fn submit_perpetual_order_inner(
 //
 
 pub async fn submit_liquidation_order_inner(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    main_storage: &Arc<Mutex<MainStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     semaphore: &Semaphore,
     is_paused: &Arc<TokioMutex<bool>>,
@@ -394,6 +383,11 @@ pub async fn submit_liquidation_order_inner(
     tokio::task::yield_now().await;
 
     let req: LiquidationOrderMessage = request.into_inner();
+
+    let tx_batch_m = tx_batch.lock().await;
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    drop(tx_batch_m);
 
     // ? Verify the signature is defined and has a valid format
     let signature: Signature;
@@ -440,30 +434,9 @@ pub async fn submit_liquidation_order_inner(
 
     let liquidation_swap = LiquidationSwap::new(liquidation_order, signature, market_price);
 
-    // TODO ==================================================================================
-
-    let transaction_mpsc_tx = mpsc_tx.clone();
-
-    let handle: TokioJoinHandle<
-        JoinHandle<Result<LiquidationResponse, Report<PerpSwapExecutionError>>>,
-    > = tokio::spawn(async move {
-        let (resp_tx, resp_rx) = oneshot::channel();
-
-        let mut grpc_message = GrpcMessage::new();
-        grpc_message.msg_type = MessageType::LiquidationMessage;
-        grpc_message.liquidation_message = Some(liquidation_swap);
-
-        transaction_mpsc_tx
-            .send((grpc_message, resp_tx))
-            .await
-            .ok()
-            .unwrap();
-        let res = resp_rx.await.unwrap();
-
-        return res.liquidation_tx_handle.unwrap();
-    });
-
-    let liquidation_handle = handle.await.unwrap();
+    let mut tx_batch_m = tx_batch.lock().await;
+    let liquidation_handle = tx_batch_m.execute_liquidation_transaction(liquidation_swap);
+    drop(tx_batch_m);
 
     let liquidation_response = liquidation_handle.join();
 

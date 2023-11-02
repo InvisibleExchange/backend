@@ -22,7 +22,7 @@ use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{send_perp_swap_error, PerpSwapExecutionError};
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 
 use error_stack::{Report, Result};
 //
@@ -73,6 +73,7 @@ impl LiquidationSwap {
 
         // TODO: This is only for testing purposes -- remove after
         let index_price = self.market_price;
+        // TODO: This is only for testing purposes -- remove after
 
         // ? Execute orders in parallel ===========================================================
 
@@ -104,20 +105,19 @@ impl LiquidationSwap {
 
             let new_idx = state_tree.lock().first_zero_idx() as u32;
 
-    //         liquidation_order: &LiquidationOrder,
-    // liquidated_size: u64,
-    // liquidator_fee: u64,
-    // market_price: u64,
-    // current_funding_index: u32,
-    // new_idx: u32,
+            //         liquidation_order: &LiquidationOrder,
+            // liquidated_size: u64,
+            // liquidator_fee: u64,
+            // market_price: u64,
+            // current_funding_index: u32,
+            // new_idx: u32,
 
-    // liquidated_size: 48920440
-// liquidator_fee: 7.674.637 404 000
-// leftover_collateral: -7674592164155
-// is_partial_liquidation: false
-// liquidation swap executed successfully
-// Position liquidated successfully!!!!!!!!!
-
+            // liquidated_size: 48920440
+            // liquidator_fee: 7.674.637 404 000
+            // leftover_collateral: -7674592164155
+            // is_partial_liquidation: false
+            // liquidation swap executed successfully
+            // Position liquidated successfully!!!!!!!!!
 
             let new_position = open_new_position_after_liquidation(
                 &self.liquidation_order,

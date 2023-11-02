@@ -1,41 +1,28 @@
 use super::perp_swap_execution::{process_and_execute_perp_swaps, retry_failed_perp_swaps};
 use super::swap_execution::{
-    await_swap_handles, process_and_execute_spot_swaps, retry_failed_swaps,
+    handle_swap_execution_results, process_and_execute_spot_swaps, retry_failed_swaps,
 };
 
-use std::thread::ThreadId;
+use std::sync::Arc;
 
-use std::{collections::HashMap, sync::Arc};
-
-use firestore_db_and_auth::ServiceSession;
 use tokio::sync::Mutex as TokioMutex;
-
-use parking_lot::Mutex;
 
 use crate::matching_engine::orderbook::{Failed, Success};
 use crate::matching_engine::{
     domain::{Order, OrderSide as OBOrderSide},
     orderbook::OrderBook,
 };
-use crate::perpetual::perp_helpers::perp_rollback::PerpRollbackInfo;
 use crate::perpetual::perp_order::PerpOrder;
+use crate::transaction_batch::TransactionBatch;
 use crate::transactions::limit_order::LimitOrder;
-use crate::transactions::transaction_helpers::rollbacks::RollbackInfo;
 
 use crate::utils::crypto_utils::Signature;
-use crate::utils::storage::BackupStorage;
 
-use tokio::sync::{mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender};
-
-use super::super::grpc::{GrpcMessage, GrpcTxResponse};
 use super::WsConnectionsMap;
 
 pub async fn execute_spot_swaps_after_amend_order(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_book: &Arc<TokioMutex<OrderBook>>,
-    session: &Arc<Mutex<ServiceSession>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
     mut processed_res: Vec<std::result::Result<Success, Failed>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
@@ -45,15 +32,18 @@ pub async fn execute_spot_swaps_after_amend_order(
     signature: Signature,
     user_id: u64,
 ) -> Result<(), String> {
+    let tx_batch_m = tx_batch.lock().await;
+    let session = Arc::clone(&tx_batch_m.firebase_session);
+    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
+    drop(tx_batch_m);
+
     // This matches the orders and creates the swaps that can be executed
     let handles;
-
     match process_and_execute_spot_swaps(
-        mpsc_tx,
-        rollback_safeguard,
+        tx_batch,
         order_book,
-        session,
-        backup_storage,
+        &session,
+        &backup_storage,
         &mut processed_res,
     )
     .await
@@ -67,7 +57,9 @@ pub async fn execute_spot_swaps_after_amend_order(
     };
 
     let retry_messages;
-    match await_swap_handles(ws_connections, privileged_ws_connections, handles, user_id).await {
+    match handle_swap_execution_results(ws_connections, privileged_ws_connections, handles, user_id)
+        .await
+    {
         Ok(rm) => retry_messages = rm,
         Err(e) => return Err(e),
     };
@@ -90,8 +82,7 @@ pub async fn execute_spot_swaps_after_amend_order(
         }
 
         if let Err(e) = retry_failed_swaps(
-            &mpsc_tx,
-            &rollback_safeguard,
+            tx_batch,
             order_book,
             &session,
             &backup_storage,
@@ -115,11 +106,8 @@ pub async fn execute_spot_swaps_after_amend_order(
 }
 
 pub async fn execute_perp_swaps_after_amend_order(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    perp_rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     perp_order_book: &Arc<TokioMutex<OrderBook>>,
-    session: &Arc<Mutex<ServiceSession>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
     processed_res: &mut Vec<std::result::Result<Success, Failed>>,
@@ -129,15 +117,18 @@ pub async fn execute_perp_swaps_after_amend_order(
     signature: Signature,
     user_id: u64,
 ) -> Result<(), String> {
+    let tx_batch_m = tx_batch.lock().await;
+    let session = Arc::clone(&tx_batch_m.firebase_session);
+    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
+    drop(tx_batch_m);
+
     // This matches the orders and creates the swaps that can be executed
     let retry_messages;
-
     match process_and_execute_perp_swaps(
-        mpsc_tx,
-        perp_rollback_safeguard,
+        tx_batch,
         perp_order_book,
-        session,
-        backup_storage,
+        &session,
+        &backup_storage,
         ws_connections,
         privileged_ws_connections,
         processed_res,
@@ -171,11 +162,10 @@ pub async fn execute_perp_swaps_after_amend_order(
         }
 
         if let Err(e) = retry_failed_perp_swaps(
-            mpsc_tx,
-            perp_rollback_safeguard,
+            tx_batch,
             perp_order_book,
-            session,
-            backup_storage,
+            &session,
+            &backup_storage,
             perp_order.clone(),
             order_side,
             signature,

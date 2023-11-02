@@ -1,5 +1,5 @@
 use parking_lot::Mutex;
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 use num_bigint::BigUint;
@@ -9,14 +9,10 @@ use crate::{
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
     utils::{
-        errors::{
-            send_withdrawal_error, DepositThreadExecutionError, WithdrawalThreadExecutionError,
-        },
+        errors::{send_withdrawal_error, WithdrawalThreadExecutionError},
         notes::Note,
     },
 };
-
-use super::rollbacks::{OrderRollbackInfo, RollbackInfo};
 
 // * ================================================================================================================================================
 // * Swap state updates -----------------------------------------------------------------------------------------------------------------------------
@@ -26,52 +22,12 @@ use super::rollbacks::{OrderRollbackInfo, RollbackInfo};
 pub fn update_state_after_swap_first_fill(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-    thread_id: ThreadId,
-    order_id: u64,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
     swap_note: &Note,
     partial_fill_refund_note: &Option<&Note>,
 ) {
     //
-
-    // ? Right before the first modification is made activate the safeguard
-    // ? If anything fails from here on out the rollback function will be called
-    let mut rollback_safeguard_m = rollback_safeguard.lock();
-    let rollback_info__ = rollback_safeguard_m.remove(&thread_id);
-    let mut rollback_info: RollbackInfo;
-    if rollback_info__.is_some() {
-        rollback_info = rollback_info__.unwrap();
-        rollback_info.swap_rollback_info_b = Some(OrderRollbackInfo {
-            order_id,
-            new_pfr_note_idx: if partial_fill_refund_note.is_some() {
-                Some(partial_fill_refund_note.unwrap().index)
-            } else {
-                None
-            },
-            prev_pfr_note: None,
-            swap_note_idx: swap_note.index,
-        });
-    } else {
-        rollback_info = RollbackInfo {
-            zero_idxs: None,
-            swap_rollback_info_a: Some(OrderRollbackInfo {
-                order_id,
-                new_pfr_note_idx: if partial_fill_refund_note.is_some() {
-                    Some(partial_fill_refund_note.unwrap().index)
-                } else {
-                    None
-                },
-                prev_pfr_note: None,
-                swap_note_idx: swap_note.index,
-            }),
-            swap_rollback_info_b: None,
-        };
-    }
-
-    rollback_safeguard_m.insert(thread_id, rollback_info);
-    drop(rollback_safeguard_m);
 
     // ? Get lock to mutable values
     let mut tree = tree_m.lock();
@@ -126,51 +82,11 @@ pub fn update_state_after_swap_first_fill(
 pub fn update_state_after_swap_later_fills(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-    thread_id: ThreadId,
-    order_id: u64,
-    prev_partial_fill_refund_note: &Note,
+
     swap_note: &Note,
     new_partial_fill_refund_note: &Option<&Note>,
 ) {
     //
-
-    // ? Right before the first modification is made activate the safeguard
-    // ? If anything fails from here on out the rollback function will be called
-    let mut rollback_safeguard_m = rollback_safeguard.lock();
-    let rollback_info__ = rollback_safeguard_m.remove(&thread_id);
-    let mut rollback_info: RollbackInfo;
-    if rollback_info__.is_some() {
-        rollback_info = rollback_info__.unwrap();
-        rollback_info.swap_rollback_info_b = Some(OrderRollbackInfo {
-            order_id,
-            new_pfr_note_idx: if new_partial_fill_refund_note.is_some() {
-                Some(new_partial_fill_refund_note.unwrap().index)
-            } else {
-                None
-            },
-            prev_pfr_note: Some(prev_partial_fill_refund_note.clone()),
-            swap_note_idx: swap_note.index,
-        });
-    } else {
-        rollback_info = RollbackInfo {
-            zero_idxs: None,
-            swap_rollback_info_a: Some(OrderRollbackInfo {
-                order_id,
-                new_pfr_note_idx: if new_partial_fill_refund_note.is_some() {
-                    Some(new_partial_fill_refund_note.unwrap().index)
-                } else {
-                    None
-                },
-                prev_pfr_note: Some(prev_partial_fill_refund_note.clone()),
-                swap_note_idx: swap_note.index,
-            }),
-            swap_rollback_info_b: None,
-        };
-    }
-
-    rollback_safeguard_m.insert(thread_id, rollback_info);
-    drop(rollback_safeguard_m);
 
     // ? Get mutable pointer locks
     let mut tree = tree_m.lock();
@@ -200,23 +116,9 @@ pub fn update_state_after_swap_later_fills(
 pub fn update_state_after_deposit(
     tree: &mut SuperficialTree,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
     notes: &Vec<Note>,
-) -> Result<(), DepositThreadExecutionError> {
+) {
     //
-
-    // ? Right before the first modification is made activate the safeguard
-    // ? If anything fails from here on out the rollback function will be called
-    let mut rollback_safeguard_m = rollback_safeguard.lock();
-    rollback_safeguard_m.insert(
-        std::thread::current().id(),
-        RollbackInfo {
-            zero_idxs: Some(notes.iter().map(|n| n.index).collect()),
-            swap_rollback_info_a: None,
-            swap_rollback_info_b: None,
-        },
-    );
-    drop(rollback_safeguard_m);
 
     // ? Upadte the state by adding the note hashes to the merkle tree
     let mut updated_state_hashes = updated_state_hashes_m.lock();
@@ -229,8 +131,6 @@ pub fn update_state_after_deposit(
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note.hash.clone()));
     }
     drop(updated_state_hashes);
-
-    Ok(())
 }
 
 // * ===============================================================================================================================================
@@ -239,24 +139,10 @@ pub fn update_state_after_deposit(
 pub fn update_state_after_withdrawal(
     tree: &mut SuperficialTree,
     updated_state_hashes: &mut HashMap<u64, (LeafNodeType, BigUint)>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
 ) -> Result<(), WithdrawalThreadExecutionError> {
     //
-
-    // ? Right before the first modification is made activate the safeguard
-    // ? If anything fails from here on out the rollback function will be called
-    let mut rollback_safeguard_m = rollback_safeguard.lock();
-    rollback_safeguard_m.insert(
-        std::thread::current().id(),
-        RollbackInfo {
-            zero_idxs: None,
-            swap_rollback_info_a: None,
-            swap_rollback_info_b: None,
-        },
-    );
-    drop(rollback_safeguard_m);
 
     // ? Remove the notes_in from the tree and add the refund note
     let refund_idx = notes_in[0].index;

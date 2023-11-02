@@ -3,14 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 
-use crate::trees::superficial_tree::SuperficialTree;
-use crate::utils::storage::MainStorage;
-use crate::{
-    perpetual::SYNTHETIC_ASSETS,
-    transaction_batch::tx_batch_helpers::{
-        _calculate_funding_rates, _per_minute_funding_update_inner,
-    },
+use crate::transaction_batch::tx_batch_helpers::{
+    _calculate_funding_rates, _per_minute_funding_update_inner,
 };
+use crate::trees::superficial_tree::SuperficialTree;
+use crate::utils::storage::local_storage::MainStorage;
 
 use crate::utils::errors::OracleUpdateError;
 
@@ -24,8 +21,6 @@ pub fn _init_inner(
     main_storage: &Arc<Mutex<MainStorage>>,
     funding_rates: &mut HashMap<u32, Vec<i64>>,
     funding_prices: &mut HashMap<u32, Vec<u64>>,
-    current_funding_idx: &mut u32,
-    funding_idx_shift: &mut HashMap<u32, u32>,
     min_funding_idxs: &mut Arc<Mutex<HashMap<u32, u32>>>,
     latest_index_price: &mut HashMap<u32, u64>,
     min_index_price_data: &mut HashMap<u32, (u64, OracleUpdate)>,
@@ -34,23 +29,11 @@ pub fn _init_inner(
 ) {
     let storage = main_storage.lock();
     if !storage.funding_db.is_empty() {
-        if let Ok((funding_rates_, funding_prices_, funding_idx, min_funding_idxs_)) =
+        if let Ok((funding_rates_, funding_prices_, min_funding_idxs_)) =
             storage.read_funding_info()
         {
-            let mut funding_idx_shift_ = HashMap::new();
-            for t in SYNTHETIC_ASSETS {
-                let rates_arr_len = funding_rates_.get(&t).unwrap_or(&vec![]).len();
-
-                let shift = funding_idx - rates_arr_len as u32;
-
-                funding_idx_shift_.insert(t, shift);
-            }
-
             *funding_rates = funding_rates_;
             *funding_prices = funding_prices_;
-            *current_funding_idx = funding_idx;
-            *funding_idx_shift = funding_idx_shift_;
-
             *min_funding_idxs = Arc::new(Mutex::new(min_funding_idxs_));
         } else {
             panic!("Error reading funding info from storage");
@@ -80,7 +63,6 @@ pub fn _per_minute_funding_updates(
     current_funding_count: &mut u16,
     funding_rates: &mut HashMap<u32, Vec<i64>>,
     funding_prices: &mut HashMap<u32, Vec<u64>>,
-    current_funding_idx: &mut u32,
     min_funding_idxs: &Arc<Mutex<HashMap<u32, u32>>>,
     main_storage: &Arc<Mutex<MainStorage>>,
     funding_update: FundingUpdateMessage,
@@ -114,19 +96,12 @@ pub fn _per_minute_funding_updates(
             funding_prices.get_mut(token).unwrap().push(price);
         }
 
-        *current_funding_idx += 1;
-
         // Reinitialize the funding tick sums
         *current_funding_count = 0;
         _init_empty_tokens_map::<i64>(&mut *running_funding_tick_sums);
 
         let storage = main_storage.lock();
-        storage.store_funding_info(
-            &funding_rates,
-            &funding_prices,
-            &current_funding_idx,
-            &min_funding_idxs.lock(),
-        );
+        storage.store_funding_info(&funding_rates, &funding_prices, &min_funding_idxs.lock());
         drop(storage);
     }
 }

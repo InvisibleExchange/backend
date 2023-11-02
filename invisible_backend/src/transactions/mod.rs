@@ -1,6 +1,6 @@
 use error_stack::Result;
 use firestore_db_and_auth::ServiceSession;
-use std::{collections::HashMap, sync::Arc, thread::ThreadId};
+use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
 use parking_lot::Mutex;
@@ -9,10 +9,14 @@ use serde_json::Value;
 use crate::{
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{errors::TransactionExecutionError, notes::Note, storage::BackupStorage},
+    utils::{
+        errors::TransactionExecutionError,
+        notes::Note,
+        storage::local_storage::{BackupStorage, MainStorage},
+    },
 };
 
-use self::{swap::SwapResponse, transaction_helpers::rollbacks::RollbackInfo};
+use self::swap::SwapResponse;
 
 pub mod deposit;
 pub mod limit_order;
@@ -31,8 +35,8 @@ pub trait Transaction {
         updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
         blocked_order_ids: Arc<Mutex<HashMap<u64, bool>>>,
-        rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
         session: &Arc<Mutex<ServiceSession>>,
+        main_storage: &Arc<Mutex<MainStorage>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(Option<SwapResponse>, Option<Vec<u64>>), TransactionExecutionError>;
 }

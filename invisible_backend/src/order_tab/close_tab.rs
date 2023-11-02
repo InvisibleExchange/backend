@@ -12,7 +12,7 @@ use crate::{
     server::grpc::engine_proto::CloseOrderTabReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::pedersen_on_vec, notes::Note, storage::BackupStorage},
+    utils::{crypto_utils::pedersen_on_vec, notes::Note, storage::local_storage::BackupStorage},
 };
 
 use crate::utils::crypto_utils::{verify, Signature};

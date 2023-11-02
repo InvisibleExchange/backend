@@ -1,7 +1,0 @@
-
-syntax = "proto3";
-
-message TestStruct {
-    uint32 id = 1;
-    
-}

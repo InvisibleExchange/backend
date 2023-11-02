@@ -93,22 +93,6 @@ pub const COLLATERAL_TOKEN_DECIMALS: u8 = 6; // 6 decimals for USDC/USDT...
 // 10 BTC min init_margin = 3BTC*5% + 6BTC*10% + 1BTC*20% = 0.95BTC
 // max leverage = 10BTC/0.95BTC = 10.5X
 
-pub fn calculate_funding() {
-    // link to imapct notional values = https://docs.google.com/document/d/1o7Eg5Shvfjz6oTyQPrhshr3aSnm6CbxFmt9xu6N0DtM/edit
-
-    // Bybit:
-    // Premium Index (P) = [Max(0, Impact Bid Price* − Mark Price) − Max(0, Mark Price − Impact Ask Price*)]/Index Price
-    // + [(Funding Rate of Current Interval × Time Until Next Interval)/Funding Interval]
-
-    // Basis (Funding) = 8 hour TWAP of (Spot Market Price - Future Market Price)
-
-    // FTX:
-    // position size * TWAP of ((future mark price - index) / index) / 24
-
-    //& Maybe combine both ways for something like:
-    //& Funding = (position size * TWAP of [Max(0, Impact Bid Price* − Index Price) − Max(0, Index Price − Impact Ask Price*)]/Index Price / 3
-}
-
 // * Price functions * // ====================================================================
 pub fn get_price(synthetic_token: u32, collateral_amount: u64, synthetic_amount: u64) -> u64 {
     let synthetic_decimals: &u8 = DECIMALS_PER_ASSET
@@ -181,19 +165,6 @@ pub fn round_price(price: f64, round: Option<bool>) -> f64 {
     }
 
     return (price * 100.0).floor() / 100.0;
-
-    // if round.is_none() {
-    //     return price;
-    // }
-
-    // // ? If round == true round up else round down
-    // if round.unwrap() {
-    //     // round price to 3 decimals
-    //     return (price * 1000.0).ceil() / 1000.0;
-    // } else {
-    //     // round price to 3 decimals
-    //     return (price * 1000.0).floor() / 1000.0;
-    // }
 }
 
 pub fn scale_up_price(price: f64, token: u32) -> u64 {

@@ -4,72 +4,53 @@ const {
   updateStoredDepositIds,
 } = require("./localStorage");
 const { storeOnchainDeposit } = require("./firebase/firebaseConnection");
+const { id } = require("ethers/lib/utils");
 
-const privateKey =
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+// const privateKey =
+//   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+// const signer = new ethers.Wallet(privateKey, provider);
+
 const provider = new ethers.providers.JsonRpcProvider("http://localhost:8545");
-const signer = new ethers.Wallet(privateKey, provider);
 
-const invisibleL1Address = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; //Todo
+const invisibleL1Address = "0xFa62E2E9B7A3F1Aa1773e165c42fEabc52d748bB"; //Todo
 const invisibleL1Abi = require("./abis/InvisibleL1.json").abi;
 
 const invisibleL1Contract = new ethers.Contract(
   invisibleL1Address,
   invisibleL1Abi,
-  signer
+  provider
 );
 
-const TestTokenAbi = require("./abis/TestToken.json").abi;
-
-const WbtcAddress = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"; //Todo
-const WbtcContract = new ethers.Contract(WbtcAddress, TestTokenAbi, signer);
-
-const UsdcAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; //Todo
-const UsdcContract = new ethers.Contract(UsdcAddress, TestTokenAbi, signer);
-
-const tokenContracts = {
-  12345: WbtcContract,
-  55555: UsdcContract,
-};
-const onChainErc20Decimals = {
-  12345: 18,
-  54321: 18,
-  55555: 18,
+const tokenId2Address = {
+  55555: "0x1754C78DD11F6B07DFC9e529BD19d912EAEfA1c8",
+  12345: "0xBF52caf40b7612bEd0814A09842c14BAB217BaD5",
+  54321: "0x0000000000000000000000000000000000000000",
 };
 
 async function listenForDeposits(db) {
-  let pendingDepositIds = [];
-  let processedDepositIds = [];
-
-  getProcessedDeposits(db, (err, pending_, processed_) => {
-    if (err) {
-      console.log("error: ", err);
-      throw err;
-    } else {
-      pendingDepositIds = pending_ ?? [];
-      processedDepositIds = processed_ ?? [];
-    }
-  });
+  let { pendingDeposits, processedDepositIds } = (await getProcessedDeposits(
+    db
+  )) || { pendingDeposits: [], processedDepositIds: [] };
 
   invisibleL1Contract.on(
     "DepositEvent",
     (depositId, pubKey, tokenId, depositAmountScaled, timestamp) => {
       if (
-        pendingDepositIds.includes(depositId.toString()) ||
+        pendingDeposits.includes(depositId.toString()) ||
         processedDepositIds.includes(depositId.toString())
       )
         return;
 
       let deposit = {
-        depositId: depositId.toString(),
-        starkKey: pubKey.toString(),
-        tokenId: tokenId.toString(),
-        amount: depositAmountScaled.toString(),
+        deposit_id: depositId.toString(),
+        stark_key: pubKey.toString(),
+        deposit_token: tokenId.toString(),
+        deposit_amount: depositAmountScaled.toString(),
         timestamp: timestamp.toString(),
       };
 
-      pendingDepositIds.push(deposit);
-      updateStoredDepositIds(db, pendingDepositIds, processedDepositIds);
+      pendingDeposits.push(deposit);
+      updateStoredDepositIds(db, pendingDeposits, processedDepositIds);
 
       // ? Store the deposit in the datatbase
       storeOnchainDeposit(deposit);
@@ -77,4 +58,69 @@ async function listenForDeposits(db) {
   );
 }
 
-module.exports = { listenForDeposits };
+const onchainDecimalsPerAsset = {
+  55555: 18,
+  12345: 18,
+  54321: 18,
+};
+
+const DECIMALS_PER_ASSET = {
+  55555: 6,
+  12345: 8,
+  54321: 8,
+};
+
+async function isDepositValid(deposit, db) {
+  let { pendingDeposits, processedDepositIds } = (await getProcessedDeposits(
+    db
+  )) || { pendingDeposits: [], processedDepositIds: [] };
+
+  if (processedDepositIds.includes(deposit.deposit_id)) return false;
+
+  let pendingDeposit = pendingDeposits.find(
+    (dep) => dep.deposit_id == deposit.deposit_id
+  );
+
+  if (!pendingDeposit) return false;
+
+  if (pendingDeposit.stark_key !== deposit.stark_key) return false;
+  if (pendingDeposit.deposit_token !== deposit.deposit_token) return false;
+  if (pendingDeposit.deposit_amount !== deposit.deposit_amount) return false;
+
+  let depositAmount = await invisibleL1Contract.getPendingDepositAmount(
+    deposit.stark_key,
+    tokenId2Address[deposit.deposit_token]
+  );
+
+  let scaledDownOnChainAmount = ethers.utils.formatUnits(
+    depositAmount,
+    onchainDecimalsPerAsset[deposit.deposit_token]
+  );
+  let scaledDownDepositAmount =
+    pendingDeposit.deposit_amount /
+    10 ** DECIMALS_PER_ASSET[deposit.deposit_token];
+
+  return scaledDownOnChainAmount >= scaledDownDepositAmount;
+}
+
+async function depositProcessedCallback(db, depositId) {
+  let { pendingDeposits, processedDepositIds } = (await getProcessedDeposits(
+    db
+  )) || { pendingDeposits: [], processedDepositIds: [] };
+
+  let pendingDeposit = pendingDeposits.find(
+    (deposit) => deposit.deposit_id === depositId
+  );
+  if (!pendingDeposit) return false;
+
+  pendingDeposits = pendingDeposits.filter((id) => id !== depositId);
+  processedDepositIds.push(depositId);
+
+  updateStoredDepositIds(db, pendingDeposits, processedDepositIds);
+}
+
+module.exports = {
+  listenForDeposits,
+  isDepositValid,
+  depositProcessedCallback,
+};

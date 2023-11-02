@@ -1,12 +1,10 @@
-use std::thread::{JoinHandle, ThreadId};
+use std::sync::Arc;
 use std::time::SystemTime;
-use std::{collections::HashMap, sync::Arc};
 
 use firestore_db_and_auth::ServiceSession;
 use serde_json::json;
-use tokio::sync::{oneshot, Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 
-use error_stack::Result;
 use parking_lot::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -18,23 +16,16 @@ use crate::matching_engine::{
 };
 use crate::perpetual::{get_cross_price, scale_up_price};
 
+use crate::transaction_batch::TransactionBatch;
 use crate::transactions::limit_order::LimitOrder;
 use crate::transactions::swap::OrderFillResponse;
+use crate::transactions::swap::Swap;
 use crate::transactions::transaction_helpers::db_updates::store_spot_fill;
-use crate::transactions::{
-    swap::{Swap, SwapResponse},
-    transaction_helpers::rollbacks::RollbackInfo,
-};
 
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::TransactionExecutionError;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::BackupStorage;
 
-use tokio::sync::{mpsc::Sender as MpscSender, oneshot::Sender as OneshotSender};
-
-use tokio::task::JoinHandle as TokioJoinHandle;
-
-use super::super::grpc::{GrpcMessage, GrpcTxResponse, MessageType};
 use super::super::server_helpers::get_order_side;
 use super::{
     broadcast_message, proccess_spot_matching_result, send_direct_message, WsConnectionsMap,
@@ -43,8 +34,7 @@ use super::{
 type SwapErrorInfo = (Option<u64>, u64, u64, String);
 pub async fn execute_swap(
     swap: Swap,
-    transaction_mpsc_tx: MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    _rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_book: Arc<TokioMutex<OrderBook>>,
     user_id_pair: (u64, u64),
     session: Arc<Mutex<ServiceSession>>,
@@ -142,23 +132,9 @@ pub async fn execute_swap(
         price = scale_up_price(p, base_asset);
     };
 
-    let tx_mpsc_tx = transaction_mpsc_tx.clone();
-    let handle: TokioJoinHandle<
-        JoinHandle<Result<(Option<SwapResponse>, Option<Vec<u64>>), TransactionExecutionError>>,
-    > = tokio::spawn(async move {
-        let (resp_tx, resp_rx) = oneshot::channel();
-
-        let mut grpc_message = GrpcMessage::new();
-        grpc_message.msg_type = MessageType::SwapMessage;
-        grpc_message.swap_message = Some(swap);
-
-        tx_mpsc_tx.send((grpc_message, resp_tx)).await.ok().unwrap();
-        let res = resp_rx.await.unwrap();
-
-        return res.tx_handle.unwrap();
-    });
-
-    let swap_handle = handle.await.unwrap();
+    let mut tx_batch_m = tx_batch.lock().await;
+    let swap_handle = tx_batch_m.execute_transaction(swap);
+    drop(tx_batch_m);
 
     let swap_response = swap_handle.join();
 
@@ -320,8 +296,7 @@ pub async fn execute_swap(
 }
 
 pub async fn process_and_execute_spot_swaps(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_book: &Arc<TokioMutex<OrderBook>>,
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -348,8 +323,6 @@ pub async fn process_and_execute_spot_swaps(
     let mut results = Vec::new();
     if let Some(swaps) = processed_result.swaps {
         for (swap, user_id_a, user_id_b) in swaps {
-            let mpsc_tx = mpsc_tx.clone();
-            let rollback_safeguard_clone = rollback_safeguard.clone();
             let order_book = order_book.clone();
             let session = session.clone();
             let backup_storage = backup_storage.clone();
@@ -357,8 +330,7 @@ pub async fn process_and_execute_spot_swaps(
             // let handle = tokio::spawn(execute_swap(
             let res = execute_swap(
                 swap,
-                mpsc_tx,
-                rollback_safeguard_clone,
+                tx_batch,
                 order_book,
                 (user_id_a, user_id_b),
                 session,
@@ -422,7 +394,7 @@ type SwapExecutionResultMessage = (
     Option<SwapErrorInfo>,
 );
 
-pub async fn await_swap_handles(
+pub async fn handle_swap_execution_results(
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
     messages: Vec<SwapExecutionResultMessage>,
@@ -480,8 +452,7 @@ pub async fn await_swap_handles(
 
 #[async_recursion]
 pub async fn retry_failed_swaps(
-    mpsc_tx: &MpscSender<(GrpcMessage, OneshotSender<GrpcTxResponse>)>,
-    rollback_safeguard: &Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
     order_book: &Arc<TokioMutex<OrderBook>>,
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -538,8 +509,7 @@ pub async fn retry_failed_swaps(
 
         let new_results;
         match process_and_execute_spot_swaps(
-            mpsc_tx,
-            rollback_safeguard,
+            tx_batch,
             order_book,
             session,
             backup_storage,
@@ -556,7 +526,7 @@ pub async fn retry_failed_swaps(
         };
 
         let retry_messages;
-        match await_swap_handles(
+        match handle_swap_execution_results(
             ws_connections,
             privileged_ws_connections,
             new_results,
@@ -570,8 +540,7 @@ pub async fn retry_failed_swaps(
 
         if retry_messages.len() > 0 {
             return retry_failed_swaps(
-                &mpsc_tx,
-                &rollback_safeguard,
+                &tx_batch,
                 order_book,
                 &session,
                 &backup_storage,

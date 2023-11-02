@@ -310,6 +310,7 @@ fn add_margin_to_position(
     let leverage = (spent_collateral as u128 * 10_u128.pow(LEVERAGE_DECIMALS as u32)
         / init_margin as u128) as u64;
 
+    
     position.add_margin_to_position(init_margin, spent_synthetic, leverage, fee_taken);
 
     // ? Check that leverage is valid relative to the notional position size

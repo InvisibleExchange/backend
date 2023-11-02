@@ -2,7 +2,6 @@ use firestore_db_and_auth::ServiceSession;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::thread::ThreadId;
 
 use num_bigint::BigUint;
 use serde_json::Value;
@@ -15,7 +14,6 @@ use super::Transaction;
 use super::limit_order::LimitOrder;
 use super::swap_execution::{execute_order, reverify_existances, update_state_after_order};
 use super::transaction_helpers::db_updates::update_db_after_spot_swap;
-use super::transaction_helpers::rollbacks::RollbackInfo;
 use super::transaction_helpers::swap_helpers::{
     consistency_checks, finalize_updates, unblock_order, NoteInfoExecutionOutput,
     TxExecutionThreadOutput,
@@ -26,7 +24,7 @@ use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{send_swap_error, SwapThreadExecutionError, TransactionExecutionError};
 use crate::utils::notes::Note;
-use crate::utils::storage::BackupStorage;
+use crate::utils::storage::local_storage::{BackupStorage, MainStorage};
 
 #[derive(Debug)]
 pub struct Swap {
@@ -76,7 +74,6 @@ impl Swap {
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
         blocked_order_ids_m: Arc<Mutex<HashMap<u64, bool>>>,
-        rollback_safeguard_m: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
         session: &Arc<Mutex<ServiceSession>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<SwapResponse, SwapThreadExecutionError> {
@@ -114,8 +111,6 @@ impl Swap {
         }
         let prev_order_tab_b = order_tab_b.clone();
         let prev_order_tab_b2 = order_tab_b.clone();
-
-        let thread_id = std::thread::current().id();
 
         let blocked_order_ids_c = blocked_order_ids_m.clone();
 
@@ -234,16 +229,13 @@ impl Swap {
             let updated_state_hashes = updated_state_hashes_m.clone();
             let partial_fill_tracker = partial_fill_tracker_m.clone();
             let blocked_order_ids = blocked_order_ids_m.clone();
-            let rollback_safeguard = rollback_safeguard_m.clone();
+
             let order_a_output_clone = order_a_output.clone();
 
             let update_state_handle_a = s.spawn(move |_| {
                 update_state_after_order(
                     &tree,
                     &updated_state_hashes,
-                    &rollback_safeguard,
-                    thread_id,
-                    &self.order_a,
                     &self.order_a.spot_note_info,
                     &order_a_output_clone.note_info_output,
                     &order_a_output_clone.updated_order_tab,
@@ -274,16 +266,12 @@ impl Swap {
             let updated_state_hashes = updated_state_hashes_m.clone();
             let partial_fill_tracker = partial_fill_tracker_m.clone();
             let blocked_order_ids = blocked_order_ids_m.clone();
-            let rollback_safeguard = rollback_safeguard_m.clone();
             let order_b_output_clone = order_b_output.clone();
 
             let update_state_handle_b = s.spawn(move |_| {
                 update_state_after_order(
                     &tree,
                     &updated_state_hashes,
-                    &rollback_safeguard,
-                    thread_id,
-                    &self.order_b,
                     &self.order_b.spot_note_info,
                     &order_b_output_clone.note_info_output,
                     &order_b_output_clone.updated_order_tab,
@@ -473,8 +461,8 @@ impl Transaction for Swap {
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
         swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
         blocked_order_ids_m: Arc<Mutex<HashMap<u64, bool>>>,
-        rollback_safeguard_m: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
         session: &Arc<Mutex<ServiceSession>>,
+        _main_storage: &Arc<Mutex<MainStorage>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(Option<SwapResponse>, Option<Vec<u64>>), TransactionExecutionError> {
         let swap_response = self
@@ -484,7 +472,6 @@ impl Transaction for Swap {
                 updated_state_hashes_m,
                 swap_output_json_m,
                 blocked_order_ids_m,
-                rollback_safeguard_m,
                 session,
                 backup_storage,
             )

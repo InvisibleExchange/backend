@@ -6,36 +6,38 @@ use std::{
     collections::HashMap,
     fs,
     sync::Arc,
-    thread::{self, JoinHandle, ThreadId},
+    thread::{self, JoinHandle},
 };
 
 use error_stack::Result;
 
+use crate::utils::storage::local_storage::MainStorage;
 use crate::{
     perpetual::{
         liquidations::{
             liquidation_engine::LiquidationSwap, liquidation_output::LiquidationResponse,
         },
-        perp_helpers::{perp_rollback::PerpRollbackInfo, perp_swap_outptut::PerpSwapResponse},
+        perp_helpers::perp_swap_outptut::PerpSwapResponse,
         perp_position::PerpPosition,
         perp_swap::PerpSwap,
     },
     server::grpc::{OrderTabActionMessage, OrderTabActionResponse},
     transactions::Transaction,
 };
-use crate::{server::grpc::RollbackMessage, utils::storage::MainStorage};
-use crate::{trees::superficial_tree::SuperficialTree, utils::storage::BackupStorage};
+use crate::{
+    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
+};
 
 use crate::utils::{
     errors::{
         BatchFinalizationError, OracleUpdateError, PerpSwapExecutionError,
         TransactionExecutionError,
     },
-    firestore::create_session,
     notes::Note,
+    storage::firestore::create_session,
 };
 
-use crate::transactions::{swap::SwapResponse, transaction_helpers::rollbacks::RollbackInfo};
+use crate::transactions::swap::SwapResponse;
 
 use crate::server::grpc::{ChangeMarginMessage, FundingUpdateMessage};
 
@@ -101,12 +103,7 @@ pub struct TransactionBatch {
 
     pub funding_rates: HashMap<u32, Vec<i64>>, // maps asset id to an array of funding rates (not reset at new batch)
     pub funding_prices: HashMap<u32, Vec<u64>>, // maps asset id to an array of funding prices (corresponding to the funding rates) (not reset at new batch)
-    pub current_funding_idx: u32, // the current index of the funding rates and prices arrays
-    pub funding_idx_shift: HashMap<u32, u32>, // maps asset id to an funding idx shift
     pub min_funding_idxs: Arc<Mutex<HashMap<u32, u32>>>, // the min funding index of a position being updated in this batch for each asset
-    //
-    pub rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>, // used to rollback the state in case of errors
-    pub perp_rollback_safeguard: Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>, // used to rollback the perp_state in case of errors
     //
     pub firebase_session: Arc<Mutex<ServiceSession>>, // Firebase session for updating the database in the cloud
     pub main_storage: Arc<Mutex<MainStorage>>,        // Storage Connection to store data on disk
@@ -116,11 +113,7 @@ pub struct TransactionBatch {
 }
 
 impl TransactionBatch {
-    pub fn new(
-        tree_depth: u32,
-        rollback_safeguard: Arc<Mutex<HashMap<ThreadId, RollbackInfo>>>,
-        perp_rollback_safeguard: Arc<Mutex<HashMap<ThreadId, PerpRollbackInfo>>>,
-    ) -> TransactionBatch {
+    pub fn new(tree_depth: u32) -> TransactionBatch {
         let state_tree = SuperficialTree::new(tree_depth);
         let partial_fill_tracker: HashMap<u64, (Option<Note>, u64)> = HashMap::new();
         let updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)> = HashMap::new();
@@ -142,7 +135,6 @@ impl TransactionBatch {
         let mut funding_rates: HashMap<u32, Vec<i64>> = HashMap::new();
         let mut funding_prices: HashMap<u32, Vec<u64>> = HashMap::new();
         let mut min_funding_idxs: HashMap<u32, u32> = HashMap::new();
-        let mut funding_idx_shift: HashMap<u32, u32> = HashMap::new();
 
         let session = create_session();
         let session = Arc::new(Mutex::new(session));
@@ -154,7 +146,6 @@ impl TransactionBatch {
         _init_empty_tokens_map::<i64>(&mut running_funding_tick_sums);
         _init_empty_tokens_map::<Vec<i64>>(&mut funding_rates);
         _init_empty_tokens_map::<Vec<u64>>(&mut funding_prices);
-        _init_empty_tokens_map::<u32>(&mut funding_idx_shift);
         _init_empty_tokens_map::<u32>(&mut min_funding_idxs);
 
         // TODO: For testing only =================================================
@@ -183,12 +174,8 @@ impl TransactionBatch {
             current_funding_count: 0,
             funding_rates,
             funding_prices,
-            current_funding_idx: 0,
-            funding_idx_shift,
             min_funding_idxs: Arc::new(Mutex::new(min_funding_idxs)),
-            //
-            rollback_safeguard,
-            perp_rollback_safeguard,
+
             //
             firebase_session: session,
             main_storage: Arc::new(Mutex::new(MainStorage::new())),
@@ -206,8 +193,6 @@ impl TransactionBatch {
             &mut self.main_storage,
             &mut self.funding_rates,
             &mut self.funding_prices,
-            &mut self.current_funding_idx,
-            &mut self.funding_idx_shift,
             &mut self.min_funding_idxs,
             &mut self.latest_index_price,
             &mut self.min_index_price_data,
@@ -243,14 +228,14 @@ impl TransactionBatch {
     {
         //
 
-        let state_tree = self.state_tree.clone();
-        let partial_fill_tracker = self.partial_fill_tracker.clone();
-        let updated_state_hashes = self.updated_state_hashes.clone();
-        let swap_output_json = self.swap_output_json.clone();
-        let blocked_order_ids = self.blocked_order_ids.clone();
-        let rollback_safeguard = self.rollback_safeguard.clone();
-        let session = self.firebase_session.clone();
-        let backup_storage = self.backup_storage.clone();
+        let state_tree = Arc::clone(&self.state_tree);
+        let partial_fill_tracker = Arc::clone(&self.partial_fill_tracker);
+        let updated_state_hashes = Arc::clone(&self.updated_state_hashes);
+        let swap_output_json = Arc::clone(&self.swap_output_json);
+        let blocked_order_ids = Arc::clone(&self.blocked_order_ids);
+        let session = Arc::clone(&self.firebase_session);
+        let main_storage = Arc::clone(&self.main_storage);
+        let backup_storage = Arc::clone(&self.backup_storage);
 
         let handle = thread::spawn(move || {
             let res = transaction.execute_transaction(
@@ -259,9 +244,9 @@ impl TransactionBatch {
                 updated_state_hashes,
                 swap_output_json,
                 blocked_order_ids,
-                rollback_safeguard,
                 &session,
-                &backup_storage,
+                &main_storage,
+                &&backup_storage,
             );
             return res;
         });
@@ -273,16 +258,16 @@ impl TransactionBatch {
         &mut self,
         transaction: PerpSwap,
     ) -> JoinHandle<Result<PerpSwapResponse, PerpSwapExecutionError>> {
-        let state_tree = self.state_tree.clone();
-        let updated_state_hashes = self.updated_state_hashes.clone();
-        let swap_output_json = self.swap_output_json.clone();
+        let state_tree = Arc::clone(&self.state_tree);
+        let updated_state_hashes = Arc::clone(&self.updated_state_hashes);
+        let swap_output_json = Arc::clone(&self.swap_output_json);
 
-        let perpetual_partial_fill_tracker = self.perpetual_partial_fill_tracker.clone();
-        let partialy_opened_positions = self.partialy_opened_positions.clone();
-        let blocked_perp_order_ids = self.blocked_perp_order_ids.clone();
+        let perpetual_partial_fill_tracker = Arc::clone(&self.perpetual_partial_fill_tracker);
+        let partialy_opened_positions = Arc::clone(&self.partialy_opened_positions);
+        let blocked_perp_order_ids = Arc::clone(&self.blocked_perp_order_ids);
 
-        let session = self.firebase_session.clone();
-        let backup_storage = self.backup_storage.clone();
+        let session = Arc::clone(&self.firebase_session);
+        let backup_storage = Arc::clone(&self.backup_storage);
 
         let current_index_price = *self
             .latest_index_price
@@ -290,13 +275,9 @@ impl TransactionBatch {
             .unwrap();
         let min_funding_idxs = self.min_funding_idxs.clone();
 
-        let perp_rollback_safeguard = self.perp_rollback_safeguard.clone();
-
         let swap_funding_info = SwapFundingInfo::new(
             &self.funding_rates,
             &self.funding_prices,
-            self.current_funding_idx,
-            &self.funding_idx_shift,
             transaction.order_a.synthetic_token,
             &transaction.order_a.position,
             &transaction.order_b.position,
@@ -313,7 +294,6 @@ impl TransactionBatch {
                 current_index_price,
                 min_funding_idxs,
                 swap_funding_info,
-                perp_rollback_safeguard,
                 session,
                 backup_storage,
             );
@@ -344,8 +324,6 @@ impl TransactionBatch {
         let swap_funding_info = SwapFundingInfo::new(
             &self.funding_rates,
             &self.funding_prices,
-            self.current_funding_idx,
-            &self.funding_idx_shift,
             liquidation_transaction.liquidation_order.synthetic_token,
             &Some(liquidation_transaction.liquidation_order.position.clone()),
             &None,
@@ -366,61 +344,6 @@ impl TransactionBatch {
         });
 
         return handle;
-    }
-
-    // * Rollback the transaction execution state updates
-    pub fn rollback_transaction(&mut self, _rollback_info_message: (ThreadId, RollbackMessage)) {
-        // let thread_id = rollback_info_message.0;
-        // let rollback_message = rollback_info_message.1;
-
-        println!(
-            "Rolling back transaction: {:?}",
-            _rollback_info_message.1.tx_type
-        );
-
-        // if rollback_message.tx_type == "deposit" {
-        //     // ? rollback the deposit execution state updates
-
-        //     let rollback_info = self.rollback_safeguard.lock().remove(&thread_id).unwrap();
-
-        //     rollback_deposit_updates(&self.state_tree, &self.updated_state_hashes, rollback_info);
-        // } else if rollback_message.tx_type == "swap" {
-        //     // ? rollback the swap execution state updates
-
-        //     let rollback_info = self.rollback_safeguard.lock().remove(&thread_id).unwrap();
-
-        //     rollback_swap_updates(
-        //         &self.state_tree,
-        //         &self.updated_state_hashes,
-        //         rollback_message,
-        //         rollback_info,
-        //     );
-        // } else if rollback_message.tx_type == "withdrawal" {
-        //     // ? rollback the withdrawal execution state updates
-
-        //     rollback_withdrawal_updates(
-        //         &self.state_tree,
-        //         &self.updated_state_hashes,
-        //         rollback_message,
-        //     );
-        // } else if rollback_message.tx_type == "perp_swap" {
-        //     // ? rollback the perp swap execution state updates
-
-        //     let rollback_info = self
-        //         .perp_rollback_safeguard
-        //         .lock()
-        //         .remove(&thread_id)
-        //         .unwrap();
-
-        //     rollback_perp_swap(
-        //         &self.state_tree,
-        //         &self.updated_state_hashes,
-        //         &self.perpetual_state_tree,
-        //         &self.perpetual_updated_position_hashes,
-        //         rollback_message,
-        //         rollback_info,
-        //     );
-        // }
     }
 
     // * =================================================================
@@ -484,6 +407,7 @@ impl TransactionBatch {
             &self.updated_state_hashes,
             &self.swap_output_json,
             &self.main_storage,
+            &self.insurance_fund,
             &mut self.funding_rates,
             &mut self.funding_prices,
             &mut self.min_funding_idxs,
@@ -521,7 +445,6 @@ impl TransactionBatch {
             &mut self.current_funding_count,
             &mut self.funding_rates,
             &mut self.funding_prices,
-            &mut self.current_funding_idx,
             &self.min_funding_idxs,
             &self.main_storage,
             funding_update,

@@ -262,11 +262,6 @@ fn restore_after_perp_swap_first_fill(
         tree.update_leaf_node(&hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, hash));
 
-        // Set this so that the partial fill fails in case it tries to fill again (to prevent unexpected behavior)
-        // let mut pft = perpetual_partial_fill_tracker_m.lock();
-        // pft.insert(order_id, (None, 69, 69));
-        // drop(pft);
-
         //
     } else {
         if notes_in.len() > 1 {
@@ -310,11 +305,6 @@ fn restore_after_perp_swap_later_fills(
 
         tree.update_leaf_node(&hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, hash));
-
-        // Set this so that the partial fill fails in case it tries to fill again (to prevent unexpected behavior)
-        let mut pft = perpetual_partial_fill_tracker_m.lock();
-        pft.insert(order_id, (None, 69, 69));
-        drop(pft);
     } else {
         tree.update_leaf_node(&BigUint::zero(), prev_pfr_idx);
         updated_state_hashes.insert(prev_pfr_idx, (LeafNodeType::Note, BigUint::zero()));

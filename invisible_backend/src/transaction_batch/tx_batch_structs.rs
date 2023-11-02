@@ -195,8 +195,6 @@ impl SwapFundingInfo {
     pub fn new(
         funding_rates: &HashMap<u32, Vec<i64>>,
         funding_prices: &HashMap<u32, Vec<u64>>,
-        current_funding_idx: u32,
-        funding_idx_shift: &HashMap<u32, u32>,
         synthetic_token: u32,
         position_a: &Option<PerpPosition>,
         position_b: &Option<PerpPosition>,
@@ -214,8 +212,10 @@ impl SwapFundingInfo {
         let swap_funding_rates: Vec<i64>;
         let swap_funding_prices: Vec<u64>;
         let min_swap_funding_idx: u32;
+        let funding_idx: u32;
         if prev_funding_idx_a.is_none() && prev_funding_idx_b.is_none() {
             min_swap_funding_idx = 0;
+            funding_idx = 0;
 
             swap_funding_rates = Vec::new();
             swap_funding_prices = Vec::new();
@@ -225,33 +225,26 @@ impl SwapFundingInfo {
                 prev_funding_idx_b.unwrap_or(u32::MAX),
             );
 
-            let shift: u32 = *funding_idx_shift.get(&synthetic_token).unwrap_or(&0);
-            let arr_start_idx = min_swap_funding_idx - shift;
+            funding_idx = funding_rates.get(&synthetic_token).unwrap().len() as u32;
 
-            if arr_start_idx == 0 {
-                swap_funding_rates = funding_rates
-                    .get(&synthetic_token)
-                    .unwrap_or(&vec![])
-                    .clone();
-                swap_funding_prices = funding_prices
-                    .get(&synthetic_token)
-                    .unwrap_or(&vec![])
-                    .clone();
+            if min_swap_funding_idx >= funding_idx {
+                swap_funding_rates = Vec::new();
+                swap_funding_prices = Vec::new();
             } else {
                 swap_funding_rates = funding_rates.get(&synthetic_token).unwrap()
-                    [arr_start_idx as usize - 1..]
+                    [min_swap_funding_idx as usize..]
                     .to_vec()
                     .clone();
 
                 swap_funding_prices = funding_prices.get(&synthetic_token).unwrap()
-                    [arr_start_idx as usize - 1..]
+                    [min_swap_funding_idx as usize..]
                     .to_vec()
                     .clone();
             }
         };
 
         let swap_funding_info = SwapFundingInfo {
-            current_funding_idx,
+            current_funding_idx: funding_idx,
             swap_funding_rates,
             swap_funding_prices,
             min_swap_funding_idx,
