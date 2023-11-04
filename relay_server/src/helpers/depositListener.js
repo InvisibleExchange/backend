@@ -4,15 +4,16 @@ const {
   updateStoredDepositIds,
 } = require("./localStorage");
 const { storeOnchainDeposit } = require("./firebase/firebaseConnection");
-const { id } = require("ethers/lib/utils");
 
 // const privateKey =
 //   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 // const signer = new ethers.Wallet(privateKey, provider);
 
+const exchange_config = require("../../../exchange-config.json");
+
 const provider = new ethers.providers.JsonRpcProvider("http://localhost:8545");
 
-const invisibleL1Address = "0xFa62E2E9B7A3F1Aa1773e165c42fEabc52d748bB"; //Todo
+const invisibleL1Address = exchange_config["INVISIBL1_ETH_ADDRESS"];
 const invisibleL1Abi = require("./abis/InvisibleL1.json").abi;
 
 const invisibleL1Contract = new ethers.Contract(
@@ -21,11 +22,7 @@ const invisibleL1Contract = new ethers.Contract(
   provider
 );
 
-const tokenId2Address = {
-  55555: "0x1754C78DD11F6B07DFC9e529BD19d912EAEfA1c8",
-  12345: "0xBF52caf40b7612bEd0814A09842c14BAB217BaD5",
-  54321: "0x0000000000000000000000000000000000000000",
-};
+const tokenId2Address = exchange_config["TOKEN_ID_2_ADDRESS"];
 
 async function listenForDeposits(db) {
   let { pendingDeposits, processedDepositIds } = (await getProcessedDeposits(
@@ -58,17 +55,9 @@ async function listenForDeposits(db) {
   );
 }
 
-const onchainDecimalsPerAsset = {
-  55555: 18,
-  12345: 18,
-  54321: 18,
-};
+const onchainDecimalsPerAsset = exchange_config["ONCHAIN_DECIMALS_PER_ASSET"];
 
-const DECIMALS_PER_ASSET = {
-  55555: 6,
-  12345: 8,
-  54321: 8,
-};
+const DECIMALS_PER_ASSET = exchange_config["DECIMALS_PER_ASSET"];
 
 async function isDepositValid(deposit, db) {
   let { pendingDeposits, processedDepositIds } = (await getProcessedDeposits(

@@ -88,20 +88,20 @@ impl Deposit {
             // ? verify Signature
             self.verify_deposit_signature()?;
 
-            // ? Verify the deposit has not been processed yet
-            let main_storage_m = main_storage.lock();
+            // // ? Verify the deposit has not been processed yet
+            // let main_storage_m = main_storage.lock();
 
-            let is_already_processed = main_storage_m.is_deposit_already_processed(deposit_id);
-            if is_already_processed {
-                return Err(send_deposit_error(
-                    "deposit has already been processed".to_string(),
-                    None,
-                ));
-            }
+            // let is_already_processed = main_storage_m.is_deposit_already_processed(deposit_id);
+            // if is_already_processed {
+            //     return Err(send_deposit_error(
+            //         "deposit has already been processed".to_string(),
+            //         None,
+            //     ));
+            // }
 
-            // ? store the deposit_id as processed
-            main_storage_m.store_processed_deposit_id(deposit_id);
-            drop(main_storage_m);
+            // // ? store the deposit_id as processed
+            // main_storage_m.store_processed_deposit_id(deposit_id);
+            // drop(main_storage_m);
 
             // * After the deposit is verified to be valid update the state ================ //
 

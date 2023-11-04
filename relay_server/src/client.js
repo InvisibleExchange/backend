@@ -91,26 +91,23 @@ initFundingInfo(client, updateFundingInfo);
 
 // * EXECUTE DEPOSIT -----------------------------------------------------------------
 app.post("/execute_deposit", async (req, res) => {
-  let isValid = await isDepositValid(req.body, db);
+  // let isValid = await isDepositValid(req.body, db);
 
-  if (!isValid) {
-    res.send({
-      response: { successful: false, error_message: "Invalid deposit" },
-    });
-    return;
-  }
-
+  // if (!isValid) {
+  //   res.send({
+  //     response: { successful: false, error_message: "Invalid deposit" },
+  //   });
+  //   return;
+  // }
 
   client.execute_deposit(req.body, function (err, response) {
     if (err) {
       console.log(err);
     } else {
-      console.log("response: ", response);
-
-      if (response.successful) {
-        console.log("deposit processed", req.body.deposit_id);
-        depositProcessedCallback(db, req.body.deposit_id);
-      }
+      // if (response.successful) {
+      //   console.log("deposit processed", req.body.deposit_id);
+      //   depositProcessedCallback(db, req.body.deposit_id);
+      // }
 
       res.send({ response: response });
     }
@@ -164,14 +161,6 @@ app.post("/submit_liquidation_order", (req, res) => {
     }
   });
 });
-
-// * GET LIQUIDATABLE POSITIONS -----------------------------------------------------------
-// app.post("/get_liquidatable_positions", (req, res) => {
-//   let { token, price } = req.body;
-//   getLiquidatablePositions(db, token, price).then((response) => {
-//     res.send({ response: response });
-//   });
-// });
 
 // * CANCEL ORDER ---------------------------------------------------------------------
 app.post("/cancel_order", (req, res) => {

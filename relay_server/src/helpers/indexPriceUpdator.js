@@ -16,17 +16,10 @@ let client = new engine.Engine(SERVER_URL, grpc.credentials.createInsecure());
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-const PRICE_DECIMALS_PER_ASSET = {
-  12345: 6, // BTC
-  54321: 6, // ETH
-  66666: 6, // PEPE
-};
-const SYMBOLS_TO_IDS = {
-  BTC: 12345,
-  ETH: 54321,
-  USDC: 55555,
-  SOL: 66666,
-};
+const exchange_config = require("../../../exchange-config.json");
+
+const PRICE_DECIMALS_PER_ASSET = exchange_config["PRICE_DECIMALS_PER_ASSET"];
+const SYMBOLS_TO_IDS = exchange_config["SYMBOLS_TO_IDS"];
 
 const { getKeyPair, sign } = require("starknet").ec;
 
