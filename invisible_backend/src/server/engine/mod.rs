@@ -32,11 +32,8 @@ use super::{
     grpc::engine_proto::{engine_server::Engine, CloseOrderTabRes, OpenOrderTabRes},
     server_helpers::WsConnectionsMap,
 };
-use crate::transaction_batch::TransactionBatch;
-use crate::{
-    matching_engine::orderbook::OrderBook,
-    utils::errors::{send_deposit_error_reply, send_oracle_update_error_reply},
-};
+use crate::{matching_engine::orderbook::OrderBook, utils::errors::send_deposit_error_reply};
+use crate::{transaction_batch::TransactionBatch, utils::errors::send_oracle_update_error_reply};
 
 use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
@@ -49,6 +46,8 @@ mod order_executions;
 mod order_interactions;
 mod order_tabs;
 mod queries;
+
+const SERVER_URL: [u8; 4] = [54, 212, 28, 196];
 
 // #[derive(Debug)]
 pub struct EngineService {
@@ -166,9 +165,7 @@ impl Engine for EngineService {
         request: Request<DepositMessage>,
     ) -> Result<Response<DepositResponse>, Status> {
         // ? Only call the server from the same network (onyl as fallback)
-        if request.remote_addr().unwrap().ip()
-            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
-        {
+        if !is_local_address(&request) {
             return send_deposit_error_reply(
                 "execute deposit can only be called from the same network".to_string(),
             );
@@ -338,9 +335,7 @@ impl Engine for EngineService {
         request: Request<EmptyReq>,
     ) -> Result<Response<FinalizeBatchResponse>, Status> {
         // ? Only call the server from the same network (onyl as fallback)
-        if request.remote_addr().unwrap().ip()
-            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
-        {
+        if !is_local_address(&request) {
             return Ok(Response::new(FinalizeBatchResponse {}));
         }
 
@@ -362,9 +357,7 @@ impl Engine for EngineService {
         request: Request<OracleUpdateReq>,
     ) -> Result<Response<SuccessResponse>, Status> {
         // ? Only call the server from the same network (onyl as fallback)
-        if request.remote_addr().unwrap().ip()
-            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
-        {
+        if !is_local_address(&request) {
             return send_oracle_update_error_reply(format!(
                 "update_index_price can only be called from the same network"
             ));
@@ -382,9 +375,7 @@ impl Engine for EngineService {
         request: Request<RestoreOrderBookMessage>,
     ) -> Result<Response<SuccessResponse>, Status> {
         // ? Only call the server from the same network (onyl as fallback)
-        if request.remote_addr().unwrap().ip()
-            != std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
-        {
+        if !is_local_address(&request) {
             let reply = SuccessResponse {
                 successful: false,
                 error_message: "restore_orderbook can only be called from the same network"
@@ -443,4 +434,13 @@ impl Engine for EngineService {
     //
     // * ===================================================================================================================================
     //
+}
+
+fn is_local_address<T>(request: &Request<T>) -> bool {
+    let [a, b, c, d] = SERVER_URL;
+
+    return request.remote_addr().unwrap().ip()
+        == std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
+        || request.remote_addr().unwrap().ip()
+            == std::net::IpAddr::V4(std::net::Ipv4Addr::new(a, b, c, d));
 }

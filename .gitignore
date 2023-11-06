@@ -14,8 +14,7 @@ invisible_backend/target
 invisible_backend/storage
 
 
-
-
+invisible_backend/invisible.json
 
 circomlib/test
 

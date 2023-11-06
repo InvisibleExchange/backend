@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, CHAIN_IDS};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::errors::{
     send_deposit_error, DepositThreadExecutionError, TransactionExecutionError,
@@ -87,6 +87,15 @@ impl Deposit {
 
             // ? verify Signature
             self.verify_deposit_signature()?;
+
+            // ? Verify chain id
+            let chain_id = deposit_id / 2u64.pow(32);
+            if !CHAIN_IDS.contains(&(chain_id as u32)) {
+                return Err(send_deposit_error(
+                    "invalid chain id".to_string(),
+                    Some(format!("invalid chain id: {}", chain_id)),
+                ));
+            }
 
             // // ? Verify the deposit has not been processed yet
             // let main_storage_m = main_storage.lock();
