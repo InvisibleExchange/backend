@@ -11,7 +11,6 @@ use std::{
 
 use error_stack::Result;
 
-use crate::utils::storage::local_storage::MainStorage;
 use crate::{
     perpetual::{
         liquidations::{
@@ -23,6 +22,9 @@ use crate::{
     },
     server::grpc::{OrderTabActionMessage, OrderTabActionResponse},
     transactions::Transaction,
+};
+use crate::{
+    server::grpc::engine_proto::EscapeMessage, utils::storage::local_storage::MainStorage,
 };
 use crate::{
     trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
@@ -55,6 +57,7 @@ use self::{
             _split_notes_inner,
         },
     },
+    escapes::verify_escapes::{_execute_forced_escape_inner, _get_position_close_escape_info},
     restore_state_helpers::_restore_state_inner,
 };
 
@@ -66,6 +69,7 @@ use self::{
 // TODO: If you get a note doesn't exist error, there should  be a function where you can check the existence of all your notes
 
 pub mod batch_functions;
+pub mod escapes;
 pub mod restore_state_helpers;
 pub mod tx_batch_helpers;
 pub mod tx_batch_structs;
@@ -396,6 +400,36 @@ impl TransactionBatch {
         );
     }
 
+    pub fn execute_forced_escape(&mut self, escape_message: EscapeMessage) {
+        let (index_price, swap_funding_info, synthetic_token) = _get_position_close_escape_info(
+            &self.funding_rates,
+            &self.funding_prices,
+            &self.latest_index_price,
+            &escape_message,
+        );
+
+        _execute_forced_escape_inner(
+            &self.state_tree,
+            &self.updated_state_hashes,
+            &self.firebase_session,
+            &self.backup_storage,
+            &self.swap_output_json,
+            escape_message,
+            &swap_funding_info,
+            index_price,
+        );
+
+        if let Some(funding_info) = swap_funding_info {
+            let mut min_funding_idxs_m = self.min_funding_idxs.lock();
+            let prev_min_funding_idx = min_funding_idxs_m.get(&synthetic_token).unwrap();
+
+            if funding_info.min_swap_funding_idx < *prev_min_funding_idx {
+                min_funding_idxs_m.insert(synthetic_token, funding_info.min_swap_funding_idx);
+            }
+            drop(min_funding_idxs_m);
+        }
+    }
+
     // * =================================================================
     // * FINALIZE BATCH
 
@@ -431,7 +465,6 @@ impl TransactionBatch {
             &self.state_tree,
             &self.updated_state_hashes,
             &self.perpetual_partial_fill_tracker,
-            &self.main_storage,
             transactions,
         )
     }

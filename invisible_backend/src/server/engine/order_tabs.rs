@@ -128,7 +128,7 @@ pub async fn close_order_tab_inner(
     semaphore: &Semaphore,
     is_paused: &Arc<TokioMutex<bool>>,
     //
-    req: Request<CloseOrderTabReq>,
+    req: CloseOrderTabReq,
 ) -> Result<Response<CloseOrderTabRes>, Status> {
     let _permit = semaphore.acquire().await.unwrap();
 
@@ -136,8 +136,6 @@ pub async fn close_order_tab_inner(
     drop(lock);
 
     tokio::task::yield_now().await;
-
-    let req: CloseOrderTabReq = req.into_inner();
 
     let tx_batch_m = tx_batch.lock().await;
     let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);

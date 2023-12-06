@@ -14,7 +14,7 @@ use crate::{
         perp_helpers::perp_swap_outptut::PerpSwapResponse, perp_order::CloseOrderFields,
         perp_position::PerpPosition,
     },
-    smart_contract_mms::remove_liquidity::RemoveLiqRes,
+    smart_contract_mms::{remove_liquidity::RemoveLiqRes, vlp_note::VlpNote},
     transactions::swap::SwapResponse,
     utils::crypto_utils::Signature,
     utils::{
@@ -93,8 +93,8 @@ pub struct OrderTabActionResponse {
     pub open_tab_response: Option<std::result::Result<OrderTab, String>>,
     pub close_tab_response: Option<std::result::Result<(Note, Note), String>>,
     pub register_mm_response:
-        Option<std::result::Result<(Option<OrderTab>, Option<PerpPosition>, Note), String>>,
+        Option<std::result::Result<(Option<OrderTab>, Option<PerpPosition>, VlpNote), String>>,
     pub add_liq_response:
-        Option<std::result::Result<(Option<OrderTab>, Option<PerpPosition>, Note), String>>,
+        Option<std::result::Result<(Option<OrderTab>, Option<PerpPosition>, VlpNote), String>>,
     pub remove_liq_response: Option<std::result::Result<RemoveLiqRes, String>>,
 }

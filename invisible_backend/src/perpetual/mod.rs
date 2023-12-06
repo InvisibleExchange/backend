@@ -155,6 +155,25 @@ pub fn get_cross_price(
     // return price as f64 / 10_f64.powi(*base_price_decimals as i32);
 }
 
+// * Price functions * // ====================================================================
+pub fn get_collateral_amount(synthetic_token: u32, synthetic_amount: u64, price: u64) -> u64 {
+    let synthetic_decimals: &u8 = DECIMALS_PER_ASSET
+        .get(synthetic_token.to_string().as_str())
+        .unwrap();
+
+    let synthetic_price_decimals: &u8 = PRICE_DECIMALS_PER_ASSET
+        .get(synthetic_token.to_string().as_str())
+        .unwrap();
+
+    let decimal_conversion: i8 = *synthetic_decimals as i8 + *synthetic_price_decimals as i8
+        - COLLATERAL_TOKEN_DECIMALS as i8;
+    let multiplier = 10_u128.pow(decimal_conversion as u32);
+
+    let collateral_amount = ((synthetic_amount as u128 * price as u128) / multiplier) as u64;
+
+    return collateral_amount;
+}
+
 pub fn round_price(price: f64, round: Option<bool>) -> f64 {
     if let Some(r) = round {
         if r {

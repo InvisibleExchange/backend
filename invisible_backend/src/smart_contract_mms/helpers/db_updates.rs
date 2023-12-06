@@ -8,11 +8,12 @@ use firestore_db_and_auth::ServiceSession;
 use crate::{
     order_tab::OrderTab,
     perpetual::perp_position::PerpPosition,
+    smart_contract_mms::vlp_note::VlpNote,
     utils::{
         notes::Note,
         storage::firestore::{
             start_add_note_thread, start_add_order_tab_thread, start_add_position_thread,
-            start_delete_note_thread, start_delete_order_tab_thread,
+            start_add_vlp_note_thread, start_delete_note_thread, start_delete_order_tab_thread,
         },
         storage::local_storage::BackupStorage,
     },
@@ -27,11 +28,11 @@ pub fn onchain_open_tab_db_updates(
     backup_storage: &Arc<Mutex<BackupStorage>>,
     order_tab: Option<OrderTab>,
     position: Option<PerpPosition>,
-    vlp_note: Note,
+    vlp_note: VlpNote,
 ) {
     //
 
-    let _h = start_add_note_thread(vlp_note, session, backup_storage);
+    let _h = start_add_vlp_note_thread(vlp_note, session, backup_storage);
 
     if let Some(tab) = order_tab {
         let _h: std::thread::JoinHandle<()> =
@@ -95,7 +96,7 @@ pub fn onchain_position_add_liquidity_db_updates(
     position: PerpPosition,
     collateral_notes_in: Vec<Note>,
     collateral_refund_note: Option<Note>,
-    vlp_note: Note,
+    vlp_note: VlpNote,
 ) {
     //
 
@@ -111,7 +112,7 @@ pub fn onchain_position_add_liquidity_db_updates(
         let _h = start_add_note_thread(note, session, backup_storage);
     }
 
-    let _h = start_add_note_thread(vlp_note, session, backup_storage);
+    let _h = start_add_vlp_note_thread(vlp_note, session, backup_storage);
 
     let _h: std::thread::JoinHandle<()> =
         start_add_position_thread(position, session, backup_storage);
@@ -165,7 +166,7 @@ pub fn onchain_position_remove_liquidity_db_updates(
     pos_idx: u64,
     pos_address: BigUint,
     position: Option<PerpPosition>,
-    vlp_notes_in: &Vec<Note>,
+    vlp_notes_in: &Vec<VlpNote>,
     collateral_return_note: Note,
 ) {
     //

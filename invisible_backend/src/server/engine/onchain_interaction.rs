@@ -5,7 +5,12 @@ use super::super::grpc::engine_proto::{
 };
 
 use crate::{
-    server::server_helpers::engine_helpers::{handle_deposit_repsonse, handle_withdrawal_repsonse},
+    server::{
+        grpc::engine_proto::EscapeMessage,
+        server_helpers::engine_helpers::{
+            handle_deposit_repsonse, handle_withdrawal_repsonse, store_output_json,
+        },
+    },
     transaction_batch::TransactionBatch,
 };
 
@@ -118,4 +123,38 @@ pub async fn execute_withdrawal_inner(
         &main_storage,
     )
     .await;
+}
+
+//
+// * ===================================================================================================================================
+// * EXECUTE ESCAPE
+
+pub async fn execute_escape_inner(
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
+    semaphore: &Semaphore,
+    is_paused: &Arc<TokioMutex<bool>>,
+    request: Request<EscapeMessage>,
+) -> Result<Response<SuccessResponse>, Status> {
+    let _permit = semaphore.acquire().await.unwrap();
+
+    let lock = is_paused.lock().await;
+    drop(lock);
+
+    tokio::task::yield_now().await;
+
+    let escape_message: EscapeMessage = request.into_inner();
+
+    let mut tx_batch_m = tx_batch.lock().await;
+
+    tx_batch_m.execute_forced_escape(escape_message);
+    store_output_json(&tx_batch_m.swap_output_json, &tx_batch_m.main_storage);
+
+    drop(tx_batch_m);
+
+    let reply = SuccessResponse {
+        successful: true,
+        error_message: "".to_string(),
+    };
+
+    return Ok(Response::new(reply));
 }

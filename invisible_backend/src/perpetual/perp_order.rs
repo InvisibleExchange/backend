@@ -155,6 +155,7 @@ impl PerpOrder {
             fee_limit,
             open_order_fields: None,
             close_order_fields,
+
             hash,
         };
     }
@@ -241,10 +242,10 @@ impl Serialize for PerpOrder {
     where
         S: Serializer,
     {
-        let mut note = serializer.serialize_struct("PerpOrder", 13)?;
+        let mut order = serializer.serialize_struct("PerpOrder", 13)?;
 
-        note.serialize_field("order_id", &self.order_id)?;
-        note.serialize_field("expiration_timestamp", &self.expiration_timestamp)?;
+        order.serialize_field("order_id", &self.order_id)?;
+        order.serialize_field("expiration_timestamp", &self.expiration_timestamp)?;
 
         let pos_addr_string = if self.position_effect_type == PositionEffectType::Open {
             self.open_order_fields
@@ -260,19 +261,20 @@ impl Serialize for PerpOrder {
                 .position_address
                 .to_string()
         };
-        note.serialize_field("pos_addr", &pos_addr_string)?;
-        note.serialize_field("position_effect_type", &self.position_effect_type)?;
-        note.serialize_field("order_side", &self.order_side)?;
-        note.serialize_field("synthetic_token", &self.synthetic_token)?;
-        note.serialize_field("synthetic_amount", &self.synthetic_amount)?;
-        note.serialize_field("collateral_amount", &self.collateral_amount)?;
-        note.serialize_field("fee_limit", &self.fee_limit)?;
-        note.serialize_field("open_order_fields", &self.open_order_fields)?;
-        note.serialize_field("close_order_fields", &self.close_order_fields)?;
+        order.serialize_field("pos_addr", &pos_addr_string)?;
+        order.serialize_field("position_effect_type", &self.position_effect_type)?;
+        order.serialize_field("order_side", &self.order_side)?;
+        order.serialize_field("synthetic_token", &self.synthetic_token)?;
+        order.serialize_field("synthetic_amount", &self.synthetic_amount)?;
+        order.serialize_field("collateral_amount", &self.collateral_amount)?;
+        order.serialize_field("fee_limit", &self.fee_limit)?;
+        order.serialize_field("open_order_fields", &self.open_order_fields)?;
+        order.serialize_field("close_order_fields", &self.close_order_fields)?;
+        order.serialize_field("close_order_fields", &self.close_order_fields)?;
         let hash: &BigUint = &self.hash;
-        note.serialize_field("hash", &hash.to_string())?;
+        order.serialize_field("hash", &hash.to_string())?;
 
-        return note.end();
+        return order.end();
     }
 }
 

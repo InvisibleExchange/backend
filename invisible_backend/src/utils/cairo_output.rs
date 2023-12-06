@@ -23,6 +23,8 @@ pub struct ProgramOutput {
     pub deposit_outputs: Vec<DepositOutput>,
     pub withdrawal_outputs: Vec<WithdrawalOutput>,
     pub mm_registrations: Vec<MMRegistrationOutput>,
+    pub escape_outputs: Vec<EscapeOutput>,
+    pub position_escape_outputs: Vec<PositionEscapeOutput>,
     pub note_outputs: Vec<NoteOutput>,
     pub position_outputs: Vec<PerpPositionOutput>,
     pub tab_outputs: Vec<OrderTabOutput>,
@@ -36,6 +38,8 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
     // 1.1: deposits
     // 1.2: withdrawals
     // 1.3: MM registrations
+    // 1.4: escapes
+    // 1.5: position escapes
     // 2: notes
     // 3: positions
     // 4: order_tabs
@@ -60,9 +64,23 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
     let (withdrawal_outputs, cairo_output) =
         parse_withdrawal_outputs(&cairo_output, dex_state.program_input_counts.n_withdrawals);
 
+    // ? Parse MM registrations
     let (mm_registrations, cairo_output) = parse_mm_registration_outputs(
         &cairo_output,
         dex_state.program_input_counts.n_mm_registrations,
+    );
+
+    // ? Parse escapes
+    let (escape_outputs, cairo_output) = parse_escape_outputs(
+        &cairo_output,
+        dex_state.program_input_counts.n_note_escapes
+            + dex_state.program_input_counts.n_tab_escapes,
+    );
+
+    // ? Parse position escapes
+    let (position_escape_outputs, cairo_output) = parse_position_escape_outputs(
+        &cairo_output,
+        dex_state.program_input_counts.n_position_escapes,
     );
 
     // ? Parse notes
@@ -90,6 +108,8 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
         deposit_outputs,
         withdrawal_outputs,
         mm_registrations,
+        escape_outputs,
+        position_escape_outputs,
         note_outputs,
         position_outputs,
         tab_outputs,
@@ -118,17 +138,23 @@ fn parse_dex_state(output: &[BigUint]) -> (GlobalDexState, &[BigUint]) {
     let global_expiration_timestamp = res_vec[1].to_u32().unwrap();
     let config_code = res_vec[2].to_u32().unwrap();
 
-    let batched_output_info = &output[3];
-    let res_vec = split_by_bytes(batched_output_info, vec![32, 32, 32, 32, 32, 32, 32]);
+    let output_counts1 = &output[3];
+    let res_vec = split_by_bytes(output_counts1, vec![32, 32, 32, 32, 32, 32]);
     let n_deposits = res_vec[0].to_u32().unwrap();
     let n_withdrawals = res_vec[1].to_u32().unwrap();
     let n_mm_registrations = res_vec[2].to_u32().unwrap();
     let n_output_notes = res_vec[3].to_u32().unwrap();
     let n_output_positions = res_vec[4].to_u32().unwrap();
     let n_output_tabs = res_vec[5].to_u32().unwrap();
-    let n_zero_indexes = res_vec[6].to_u32().unwrap();
 
-    let shifted_output = &output[4..];
+    let output_counts2 = &output[4];
+    let res_vec = split_by_bytes(output_counts2, vec![32, 32, 32, 32]);
+    let n_zero_indexes = res_vec[0].to_u32().unwrap();
+    let n_note_escapes = res_vec[1].to_u32().unwrap();
+    let n_position_escapes = res_vec[2].to_u32().unwrap();
+    let n_tab_escapes = res_vec[3].to_u32().unwrap();
+
+    let shifted_output = &output[5..];
 
     let program_input_counts = ProgramInputCounts {
         n_output_notes,
@@ -138,6 +164,9 @@ fn parse_dex_state(output: &[BigUint]) -> (GlobalDexState, &[BigUint]) {
         n_deposits,
         n_withdrawals,
         n_mm_registrations,
+        n_note_escapes,
+        n_position_escapes,
+        n_tab_escapes,
     };
 
     return (
@@ -412,11 +441,7 @@ fn parse_mm_registration_outputs(
     for i in 0..num_registrations {
         let batch_registrations_info = output[(i * 2) as usize].clone();
 
-        // 20703416456491290441237729280 0 1122334455 1000000000000
-
         let split_vec = split_by_bytes(&batch_registrations_info, vec![1, 32, 64]);
-
-        println!("batch_registrations_info: {:?}", batch_registrations_info);
 
         let is_perp = split_vec[0].to_u8().unwrap() == 1;
         let vlp_token = split_vec[1].to_u32().unwrap();
@@ -437,6 +462,108 @@ fn parse_mm_registration_outputs(
     let shifted_output = &output[2 * num_registrations as usize..];
 
     return (mm_registrations, shifted_output);
+}
+
+// * =====================================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EscapeType {
+    OrderTabEscape,
+    NoteEscape,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EscapeOutput {
+    pub escape_id: u32,
+    pub is_valid: bool,
+    pub escape_type: EscapeType,
+    pub escape_message_hash: BigUint,
+    pub signature_r: BigUint,
+    pub signature_s: BigUint,
+}
+
+fn parse_escape_outputs(
+    output: &[BigUint],
+    num_escape_outputs: u32,
+) -> (Vec<EscapeOutput>, &[BigUint]) {
+    let mut escape_outputs: Vec<EscapeOutput> = Vec::new();
+
+    for i in 0..num_escape_outputs {
+        let escape_output = output[(i * 2) as usize].clone();
+
+        // escape_value (64 bits) | escape_id (32 bits) | is_valid (8 bits) |
+        let split_vec = split_by_bytes(&escape_output, vec![32, 8, 8]);
+
+        let escape_id = split_vec[0].to_u32().unwrap();
+        let is_valid = split_vec[1].to_u8().unwrap() == 1;
+        let escape_type = if split_vec[2].to_u8().unwrap() == 0 {
+            EscapeType::NoteEscape
+        } else {
+            EscapeType::OrderTabEscape
+        };
+
+        let escape = EscapeOutput {
+            escape_id,
+            is_valid,
+            escape_type,
+            escape_message_hash: output[(i * 2 + 1) as usize].clone(),
+            signature_r: output[(i * 2 + 2) as usize].clone(),
+            signature_s: output[(i * 2 + 3) as usize].clone(),
+        };
+
+        escape_outputs.push(escape);
+    }
+
+    let shifted_output = &output[4 * num_escape_outputs as usize..];
+
+    return (escape_outputs, shifted_output);
+}
+
+// * =====================================================================================
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PositionEscapeOutput {
+    pub escape_id: u32,
+    pub is_valid: bool,
+    pub escape_value: u64,
+    pub escape_message_hash: BigUint,
+    pub signature_a_r: BigUint,
+    pub signature_a_s: BigUint,
+    pub signature_b_r: BigUint,
+    pub signature_b_s: BigUint,
+}
+
+fn parse_position_escape_outputs(
+    output: &[BigUint],
+    num_escape_outputs: u32,
+) -> (Vec<PositionEscapeOutput>, &[BigUint]) {
+    let mut escape_outputs: Vec<PositionEscapeOutput> = Vec::new();
+
+    for i in 0..num_escape_outputs {
+        let escape_output = output[(i * 2) as usize].clone();
+
+        // escape_id (32 bits) | is_valid (8 bits) | escape_type (8 bits) |
+        let split_vec = split_by_bytes(&escape_output, vec![32, 8, 8]);
+
+        let escape_value = split_vec[0].to_u64().unwrap();
+        let escape_id = split_vec[1].to_u32().unwrap();
+        let is_valid = split_vec[2].to_u8().unwrap() == 1;
+
+        let escape = PositionEscapeOutput {
+            escape_id,
+            is_valid,
+            escape_value,
+            escape_message_hash: output[(i * 2 + 1) as usize].clone(),
+            signature_a_r: output[(i * 2 + 2) as usize].clone(),
+            signature_a_s: output[(i * 2 + 3) as usize].clone(),
+            signature_b_r: output[(i * 2 + 4) as usize].clone(),
+            signature_b_s: output[(i * 2 + 5) as usize].clone(),
+        };
+
+        escape_outputs.push(escape);
+    }
+
+    let shifted_output = &output[4 * num_escape_outputs as usize..];
+
+    return (escape_outputs, shifted_output);
 }
 
 // * =====================================================================================
@@ -764,6 +891,7 @@ pub fn format_cairo_ouput(program_output: &str) -> Vec<&str> {
 
     let program_output = program_output
         .split("\n")
+        .filter(|s| !s.is_empty())
         .map(|s| s.trim())
         .collect::<Vec<&str>>();
 

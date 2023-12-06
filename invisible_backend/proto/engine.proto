@@ -10,6 +10,8 @@ service Engine {
 
     rpc execute_withdrawal (WithdrawalMessage) returns (SuccessResponse);
 
+    rpc execute_escape (EscapeMessage) returns (SuccessResponse);
+
     // order executions --------------- ----------------- -------------------
     rpc submit_limit_order (LimitOrderMessage) returns (OrderResponse);
 
@@ -167,6 +169,28 @@ message SuccessResponse {
     string error_message = 2;
 }
 
+// ------ FORCED ESCAPE --------------
+
+
+message EscapeMessage {
+    uint32 escape_id = 1;
+    repeated GrpcNote escape_notes = 2;
+    Signature signature = 3;
+    // OnChainRemoveLiqTabReq force_remove_liquidity_req = 3;
+    GrpcOrderTab close_order_tab_req = 4;
+    ForcePositionCloseMessage close_position_message = 5;
+} 
+
+message ForcePositionCloseMessage {
+    GrpcPerpPosition position_a = 1; // user A Position to close
+    uint64 close_price = 2; // Price at which to close the position
+    GrpcOpenOrderFields open_order_fields_b = 3; // user B Open order fields
+    GrpcPerpPosition position_b = 4; // user B Position to close
+    Signature signature_a = 5;
+    Signature signature_b = 6;
+}
+
+
 // ------ PERPETUALS --------------
 
 message PerpOrderMessage {
@@ -198,7 +222,7 @@ message GrpcPerpPosition {
     uint64 bankruptcy_price = 7;
     uint32 last_funding_idx = 8;
     uint64 vlp_supply = 9;
-    string hash =10;
+    string hash = 10;
     uint32 index = 11 ;
 }
 
@@ -292,7 +316,7 @@ message OnChainRegisterMMRes {
     string error_message = 2;
     GrpcOrderTab order_tab = 3;
     GrpcPerpPosition position = 4;
-    GrpcNote vlp_note = 5;
+    GrpcVlpNote vlp_note = 5;
 }
 
 // -------------------------------------------------------
@@ -328,13 +352,13 @@ message AddLiqOrderTabRes {
     string error_message = 2;
     GrpcOrderTab order_tab = 3;
     GrpcPerpPosition position = 4;
-    GrpcNote vlp_note = 5;
+    GrpcVlpNote vlp_note = 5;
 }
 
 // -------------------------------------------------------
 
 message OnChainRemoveLiqTabReq {
-    repeated GrpcNote vlp_notes_in = 1;
+    repeated GrpcVlpNote vlp_notes_in = 1;
     uint32 base_token = 2;
     TabRemoveLiquidityReq tab_remove_liquidity_req = 3;
     PositionRemoveLiquidityReq position_remove_liquidity_req = 4;
@@ -470,10 +494,18 @@ message Address {
     string y = 2;
 }
 
-
 message Signature {
     string r = 1;
     string s = 2;
+}
+
+message GrpcVlpNote {
+    uint64 index = 1;
+    Address address = 2;
+    uint32 token = 3;
+    uint64 amount = 4;
+    uint64 initial_value = 5;
+    string blinding = 6;
 }
 
 // * LIQUIDITY ---------------------------------------------------

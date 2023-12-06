@@ -122,9 +122,6 @@ pub fn restore_close_order_tab(
     drop(updated_state_hashes);
 }
 
-// * MODIFY ORDER TAB RESTORE FUNCTIONS ================================================================================
-// TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 // * REGISTER MM RESTORE FUNCTIONS ================================================================================
 pub fn restore_register_mm(
     tree_m: &Arc<Mutex<SuperficialTree>>,

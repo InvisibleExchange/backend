@@ -13,11 +13,9 @@ use crate::{
     server::grpc::engine_proto::{
         OnChainRemoveLiqTabReq, PositionRemoveLiquidityReq, TabRemoveLiquidityReq,
     },
+    smart_contract_mms::vlp_note::VlpNote,
     trees::superficial_tree::SuperficialTree,
-    utils::{
-        crypto_utils::{pedersen_on_vec, EcPoint},
-        notes::Note,
-    },
+    utils::crypto_utils::{pedersen_on_vec, EcPoint},
 };
 
 use crate::utils::crypto_utils::{verify, Signature};
@@ -26,14 +24,15 @@ use crate::utils::crypto_utils::{verify, Signature};
 pub fn verify_vlp_notes(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     remove_liquidity_req: &OnChainRemoveLiqTabReq,
-) -> Result<(Vec<Note>, u64, BigUint), String> {
+) -> Result<(Vec<VlpNote>, u64, u64, BigUint), String> {
     // ? Verify the notes are valid and exist in the state
     let vlp_notes_in = remove_liquidity_req
         .vlp_notes_in
         .iter()
-        .map(|n| Note::try_from(n.clone()).unwrap())
-        .collect::<Vec<Note>>();
+        .map(|n| VlpNote::try_from(n.clone()).unwrap())
+        .collect::<Vec<VlpNote>>();
     let vlp_amount = vlp_notes_in.iter().map(|n| n.amount).sum::<u64>();
+    let vlp_initial_value = vlp_notes_in.iter().map(|n| n.initial_value).sum::<u64>();
 
     let mut pub_key_sum: AffinePoint = AffinePoint::identity();
 
@@ -69,7 +68,7 @@ pub fn verify_vlp_notes(
 
     let pub_key_sum = EcPoint::from(&pub_key_sum).x.to_biguint().unwrap();
 
-    Ok((vlp_notes_in, vlp_amount, pub_key_sum))
+    Ok((vlp_notes_in, vlp_amount, vlp_initial_value, pub_key_sum))
 }
 
 pub fn get_close_order_fields(

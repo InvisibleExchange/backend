@@ -366,6 +366,9 @@ pub struct ProgramInputCounts {
     pub n_deposits: u32,
     pub n_withdrawals: u32,
     pub n_mm_registrations: u32,
+    pub n_note_escapes: u32,
+    pub n_position_escapes: u32,
+    pub n_tab_escapes: u32,
 }
 
 // * Global Config

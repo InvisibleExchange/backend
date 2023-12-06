@@ -20,7 +20,7 @@ use super::perp_helpers::perp_state_updates::{
 };
 //
 use super::perp_helpers::perp_swap_helpers::{
-    consistency_checks, finalize_updates, reverify_existances,
+    block_until_prev_fill_finished, consistency_checks, finalize_updates, reverify_existances,
 };
 use super::perp_helpers::perp_swap_outptut::{
     PerpSwapOutput, PerpSwapResponse, TxExecutionThreadOutput,
@@ -128,6 +128,13 @@ impl PerpSwap {
             let order_handle_a = s.spawn(move |_| {
                 let execution_output: TxExecutionThreadOutput;
 
+                // ? In case of sequential partial fills block threads updating the same order id untill previous thread is finsihed and fetch the previous partial fill info
+                let partial_fill_info = block_until_prev_fill_finished(
+                    &perpetual_partial_fill_tracker__,
+                    &blocked_perp_order_ids__,
+                    self.order_a.order_id,
+                )?;
+
                 match self.order_a.position_effect_type {
                     PositionEffectType::Open => {
                         // ? Check the collateral token is valid
@@ -154,9 +161,7 @@ impl PerpSwap {
                             is_fully_filled,
                         ) = execute_open_order(
                             &state_tree__,
-                            &perpetual_partial_fill_tracker__,
                             &partialy_filled_positions__,
-                            &blocked_perp_order_ids__,
                             &self.order_a,
                             self.fee_taken_a,
                             perp_zero_idx,
@@ -164,6 +169,7 @@ impl PerpSwap {
                             self.spent_synthetic,
                             self.spent_collateral,
                             init_margin,
+                            partial_fill_info,
                         )?;
 
                         execution_output = TxExecutionThreadOutput {
@@ -201,13 +207,12 @@ impl PerpSwap {
                             index_price,
                             self.fee_taken_a,
                             &partialy_filled_positions__,
-                            &perpetual_partial_fill_tracker__,
-                            &blocked_perp_order_ids__,
                             &self.order_a,
                             &self.signature_a.as_ref().unwrap(),
                             self.spent_collateral,
                             self.spent_synthetic,
                             &prev_position,
+                            partial_fill_info,
                         )?;
 
                         execution_output = TxExecutionThreadOutput {
@@ -245,14 +250,13 @@ impl PerpSwap {
                         ) = execute_close_order(
                             &swap_funding_info__,
                             &partialy_filled_positions__,
-                            &perpetual_partial_fill_tracker__,
-                            &blocked_perp_order_ids__,
                             &self.order_a,
                             &self.signature_a.as_ref().unwrap(),
                             self.fee_taken_a,
                             self.spent_collateral,
                             self.spent_synthetic,
                             &prev_position,
+                            partial_fill_info,
                         )?;
 
                         execution_output = TxExecutionThreadOutput {
@@ -283,6 +287,13 @@ impl PerpSwap {
             let order_handle_b = s.spawn(move |_| {
                 let execution_output: TxExecutionThreadOutput;
 
+                // ? In case of sequential partial fills block threads updating the same order id untill previous thread is finsihed and fetch the previous partial fill info
+                let partial_fill_info = block_until_prev_fill_finished(
+                    &perpetual_partial_fill_tracker__,
+                    &blocked_perp_order_ids__,
+                    self.order_b.order_id,
+                )?;
+
                 match self.order_b.position_effect_type {
                     PositionEffectType::Open => {
                         // ? Check the collateral token is valid
@@ -309,9 +320,7 @@ impl PerpSwap {
                             is_fully_filled,
                         ) = execute_open_order(
                             &state_tree__,
-                            &perpetual_partial_fill_tracker__,
                             &partialy_filled_positions__,
-                            &blocked_perp_order_ids__,
                             &self.order_b,
                             self.fee_taken_b,
                             perp_zero_idx,
@@ -319,6 +328,7 @@ impl PerpSwap {
                             self.spent_synthetic,
                             self.spent_collateral,
                             init_margin,
+                            partial_fill_info,
                         )?;
 
                         execution_output = TxExecutionThreadOutput {
@@ -356,13 +366,12 @@ impl PerpSwap {
                             index_price,
                             self.fee_taken_b,
                             &partialy_filled_positions__,
-                            &perpetual_partial_fill_tracker__,
-                            &blocked_perp_order_ids__,
                             &self.order_b,
                             &self.signature_b.as_ref().unwrap(),
                             self.spent_collateral,
                             self.spent_synthetic,
                             &prev_position,
+                            partial_fill_info,
                         )?;
 
                         execution_output = TxExecutionThreadOutput {
@@ -400,14 +409,13 @@ impl PerpSwap {
                         ) = execute_close_order(
                             &swap_funding_info__,
                             &partialy_filled_positions__,
-                            &perpetual_partial_fill_tracker__,
-                            &blocked_perp_order_ids__,
                             &self.order_b,
                             &self.signature_b.as_ref().unwrap(),
                             self.fee_taken_b,
                             self.spent_collateral,
                             self.spent_synthetic,
                             &prev_position,
+                            partial_fill_info,
                         )?;
 
                         execution_output = TxExecutionThreadOutput {

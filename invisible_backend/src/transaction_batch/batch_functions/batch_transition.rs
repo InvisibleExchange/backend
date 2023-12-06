@@ -12,7 +12,7 @@ use crate::utils::storage::local_storage::MainStorage;
 use crate::{
     transaction_batch::{
         tx_batch_helpers::{get_funding_info, split_hashmap},
-        tx_batch_structs::{get_price_info, GlobalConfig, ProgramInputCounts},
+        tx_batch_structs::{get_price_info, GlobalConfig},
         LeafNodeType,
     },
     utils::storage::firestore::upload_file_to_storage,
@@ -33,7 +33,6 @@ const PARTITION_SIZE_EXPONENT: u32 = 12;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchTransitionInfo {
     pub current_batch_index: u32,
-    pub program_input_counts: ProgramInputCounts,
     pub funding_info: FundingInfo,
     pub price_info_json: Value,
     pub updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)>,
@@ -65,11 +64,9 @@ pub fn _finalize_batch_inner(
     let latest_output_json = latest_output_json.lock();
 
     let current_batch_index = main_storage.latest_batch;
-    let (n_deposits, n_withdrawals) = (main_storage.n_deposits, main_storage.n_withdrawals);
 
     // ? Store the latest output json
     main_storage.store_micro_batch(&latest_output_json);
-    main_storage.transition_to_new_batch();
 
     let min_funding_idxs = &min_funding_idxs;
     let funding_rates = &funding_rates;
@@ -87,20 +84,6 @@ pub fn _finalize_batch_inner(
 
     // ? Get the price info
     let price_info_json = get_price_info(min_index_price_data_, max_index_price_data_);
-
-    // ? Get the final updated counts for the cairo program input
-    let [n_output_notes, n_output_positions, n_output_tabs, n_zero_indexes, n_mm_registrations] =
-        get_final_updated_counts(&updated_state_hashes);
-
-    let program_input_counts = ProgramInputCounts {
-        n_output_notes,
-        n_output_positions,
-        n_output_tabs,
-        n_zero_indexes,
-        n_deposits,
-        n_withdrawals,
-        n_mm_registrations,
-    };
 
     updated_state_hashes_c.clear();
 
@@ -129,10 +112,25 @@ pub fn _finalize_batch_inner(
         String::from("insurance_fund"),
         serde_json::to_value(insurance_fund_value).unwrap_or_default(),
     );
+    exchange_state_storage.insert(
+        String::from("min_index_price_data"),
+        serde_json::to_value(&min_index_price_data).unwrap_or_default(),
+    );
+    exchange_state_storage.insert(
+        String::from("max_index_price_data"),
+        serde_json::to_value(&max_index_price_data).unwrap_or_default(),
+    );
+    let rough_timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs() as u32;
+    exchange_state_storage.insert(
+        String::from("rough_timestamp"),
+        serde_json::to_value(&rough_timestamp).unwrap_or_default(),
+    );
 
     BatchTransitionInfo {
         current_batch_index,
-        program_input_counts,
         funding_info,
         price_info_json,
         updated_state_hashes,
@@ -146,6 +144,17 @@ pub fn _transition_state(
     main_storage_m: &Arc<Mutex<MainStorage>>,
     batch_transition_info: BatchTransitionInfo,
 ) -> Result<(), BatchFinalizationError> {
+    // ? Get the json output of all the transactions
+    let main_storage = main_storage_m.lock();
+    let swap_output_json = main_storage.read_storage(0);
+    drop(main_storage);
+
+    // ? Get the final updated counts for the cairo program input
+    let program_input_counts = get_final_updated_counts(
+        &batch_transition_info.updated_state_hashes,
+        &swap_output_json,
+    );
+
     // ? Update the merkle trees and get the new roots and preimages
     let (prev_spot_root, new_spot_root, preimage_json) =
         update_trees(batch_transition_info.updated_state_hashes)?;
@@ -161,14 +170,10 @@ pub fn _transition_state(
         &new_spot_root,
         TREE_DEPTH,
         global_expiration_timestamp,
-        batch_transition_info.program_input_counts,
+        program_input_counts,
     );
 
     let global_config: GlobalConfig = GlobalConfig::new();
-
-    let main_storage = main_storage_m.lock();
-    let swap_output_json = main_storage.read_storage(1);
-    drop(main_storage);
 
     let output_json: Map<String, Value> = get_json_output(
         &global_dex_state,
@@ -187,7 +192,22 @@ pub fn _transition_state(
     std::fs::write(path, serde_json::to_string(&output_json).unwrap()).unwrap();
     // Todo: This is for testing only ----------------------------
 
+    let mut main_storage = main_storage_m.lock();
+    let future = main_storage.transition_to_new_batch();
+    drop(main_storage);
+
     let _handle = tokio::spawn(async move {
+        match future {
+            None => {
+                return;
+            }
+            Some(future) => {
+                if let Err(e) = future.await {
+                    println!("Error storing pending txs: {:?}", e);
+                }
+            }
+        }
+
         // ? Store the transactions
         let serialized_data = to_vec(&output_json).expect("Serialization failed");
         if let Err(e) = upload_file_to_storage(

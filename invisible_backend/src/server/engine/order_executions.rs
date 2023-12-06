@@ -23,8 +23,10 @@ use super::super::{
 };
 
 use crate::perpetual::perp_order::PerpOrder;
+use crate::perpetual::perp_position::PerpPosition;
 use crate::server::server_helpers::engine_helpers::verify_tab_existence;
 use crate::transaction_batch::TransactionBatch;
+use crate::trees::superficial_tree::SuperficialTree;
 use crate::{
     matching_engine::{domain::OrderSide as OBOrderSide, orderbook::OrderBook},
     perpetual::{
@@ -38,6 +40,8 @@ use crate::transactions::limit_order::LimitOrder;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::send_order_error_reply;
 
+use parking_lot::Mutex;
+use tokio::sync::oneshot::Sender;
 use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
 
@@ -224,9 +228,10 @@ pub async fn submit_perpetual_order_inner(
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
+    response_sender: Option<Sender<Vec<(Option<PerpPosition>, Option<PerpPosition>)>>>,
     semaphore: &Semaphore,
     is_paused: &Arc<TokioMutex<bool>>,
-    request: Request<PerpOrderMessage>,
+    req: PerpOrderMessage,
 ) -> Result<Response<OrderResponse>, Status> {
     let _permit = semaphore.acquire().await.unwrap();
 
@@ -235,25 +240,48 @@ pub async fn submit_perpetual_order_inner(
 
     tokio::task::yield_now().await;
 
-    let req: PerpOrderMessage = request.into_inner();
-
     let tx_batch_m = tx_batch.lock().await;
     let state_tree = Arc::clone(&tx_batch_m.state_tree);
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
-    let firebase_session = Arc::clone(&tx_batch_m.firebase_session);
-    let main_storage = Arc::clone(&tx_batch_m.main_storage);
-    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
     drop(tx_batch_m);
 
     let user_id = req.user_id;
     let is_market: bool = req.is_market;
 
+    let res = order_format_checks(req);
+    if let Err(e) = res {
+        return send_order_error_reply(e);
+    }
+    let (signature, perp_order, market) = res.unwrap();
+
+    if let Err(err) = existance_checks(&state_tree, &perp_order) {
+        return send_order_error_reply(err);
+    }
+
+    return match_and_execute_perp_order(
+        tx_batch,
+        perp_order_books,
+        ws_connections,
+        privileged_ws_connections,
+        response_sender,
+        perp_order,
+        signature,
+        user_id,
+        is_market,
+        market,
+    )
+    .await;
+}
+
+pub fn order_format_checks(
+    req: PerpOrderMessage,
+) -> std::result::Result<(Signature, PerpOrder, u16), String> {
     // ? Verify the signature is defined and has a valid format
     let signature: Signature;
     match verify_signature_format(&req.signature) {
         Ok(sig) => signature = sig,
         Err(err) => {
-            return send_order_error_reply(err);
+            return Err(err.to_string());
+            // return send_order_error_reply(err);
         }
     }
 
@@ -262,7 +290,7 @@ pub async fn submit_perpetual_order_inner(
     match PerpOrder::try_from(req) {
         Ok(po) => perp_order = po,
         Err(_e) => {
-            return send_order_error_reply(
+            return Err(
                 "Error unpacking the limit order (verify the format is correct)".to_string(),
             );
         }
@@ -271,31 +299,59 @@ pub async fn submit_perpetual_order_inner(
     // ? market for perpetuals can be just the synthetic token
     let market = PERP_MARKET_IDS.get(&perp_order.synthetic_token.to_string());
     if market.is_none() {
-        return send_order_error_reply(
-            "Market (token pair) does not exist for this token".to_string(),
-        );
+        return Err("Market (token pair) does not exist for this token".to_string());
     }
+    let market = *market.unwrap();
 
+    return Ok((signature, perp_order, market));
+}
+
+pub fn existance_checks(
+    state_tree: &Arc<Mutex<SuperficialTree>>,
+    perp_order: &PerpOrder,
+) -> std::result::Result<(), String> {
     // ? Verify the notes spent and position modified exist in the state tree
     if perp_order.position_effect_type == PositionEffectType::Open {
         if let Err(err_msg) = verify_notes_existence(
             &perp_order.open_order_fields.as_ref().unwrap().notes_in,
             &state_tree,
         ) {
-            return send_order_error_reply(err_msg);
+            return Err(err_msg);
         }
     } else {
         if let Err(err_msg) =
             verify_position_existence(&perp_order.position.as_ref().unwrap(), &state_tree)
         {
-            return send_order_error_reply(err_msg);
+            return Err(err_msg);
         }
     }
+
+    Ok(())
+}
+
+pub async fn match_and_execute_perp_order(
+    tx_batch: &Arc<TokioMutex<TransactionBatch>>,
+    perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
+    ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
+    privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
+    response_sender: Option<Sender<Vec<(Option<PerpPosition>, Option<PerpPosition>)>>>,
+    perp_order: PerpOrder,
+    signature: Signature,
+    user_id: u64,
+    is_market: bool,
+    market: u16,
+) -> Result<Response<OrderResponse>, Status> {
+    let tx_batch_m = tx_batch.lock().await;
+    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let firebase_session = Arc::clone(&tx_batch_m.firebase_session);
+    let main_storage = Arc::clone(&tx_batch_m.main_storage);
+    let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
+    drop(tx_batch_m);
 
     let side: OBOrderSide = perp_order.order_side.clone().into();
 
     let mut processed_res = process_perp_order_request(
-        perp_order_books.get(&market.unwrap()).clone().unwrap(),
+        perp_order_books.get(&market).clone().unwrap(),
         perp_order.clone(),
         side,
         signature.clone(),
@@ -313,11 +369,12 @@ pub async fn submit_perpetual_order_inner(
     let new_order_id;
     match process_and_execute_perp_swaps(
         &tx_batch,
-        perp_order_books.get(&market.unwrap()).clone().unwrap(),
+        perp_order_books.get(&market).clone().unwrap(),
         &firebase_session,
         &backup_storage,
         &ws_connections,
         &privileged_ws_connections,
+        response_sender,
         &mut processed_res,
         user_id,
     )
@@ -334,7 +391,7 @@ pub async fn submit_perpetual_order_inner(
 
     if let Err(e) = retry_failed_perp_swaps(
         &tx_batch,
-        perp_order_books.get(&market.unwrap()).clone().unwrap(),
+        perp_order_books.get(&market).clone().unwrap(),
         &firebase_session,
         &backup_storage,
         perp_order,
@@ -365,6 +422,7 @@ pub async fn submit_perpetual_order_inner(
 }
 
 //
+// * ===================================================================================================================================
 // * ===================================================================================================================================
 //
 

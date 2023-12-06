@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, time::SystemTime};
 
-use serde_json::Value;
+use serde_json::{json, to_vec, Map, Value};
 
 use sled::{Config, Result};
 
@@ -11,7 +11,9 @@ use crate::{
     transactions::transaction_helpers::transaction_output::{FillInfo, PerpFillInfo},
 };
 
-use super::super::notes::Note;
+use super::{super::notes::Note, firestore::upload_file_to_storage};
+
+type StorageResult = std::result::Result<(), Box<dyn std::error::Error>>;
 
 /// The main storage struct that stores all the data on disk.
 pub struct MainStorage {
@@ -20,8 +22,7 @@ pub struct MainStorage {
     pub funding_db: sled::Db,
     pub processed_deposits_db: sled::Db, // Deposit ids of all the deposits that were processed so far
     pub latest_batch: u32,               // every transaction batch stores data separately
-    pub n_deposits: u32,                 // the number of deposits in the current batch
-    pub n_withdrawals: u32,              // the number of withdrawals in the current batch
+    pub db_pending_updates: sled::Db, // small batches of txs that get pushed to the db periodically
 }
 
 impl MainStorage {
@@ -51,14 +52,16 @@ impl MainStorage {
         let config = Config::new().path("./storage/processed_deposits".to_string());
         let processed_deposits_db = config.open().unwrap();
 
+        let config = Config::new().path("./storage/db_pending_updates".to_string());
+        let db_pending_updates = config.open().unwrap();
+
         MainStorage {
             tx_db,
             price_db,
             funding_db,
             processed_deposits_db,
             latest_batch: batch_index as u32,
-            n_deposits: 0,
-            n_withdrawals: 0,
+            db_pending_updates,
         }
     }
 
@@ -96,15 +99,6 @@ impl MainStorage {
             None => 0,
         };
 
-        for tx in swap_output_json.iter() {
-            let transaction_type = tx.get("transaction_type").unwrap().as_str().unwrap();
-            if transaction_type == "deposit" {
-                self.n_deposits += 1;
-            } else if transaction_type == "withdrawal" {
-                self.n_withdrawals += 1;
-            }
-        }
-
         let res = serde_json::to_vec(swap_output_json).unwrap();
 
         self.tx_db.insert(&index.to_string(), res).unwrap();
@@ -114,6 +108,107 @@ impl MainStorage {
                 serde_json::to_vec(&(index + 1)).unwrap(),
             )
             .unwrap();
+
+        self.store_pending_batch_updates(swap_output_json);
+    }
+
+    //
+    //
+    //
+    pub fn store_pending_batch_updates(
+        &mut self,
+        swap_output_json: &Vec<serde_json::Map<String, Value>>,
+    ) {
+        let index = self.db_pending_updates.get("count").unwrap();
+        let index = match index {
+            Some(index) => {
+                let index: u64 = serde_json::from_slice(&index.to_vec()).unwrap();
+                index
+            }
+            None => 0,
+        };
+
+        let res = serde_json::to_vec(swap_output_json).unwrap();
+
+        self.db_pending_updates
+            .insert(&index.to_string(), res)
+            .unwrap();
+        self.db_pending_updates
+            .insert(
+                "count".to_string(),
+                serde_json::to_vec(&(index + 1)).unwrap(),
+            )
+            .unwrap();
+    }
+
+    pub fn process_pending_batch_updates(
+        &mut self,
+        finalizing_batch: bool,
+    ) -> Option<impl std::future::Future<Output = StorageResult>>
+//-> impl std::future::Future<Output = std::result::Result<(), Box<dyn std::error::Error>>>
+    {
+        let mut json_result = Vec::new();
+
+        let count = self.db_pending_updates.get("count").unwrap();
+        let count = match count {
+            Some(count) => {
+                let count: u64 = serde_json::from_slice(&count.to_vec()).unwrap();
+                count
+            }
+            None => 0,
+        };
+
+        if count == 0 {
+            return None;
+        }
+
+        let db_index = self.db_pending_updates.get("db_index").unwrap();
+        let db_index = match db_index {
+            Some(db_index) => {
+                let db_index: u64 = serde_json::from_slice(&db_index.to_vec()).unwrap();
+                db_index
+            }
+            None => 0,
+        };
+
+        let ts = SystemTime::now();
+        let timestamp = ts
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+        let timestamp = Map::from_iter(vec![("timestamp".to_string(), json!(timestamp))]);
+        json_result.push(timestamp);
+
+        for i in 0..count {
+            let value = self.db_pending_updates.get(&i.to_string()).unwrap();
+            let json_string = value.unwrap().to_vec();
+            let res_vec: Vec<serde_json::Map<String, Value>> =
+                serde_json::from_slice(&json_string).unwrap();
+
+            json_result.extend(res_vec);
+        }
+
+        let serialized_data = to_vec(&json_result).unwrap();
+
+        self.db_pending_updates.clear().unwrap();
+
+        if finalizing_batch {
+            self.db_pending_updates
+                .insert("db_index".to_string(), serde_json::to_vec(&0).unwrap())
+                .unwrap();
+        } else {
+            self.db_pending_updates
+                .insert(
+                    "db_index".to_string(),
+                    serde_json::to_vec(&(db_index + 1)).unwrap(),
+                )
+                .unwrap();
+        }
+
+        return Some(upload_file_to_storage(
+            format!("tx_batches/pending/{}", db_index),
+            serialized_data,
+        ));
     }
 
     /// Reads all the micro-batches from disk and returns them as a vector of json maps.
@@ -307,7 +402,9 @@ impl MainStorage {
 
     /// Clears the storage to make room for the next batch.
     ///
-    pub fn transition_to_new_batch(&mut self) {
+    pub fn transition_to_new_batch(
+        &mut self,
+    ) -> Option<impl std::future::Future<Output = StorageResult>> {
         let new_batch_index = self.latest_batch + 1;
 
         let config = Config::new()
@@ -320,8 +417,8 @@ impl MainStorage {
 
         self.tx_db = tx_db;
         self.latest_batch = new_batch_index;
-        self.n_deposits = 0;
-        self.n_withdrawals = 0;
+
+        return self.process_pending_batch_updates(true);
     }
 }
 

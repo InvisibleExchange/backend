@@ -6,9 +6,9 @@ use super::super::server_helpers::engine_helpers::store_output_json;
 use crate::matching_engine::orderbook::OrderBook;
 use crate::perpetual::COLLATERAL_TOKEN;
 use crate::server::grpc::engine_proto::{
-    AddLiqOrderTabRes, GrpcNote, GrpcPerpPosition, OnChainAddLiqTabReq, OnChainRegisterMmReq,
-    OnChainRegisterMmRes, OnChainRemoveLiqTabReq, PositionRemoveLiqRes, RemoveLiqOrderTabRes,
-    TabRemoveLiqRes,
+    AddLiqOrderTabRes, GrpcNote, GrpcPerpPosition, GrpcVlpNote, OnChainAddLiqTabReq,
+    OnChainRegisterMmReq, OnChainRegisterMmRes, OnChainRemoveLiqTabReq, PositionRemoveLiqRes,
+    RemoveLiqOrderTabRes, TabRemoveLiqRes,
 };
 use crate::transaction_batch::TransactionBatch;
 use crate::utils::errors::{
@@ -124,7 +124,7 @@ pub async fn onchain_register_mm_inner(
 
                 let order_tab = order_tab.map(|tab| GrpcOrderTab::from(tab));
                 let position = position.map(|pos| GrpcPerpPosition::from(pos));
-                let vlp_note = GrpcNote::from(vlp_note);
+                let vlp_note = GrpcVlpNote::from(vlp_note);
                 let reply = OnChainRegisterMmRes {
                     successful: true,
                     error_message: "".to_string(),
@@ -278,7 +278,7 @@ pub async fn add_liquidity_mm_inner(
 
                 let order_tab = order_tab.map(|tab| GrpcOrderTab::from(tab));
                 let position = position.map(|pos| GrpcPerpPosition::from(pos));
-                let vlp_note = GrpcNote::from(vlp_note);
+                let vlp_note = GrpcVlpNote::from(vlp_note);
                 let reply = AddLiqOrderTabRes {
                     successful: true,
                     error_message: "".to_string(),
@@ -314,7 +314,7 @@ pub async fn remove_liquidity_mm_inner(
     semaphore: &Semaphore,
     is_paused: &Arc<TokioMutex<bool>>,
     //
-    req: Request<OnChainRemoveLiqTabReq>,
+    req: OnChainRemoveLiqTabReq,
 ) -> Result<Response<RemoveLiqOrderTabRes>, Status> {
     let _permit = semaphore.acquire().await.unwrap();
 
@@ -323,28 +323,28 @@ pub async fn remove_liquidity_mm_inner(
 
     tokio::task::yield_now().await;
 
-    let req: OnChainRemoveLiqTabReq = req.into_inner();
-
     let is_perp = req.position_remove_liquidity_req.is_some();
 
     let base_token;
     let quote_token;
     if req.tab_remove_liquidity_req.is_some() {
-        let tab_req = &req.tab_remove_liquidity_req;
+        return send_remove_liq_tab_error_reply("This function is disabled".to_string());
 
-        if tab_req.is_none() || tab_req.as_ref().unwrap().order_tab.is_none() {
-            return send_remove_liq_tab_error_reply("Order tab is undefined".to_string());
-        }
-        let tab_header = &tab_req
-            .as_ref()
-            .unwrap()
-            .order_tab
-            .as_ref()
-            .unwrap()
-            .tab_header;
+        // let tab_req = &req.tab_remove_liquidity_req;
 
-        base_token = tab_header.as_ref().unwrap().base_token;
-        quote_token = tab_header.as_ref().unwrap().quote_token;
+        // if tab_req.is_none() || tab_req.as_ref().unwrap().order_tab.is_none() {
+        //     return send_remove_liq_tab_error_reply("Order tab is undefined".to_string());
+        // }
+        // let tab_header = &tab_req
+        //     .as_ref()
+        //     .unwrap()
+        //     .order_tab
+        //     .as_ref()
+        //     .unwrap()
+        //     .tab_header;
+
+        // base_token = tab_header.as_ref().unwrap().base_token;
+        // quote_token = tab_header.as_ref().unwrap().quote_token;
     } else {
         let pos_req = &req.position_remove_liquidity_req;
 

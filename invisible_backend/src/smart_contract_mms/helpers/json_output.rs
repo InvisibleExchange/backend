@@ -7,6 +7,7 @@ use serde_json::Value;
 use crate::{
     order_tab::OrderTab,
     perpetual::{perp_order::CloseOrderFields, perp_position::PerpPosition},
+    smart_contract_mms::vlp_note::VlpNote,
     utils::{crypto_utils::Signature, notes::Note},
 };
 
@@ -18,7 +19,7 @@ pub fn onchain_register_json_output(
     prev_position: &Option<PerpPosition>,
     new_position: &Option<PerpPosition>,
     vlp_close_order_fields: &CloseOrderFields,
-    vlp_note: &Note,
+    vlp_note: &VlpNote,
     max_vlp_supply: u64,
     index_price: u64,
     signature: &Signature,
@@ -169,7 +170,7 @@ pub fn onchain_position_add_liquidity_json_output(
     collateral_refund_note: &Option<Note>,
     new_position_hash: &BigUint,
     vlp_close_order_fields: &CloseOrderFields,
-    vlp_note: &Note,
+    vlp_note: &VlpNote,
     signature: &Signature,
 ) {
     let mut json_map = serde_json::map::Map::new();
@@ -319,7 +320,7 @@ pub fn onchain_tab_remove_liquidity_json_output(
 pub fn onchain_position_remove_liquidity_json_output(
     swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
     //
-    vlp_notes_in: &Vec<Note>,
+    vlp_notes_in: &Vec<VlpNote>,
     collateral_close_order_fields: &CloseOrderFields,
     //
     prev_position: &PerpPosition,

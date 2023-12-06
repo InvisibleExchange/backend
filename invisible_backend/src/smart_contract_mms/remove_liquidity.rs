@@ -18,20 +18,13 @@ use crate::{
 use crate::utils::crypto_utils::Signature;
 
 use super::helpers::{
-    db_updates::{
-        onchain_position_remove_liquidity_db_updates, onchain_tab_remove_liquidity_db_updates,
-    },
-    json_output::{
-        onchain_position_remove_liquidity_json_output, onchain_tab_remove_liquidity_json_output,
-    },
+    db_updates::onchain_position_remove_liquidity_db_updates,
+    json_output::onchain_position_remove_liquidity_json_output,
     remove_liquidity_helpers::{
-        get_base_close_amounts, get_close_order_fields, get_return_collateral_amount,
-        position_get_close_order_fields, verfiy_position_remove_liquidity_sig,
-        verfiy_remove_liquidity_sig, verify_vlp_notes,
+        get_return_collateral_amount, position_get_close_order_fields,
+        verfiy_position_remove_liquidity_sig, verify_vlp_notes,
     },
-    state_updates::{
-        onchain_position_remove_liquidity_state_updates, onchain_tab_remove_liquidity_state_updates,
-    },
+    state_updates::onchain_position_remove_liquidity_state_updates,
 };
 
 pub type RemoveLiqRes = (
@@ -47,145 +40,147 @@ pub fn remove_liquidity_from_order_tab(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-    index_price: u64,
+    _index_price: u64,
 ) -> std::result::Result<RemoveLiqRes, String> {
     //
 
     // ? Get vlp notes
-    let (vlp_notes_in, vlp_amount, pub_key_sum) =
+    let (vlp_notes_in, vlp_amount, vlp_initial_value, pub_key_sum) =
         verify_vlp_notes(state_tree, &remove_liquidity_req)?;
 
     if remove_liquidity_req.tab_remove_liquidity_req.is_some() {
-        let tab_remove_liquidity_req = remove_liquidity_req.tab_remove_liquidity_req.unwrap();
+        return Err("Disabled".to_string());
 
-        let order_tab =
-            OrderTab::try_from(tab_remove_liquidity_req.order_tab.as_ref().unwrap().clone());
-        if let Err(e) = order_tab {
-            return Err("Order tab is not properly defined: ".to_string() + &e.to_string());
-        }
-        let order_tab = order_tab.unwrap();
+        // let tab_remove_liquidity_req = remove_liquidity_req.tab_remove_liquidity_req.unwrap();
 
-        let (base_close_order_fields, quote_close_order_fields) =
-            get_close_order_fields(&tab_remove_liquidity_req)?;
+        // let order_tab =
+        //     OrderTab::try_from(tab_remove_liquidity_req.order_tab.as_ref().unwrap().clone());
+        // if let Err(e) = order_tab {
+        //     return Err("Order tab is not properly defined: ".to_string() + &e.to_string());
+        // }
+        // let order_tab = order_tab.unwrap();
 
-        // ? Verify the signature ---------------------------------------------------------------------
-        let signature = Signature::try_from(remove_liquidity_req.signature.unwrap_or_default())
-            .map_err(|err| err.to_string())?;
-        let valid = verfiy_remove_liquidity_sig(
-            tab_remove_liquidity_req.index_price,
-            tab_remove_liquidity_req.slippage,
-            &base_close_order_fields,
-            &quote_close_order_fields,
-            &order_tab.tab_header.pub_key,
-            &pub_key_sum,
-            &signature,
-        );
-        if !valid {
-            return Err("Invalid Signature".to_string());
-        }
+        // let (base_close_order_fields, quote_close_order_fields) =
+        //     get_close_order_fields(&tab_remove_liquidity_req)?;
 
-        let is_full_close = vlp_amount
-            >= order_tab.vlp_supply - DUST_AMOUNT_PER_ASSET[&COLLATERAL_TOKEN.to_string()];
+        // // ? Verify the signature ---------------------------------------------------------------------
+        // let signature = Signature::try_from(remove_liquidity_req.signature.unwrap_or_default())
+        //     .map_err(|err| err.to_string())?;
+        // let valid = verfiy_remove_liquidity_sig(
+        //     tab_remove_liquidity_req.index_price,
+        //     tab_remove_liquidity_req.slippage,
+        //     &base_close_order_fields,
+        //     &quote_close_order_fields,
+        //     &order_tab.tab_header.pub_key,
+        //     &pub_key_sum,
+        //     &signature,
+        // );
+        // if !valid {
+        //     return Err("Invalid Signature".to_string());
+        // }
 
-        // ? Verify the execution index price is within slippage range of users price
-        // slippage: 10_000 = 100% ; 100 = 1%; 1 = 0.01%
-        let max_slippage_price = tab_remove_liquidity_req.index_price
-            * (10_000 - tab_remove_liquidity_req.slippage as u64)
-            / 10_000;
-        if index_price < max_slippage_price {
-            return Err("Execution price is not within slippage range".to_string());
-        }
+        // let is_full_close = vlp_amount
+        //     >= order_tab.vlp_supply - DUST_AMOUNT_PER_ASSET[&COLLATERAL_TOKEN.to_string()];
 
-        let (base_return_amount, quote_return_amount) = get_base_close_amounts(
-            is_full_close,
-            &order_tab,
-            tab_remove_liquidity_req.base_return_amount,
-            index_price,
-            vlp_amount,
-        )?;
+        // // ? Verify the execution index price is within slippage range of users price
+        // // slippage: 10_000 = 100% ; 100 = 1%; 1 = 0.01%
+        // let max_slippage_price = tab_remove_liquidity_req.index_price
+        //     * (10_000 - tab_remove_liquidity_req.slippage as u64)
+        //     / 10_000;
+        // if index_price < max_slippage_price {
+        //     return Err("Execution price is not within slippage range".to_string());
+        // }
 
-        // ? create the new notes for the user
-        let mut state_tree_m = state_tree.lock();
-        let zero_idx1 = state_tree_m.first_zero_idx();
-        let zero_idx2 = state_tree_m.first_zero_idx();
-        drop(state_tree_m);
+        // let (base_return_amount, quote_return_amount) = get_base_close_amounts(
+        //     is_full_close,
+        //     &order_tab,
+        //     tab_remove_liquidity_req.base_return_amount,
+        //     index_price,
+        //     vlp_amount,
+        // )?;
 
-        let base_return_note = Note::new(
-            zero_idx1,
-            base_close_order_fields.dest_received_address.clone(),
-            order_tab.tab_header.base_token,
-            base_return_amount,
-            base_close_order_fields.dest_received_blinding.clone(),
-        );
-        let quote_return_note = Note::new(
-            zero_idx2,
-            quote_close_order_fields.dest_received_address.clone(),
-            order_tab.tab_header.quote_token,
-            quote_return_amount,
-            quote_close_order_fields.dest_received_blinding.clone(),
-        );
+        // // ? create the new notes for the user
+        // let mut state_tree_m = state_tree.lock();
+        // let zero_idx1 = state_tree_m.first_zero_idx();
+        // let zero_idx2 = state_tree_m.first_zero_idx();
+        // drop(state_tree_m);
 
-        // ? Adding to an existing order tab
-        let prev_order_tab = order_tab;
+        // let base_return_note = Note::new(
+        //     zero_idx1,
+        //     base_close_order_fields.dest_received_address.clone(),
+        //     order_tab.tab_header.base_token,
+        //     base_return_amount,
+        //     base_close_order_fields.dest_received_blinding.clone(),
+        // );
+        // let quote_return_note = Note::new(
+        //     zero_idx2,
+        //     quote_close_order_fields.dest_received_address.clone(),
+        //     order_tab.tab_header.quote_token,
+        //     quote_return_amount,
+        //     quote_close_order_fields.dest_received_blinding.clone(),
+        // );
 
-        let mut new_order_tab: Option<OrderTab> = None;
-        if !is_full_close {
-            let mut new_tab = prev_order_tab.clone();
+        // // ? Adding to an existing order tab
+        // let prev_order_tab = order_tab;
 
-            new_tab.base_amount -= base_return_amount;
-            new_tab.quote_amount -= quote_return_amount;
-            new_tab.vlp_supply -= vlp_amount;
+        // let mut new_order_tab: Option<OrderTab> = None;
+        // if !is_full_close {
+        //     let mut new_tab = prev_order_tab.clone();
 
-            new_tab.update_hash();
+        //     new_tab.base_amount -= base_return_amount;
+        //     new_tab.quote_amount -= quote_return_amount;
+        //     new_tab.vlp_supply -= vlp_amount;
 
-            new_order_tab = Some(new_tab)
-        }
+        //     new_tab.update_hash();
 
-        // ? update the state tree, json_output and database
-        // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
-        onchain_tab_remove_liquidity_json_output(
-            swap_output_json_m,
-            &vlp_notes_in,
-            tab_remove_liquidity_req.index_price,
-            tab_remove_liquidity_req.slippage,
-            &base_close_order_fields,
-            &quote_close_order_fields,
-            tab_remove_liquidity_req.base_return_amount,
-            index_price,
-            &prev_order_tab,
-            &new_order_tab,
-            &base_return_note,
-            &quote_return_note,
-            &signature,
-        );
+        //     new_order_tab = Some(new_tab)
+        // }
 
-        // ? UPDATE THE STATE TREE --------------------------------------------------------------------
-        onchain_tab_remove_liquidity_state_updates(
-            state_tree,
-            updated_state_hashes,
-            prev_order_tab.tab_idx as u64,
-            &new_order_tab,
-            &vlp_notes_in,
-            &base_return_note,
-            &quote_return_note,
-        );
+        // // ? update the state tree, json_output and database
+        // // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
+        // onchain_tab_remove_liquidity_json_output(
+        //     swap_output_json_m,
+        //     &vlp_notes_in,
+        //     tab_remove_liquidity_req.index_price,
+        //     tab_remove_liquidity_req.slippage,
+        //     &base_close_order_fields,
+        //     &quote_close_order_fields,
+        //     tab_remove_liquidity_req.base_return_amount,
+        //     index_price,
+        //     &prev_order_tab,
+        //     &new_order_tab,
+        //     &base_return_note,
+        //     &quote_return_note,
+        //     &signature,
+        // );
 
-        // ? UPDATE THE DATABASE ----------------------------------------------------------------------
-        onchain_tab_remove_liquidity_db_updates(
-            session,
-            backup_storage,
-            prev_order_tab.tab_idx as u64,
-            prev_order_tab.tab_header.pub_key,
-            new_order_tab.clone(),
-            &vlp_notes_in,
-            base_return_note.clone(),
-            quote_return_note.clone(),
-        );
+        // // ? UPDATE THE STATE TREE --------------------------------------------------------------------
+        // onchain_tab_remove_liquidity_state_updates(
+        //     state_tree,
+        //     updated_state_hashes,
+        //     prev_order_tab.tab_idx as u64,
+        //     &new_order_tab,
+        //     &vlp_notes_in,
+        //     &base_return_note,
+        //     &quote_return_note,
+        // );
 
-        return Ok((
-            Some((new_order_tab, base_return_note, quote_return_note)),
-            None,
-        ));
+        // // ? UPDATE THE DATABASE ----------------------------------------------------------------------
+        // onchain_tab_remove_liquidity_db_updates(
+        //     session,
+        //     backup_storage,
+        //     prev_order_tab.tab_idx as u64,
+        //     prev_order_tab.tab_header.pub_key,
+        //     new_order_tab.clone(),
+        //     &vlp_notes_in,
+        //     base_return_note.clone(),
+        //     quote_return_note.clone(),
+        // );
+
+        // return Ok((
+        //     Some((new_order_tab, base_return_note, quote_return_note)),
+        //     None,
+        // ));
     } else {
         let position_remove_liquidity_req =
             remove_liquidity_req.position_remove_liquidity_req.unwrap();
@@ -229,13 +224,20 @@ pub fn remove_liquidity_from_order_tab(
         let zero_idx1 = state_tree_m.first_zero_idx();
         drop(state_tree_m);
 
+        let mm_fee: i64 = (return_collateral_amount as i64 - vlp_initial_value as i64) * 20 / 100; // 20% fee
+        let mm_fee = std::cmp::max(0, mm_fee) as u64;
+
         let collateral_return_note = Note::new(
             zero_idx1,
             collateral_close_order_fields.dest_received_address.clone(),
             COLLATERAL_TOKEN,
-            return_collateral_amount,
+            return_collateral_amount - mm_fee,
             collateral_close_order_fields.dest_received_blinding.clone(),
         );
+
+        if mm_fee > 0 {
+            // TODO: DO something with the fee!!
+        }
 
         // ? Adding to an existing order tab
         let prev_position = position;

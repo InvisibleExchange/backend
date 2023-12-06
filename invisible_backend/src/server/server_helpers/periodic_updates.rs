@@ -29,6 +29,7 @@ pub async fn start_periodic_updates(
     let session = Arc::clone(&tx_batch_m.firebase_session);
     let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
     let state_tree = Arc::clone(&tx_batch_m.state_tree);
+    let storage_m = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
     // * UPDATE FUNDING RATES EVERY 60 SECONDS
@@ -102,7 +103,7 @@ pub async fn start_periodic_updates(
         }
     });
 
-    // * CREATE NEW FIREBASE SESSION EVERY 45 MINUTES
+    // * CREATE NEW FIREBASE SESSION EVERY 30 MINUTES
     std::thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1800));
 
@@ -120,7 +121,6 @@ pub async fn start_periodic_updates(
     let privileged_ws_connections_ = privileged_ws_connections.clone();
 
     let mut interval3 = time::interval(time::Duration::from_millis(300));
-
     tokio::spawn(async move {
         loop {
             interval3.tick().await;
@@ -175,6 +175,31 @@ pub async fn start_periodic_updates(
             {
                 println!("Error sending liquidity update message")
             };
+        }
+    });
+
+    // * STORE PENDING TXS EVERY 10 MINUTES
+    let mut interval4 = time::interval(time::Duration::from_secs(600));
+    tokio::spawn(async move {
+        loop {
+            interval4.tick().await;
+
+            let mut strg = storage_m.lock();
+            let future = strg.process_pending_batch_updates(false);
+            drop(strg);
+
+            let _h = tokio::spawn(async move {
+                match future {
+                    None => {
+                        return;
+                    }
+                    Some(future) => {
+                        if let Err(e) = future.await {
+                            println!("Error storing pending txs: {:?}", e);
+                        }
+                    }
+                }
+            });
         }
     });
 }

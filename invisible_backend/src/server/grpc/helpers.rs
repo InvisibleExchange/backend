@@ -6,9 +6,10 @@ use num_bigint::{BigInt, BigUint};
 use crate::{
     perpetual::{
         perp_order::CloseOrderFields,
-        perp_position::{PerpPosition, PositionHeader},
+        perp_position::{PerpPosition, PositionHeader, _hash_position},
         OrderSide, COLLATERAL_TOKEN,
     },
+    smart_contract_mms::vlp_note::VlpNote,
     transaction_batch::tx_batch_structs::OracleUpdate,
     utils::crypto_utils::{EcPoint, Signature},
     utils::{errors::GrpcMessageError, notes::Note},
@@ -16,8 +17,8 @@ use crate::{
 
 use super::{
     engine_proto::{
-        Address, GrcpPositionHeader, GrpcNote, GrpcOracleUpdate, GrpcPerpPosition, MarginChangeReq,
-        Signature as GrpcSignature,
+        Address, GrcpPositionHeader, GrpcNote, GrpcOracleUpdate, GrpcPerpPosition, GrpcVlpNote,
+        MarginChangeReq, Signature as GrpcSignature,
     },
     ChangeMarginMessage,
 };
@@ -76,6 +77,16 @@ impl TryFrom<GrpcPerpPosition> for PerpPosition {
             pos_header.max_vlp_supply,
         );
 
+        let position_hash = _hash_position(
+            &position_header.hash,
+            &order_side,
+            req.position_size,
+            req.entry_price,
+            req.liquidation_price,
+            req.last_funding_idx,
+            req.vlp_supply,
+        );
+
         let position = PerpPosition {
             position_header,
             order_side,
@@ -87,7 +98,7 @@ impl TryFrom<GrpcPerpPosition> for PerpPosition {
             last_funding_idx: req.last_funding_idx,
             index: req.index,
             vlp_supply: req.vlp_supply,
-            hash: BigUint::from_str(&req.hash).map_err(|_| GrpcMessageError {})?,
+            hash: position_hash,
         };
 
         Ok(position)
@@ -137,6 +148,25 @@ impl TryFrom<GrpcNote> for Note {
     }
 }
 
+impl TryFrom<GrpcVlpNote> for VlpNote {
+    type Error = Report<GrpcMessageError>;
+
+    fn try_from(req: GrpcVlpNote) -> Result<Self, GrpcMessageError> {
+        let note = VlpNote::new(
+            req.index,
+            EcPoint::try_from(req.address.ok_or(GrpcMessageError {})?)?,
+            req.token,
+            req.amount,
+            req.initial_value,
+            BigUint::from_str(req.blinding.as_str())
+                .ok()
+                .ok_or(GrpcMessageError {})?,
+        );
+
+        Ok(note)
+    }
+}
+
 impl TryFrom<GrpcSignature> for Signature {
     type Error = Report<GrpcMessageError>;
 
@@ -162,6 +192,22 @@ impl From<Note> for GrpcNote {
             }),
             token: req.token,
             amount: req.amount,
+            blinding: req.blinding.to_str_radix(10),
+        }
+    }
+}
+
+impl From<VlpNote> for GrpcVlpNote {
+    fn from(req: VlpNote) -> Self {
+        GrpcVlpNote {
+            index: req.index,
+            address: Some(Address {
+                x: req.address.x.to_str_radix(10),
+                y: req.address.y.to_str_radix(10),
+            }),
+            token: req.token,
+            amount: req.amount,
+            initial_value: req.initial_value,
             blinding: req.blinding.to_str_radix(10),
         }
     }

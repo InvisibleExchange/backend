@@ -7,24 +7,24 @@ use serde_json::Value;
 use firestore_db_and_auth::ServiceSession;
 
 use crate::{
-    order_tab::OrderTab,
-    perpetual::perp_position::PerpPosition,
-    server::grpc::engine_proto::OnChainRegisterMmReq,
-    transaction_batch::LeafNodeType,
-    trees::superficial_tree::SuperficialTree,
-    utils::{notes::Note, storage::local_storage::BackupStorage},
+    order_tab::OrderTab, perpetual::perp_position::PerpPosition,
+    server::grpc::engine_proto::OnChainRegisterMmReq, transaction_batch::LeafNodeType,
+    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
 };
 
 use crate::utils::crypto_utils::Signature;
 
-use super::helpers::{
-    db_updates::onchain_open_tab_db_updates,
-    json_output::onchain_register_json_output,
-    register_mm_helpers::{
-        get_vlp_amount, verfiy_open_order_sig, verify_close_order_fields,
-        verify_order_tab_validity, verify_position_validity,
+use super::{
+    helpers::{
+        db_updates::onchain_open_tab_db_updates,
+        json_output::onchain_register_json_output,
+        register_mm_helpers::{
+            get_vlp_amount, verfiy_open_order_sig, verify_close_order_fields,
+            verify_order_tab_validity, verify_position_validity,
+        },
+        state_updates::onchain_register_mm_state_updates,
     },
-    state_updates::onchain_register_mm_state_updates,
+    vlp_note::VlpNote,
 };
 
 // use super::{
@@ -43,7 +43,7 @@ pub fn onchain_register_mm(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
     index_price: u64,
-) -> std::result::Result<(Option<OrderTab>, Option<PerpPosition>, Note), String> {
+) -> std::result::Result<(Option<OrderTab>, Option<PerpPosition>, VlpNote), String> {
     //
 
     // ? Get vlp close order fields -------------------
@@ -146,10 +146,11 @@ pub fn onchain_register_mm(
     let zero_idx = state_tree_lock.first_zero_idx();
     drop(state_tree_lock);
 
-    let vlp_note = Note::new(
+    let vlp_note = VlpNote::new(
         zero_idx,
         vlp_close_order_fields.dest_received_address.clone(),
         register_mm_req.vlp_token,
+        vlp_amount,
         vlp_amount,
         vlp_close_order_fields.dest_received_blinding.clone(),
     );
