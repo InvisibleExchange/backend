@@ -19,14 +19,13 @@ use self::{
 };
 
 use super::grpc::engine_proto::{
-    AddLiqOrderTabRes, AmendOrderRequest, AmendOrderResponse, CancelOrderMessage,
-    CancelOrderResponse, CloseOrderTabReq, DepositMessage, DepositResponse, EmptyReq,
-    EscapeMessage, FinalizeBatchResponse, FundingReq, FundingRes, IndexPriceRes, LimitOrderMessage,
+    AmendOrderRequest, AmendOrderResponse, CancelOrderMessage, CancelOrderResponse,
+    CloseOrderTabReq, DepositMessage, DepositResponse, EmptyReq, EscapeMessage,
+    FinalizeBatchResponse, FundingReq, FundingRes, IndexPriceRes, LimitOrderMessage,
     LiquidationOrderMessage, LiquidationOrderResponse, LiquidityReq, LiquidityRes, MarginChangeReq,
-    MarginChangeRes, OnChainAddLiqTabReq, OnChainRegisterMmReq, OnChainRegisterMmRes,
-    OnChainRemoveLiqTabReq, OpenOrderTabReq, OracleUpdateReq, OrderResponse, OrdersReq, OrdersRes,
-    PerpOrderMessage, RemoveLiqOrderTabRes, RestoreOrderBookMessage, SplitNotesReq, SplitNotesRes,
-    StateInfoReq, StateInfoRes, SuccessResponse, WithdrawalMessage,
+    MarginChangeRes, OnChainRegisterMmReq, OnChainRegisterMmRes, OpenOrderTabReq, OracleUpdateReq,
+    OrderResponse, OrdersReq, OrdersRes, PerpOrderMessage, RestoreOrderBookMessage, SplitNotesReq,
+    SplitNotesRes, StateInfoReq, StateInfoRes, SuccessResponse, WithdrawalMessage,
 };
 use super::{
     grpc::engine_proto::{engine_server::Engine, CloseOrderTabRes, OpenOrderTabRes},

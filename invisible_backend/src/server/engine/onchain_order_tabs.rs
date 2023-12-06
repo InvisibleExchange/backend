@@ -6,9 +6,7 @@ use super::super::server_helpers::engine_helpers::store_output_json;
 use crate::matching_engine::orderbook::OrderBook;
 use crate::perpetual::COLLATERAL_TOKEN;
 use crate::server::grpc::engine_proto::{
-    AddLiqOrderTabRes, GrpcNote, GrpcPerpPosition, GrpcVlpNote, OnChainAddLiqTabReq,
-    OnChainRegisterMmReq, OnChainRegisterMmRes, OnChainRemoveLiqTabReq, PositionRemoveLiqRes,
-    RemoveLiqOrderTabRes, TabRemoveLiqRes,
+    GrpcNote, GrpcPerpPosition, GrpcVlpNote, OnChainRegisterMmReq, OnChainRegisterMmRes,
 };
 use crate::transaction_batch::TransactionBatch;
 use crate::utils::errors::{

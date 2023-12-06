@@ -37,9 +37,9 @@ service Engine {
     // On chain initiated order tabs --------------- ----------------- ----------------
     rpc onchain_register_mm (OnChainRegisterMMReq) returns (OnChainRegisterMMRes);
 
-    rpc add_liquidity_mm (OnChainAddLiqTabReq) returns (AddLiqOrderTabRes);
+    rpc add_liquidity_mm (OnChainAddLiqReq) returns (SuccessResponse);
 
-    rpc remove_liquidity_mm (OnChainRemoveLiqTabReq) returns (RemoveLiqOrderTabRes);
+    rpc remove_liquidity_mm (OnChainRemoveLiqReq) returns (SuccessResponse);
 
     // admin --------------- ----------------- ----------------
     rpc finalize_batch (EmptyReq) returns (FinalizeBatchResponse);
@@ -321,88 +321,22 @@ message OnChainRegisterMMRes {
 
 // -------------------------------------------------------
 
-message OnChainAddLiqTabReq {
-    TabAddLiquidityReq tab_add_liquidity_req = 1;
-    PositionAddLiquidityReq position_add_liquidity_req = 2;
-    GrpcCloseOrderFields vlp_close_order_fields = 3;
-    Signature signature = 4;
-    uint32 market_id = 5;
-    uint32 base_token = 6;
-}
-
-message TabAddLiquidityReq {
-    repeated GrpcNote base_notes_in = 1;
-    GrpcNote base_refund_note = 2;
-    repeated GrpcNote quote_notes_in = 3;
-    GrpcNote quote_refund_note = 4;
-    GrpcOrderTab order_tab = 6;
-    
-}
-
-message PositionAddLiquidityReq {
-    repeated GrpcNote collateral_notes_in = 1;
-    GrpcNote collateral_refund_note = 2;
-    GrpcPerpPosition position = 3;
-    
-}
-
-
-message AddLiqOrderTabRes {
-    bool successful = 1;
-    string error_message = 2;
-    GrpcOrderTab order_tab = 3;
-    GrpcPerpPosition position = 4;
-    GrpcVlpNote vlp_note = 5;
-}
-
-// -------------------------------------------------------
-
-message OnChainRemoveLiqTabReq {
-    repeated GrpcVlpNote vlp_notes_in = 1;
-    uint32 base_token = 2;
-    TabRemoveLiquidityReq tab_remove_liquidity_req = 3;
-    PositionRemoveLiquidityReq position_remove_liquidity_req = 4;
-    Signature signature = 5;
-    uint32 market_id = 6;
-}
-
-
-message TabRemoveLiquidityReq {
-    GrpcCloseOrderFields base_close_order_fields = 1;
-    GrpcCloseOrderFields quote_close_order_fields = 2;
-    GrpcOrderTab order_tab = 3;
-    uint64 base_return_amount = 4;
-    uint64 index_price = 5;
-    uint32 slippage = 6; // 100 = 1%
-}
-
-message PositionRemoveLiquidityReq {
-    GrpcCloseOrderFields collateral_close_order_fields = 1;
-    GrpcPerpPosition position = 2;
-    
-}
-
-message RemoveLiqOrderTabRes {
-    bool successful = 1;
-    string error_message = 2;
-    TabRemoveLiqRes tab_res = 3;
-    PositionRemoveLiqRes position_res = 4;
-    
-}
-
-message TabRemoveLiqRes {
-    GrpcOrderTab order_tab = 1;
-    GrpcNote base_return_note = 2;
-    GrpcNote quote_return_note = 3;
-}
-
-message PositionRemoveLiqRes {
+message OnChainAddLiqReq {
     GrpcPerpPosition position = 1;
-    GrpcNote collateral_return_note = 2;
+    string depositor = 2;
+    uint64 initial_value = 3;
+    Signature signature = 4;
 }
 
+message OnChainRemoveLiqReq { 
+    GrpcPerpPosition position = 1;
+    string depositor = 2;
+    uint64 initial_value = 3;
+    uint64 vlp_amount = 4;
+    Signature signature = 5;
+}
 
-// ------
+// ------ --------------------------------------------
 
 
 message GrpcOrderTab {
