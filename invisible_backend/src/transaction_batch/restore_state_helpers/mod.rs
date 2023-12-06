@@ -11,6 +11,9 @@ use crate::{
 
 use self::{
     helpers::{restore_margin_update, restore_note_split},
+    restore_forced_escapes::{
+        restore_forced_note_escape, restore_forced_position_escape, restore_forced_tab_escape,
+    },
     restore_order_tabs::{
         restore_add_liquidity, restore_close_order_tab, restore_open_order_tab,
         restore_register_mm, restore_remove_liquidity,
@@ -24,19 +27,17 @@ use self::{
 use super::LeafNodeType;
 
 pub mod helpers;
-pub mod restore_order_tabs;
-pub mod restore_perp_swaps;
-pub mod restore_spot_swap;
+mod restore_forced_escapes;
+mod restore_order_tabs;
+mod restore_perp_swaps;
+mod restore_spot_swap;
 
 pub fn _restore_state_inner(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     perpetual_partial_fill_tracker: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
-    main_storage: &Arc<Mutex<MainStorage>>,
     transactions: Vec<Map<String, Value>>,
 ) {
-    let mut n_deposits = 0;
-    let mut n_withdrawals = 0;
     for transaction in transactions {
         let transaction_type = transaction
             .get("transaction_type")
@@ -55,8 +56,6 @@ pub fn _restore_state_inner(
                     .unwrap();
 
                 restore_deposit_update(&state_tree, &updated_state_hashes, deposit_notes);
-
-                n_deposits += 1;
             }
             "withdrawal" => {
                 let withdrawal_notes_in = transaction
@@ -74,8 +73,6 @@ pub fn _restore_state_inner(
                     withdrawal_notes_in,
                     refund_note,
                 );
-
-                n_withdrawals += 1;
             }
             "swap" => {
                 // * Order a ------------------------
@@ -139,14 +136,23 @@ pub fn _restore_state_inner(
             "remove_liquidity" => {
                 restore_remove_liquidity(&state_tree, &updated_state_hashes, &transaction)
             }
+            "forced_escape" => match transaction.get("escape_type").unwrap().as_str().unwrap() {
+                "note_escape" => {
+                    restore_forced_note_escape(&state_tree, &updated_state_hashes, &transaction)
+                }
+                "order_tab_escape" => {
+                    restore_forced_tab_escape(&state_tree, &updated_state_hashes, &transaction)
+                }
+                "position_escape" => {
+                    restore_forced_position_escape(&state_tree, &updated_state_hashes, &transaction)
+                }
+                _ => {
+                    panic!("Invalid escape type");
+                }
+            },
             _ => {
                 panic!("Invalid transaction type");
             }
         }
     }
-
-    let mut storage = main_storage.lock();
-    storage.n_deposits = n_deposits;
-    storage.n_withdrawals = n_withdrawals;
-    drop(storage);
 }

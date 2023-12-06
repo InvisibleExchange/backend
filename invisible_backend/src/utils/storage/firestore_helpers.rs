@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::smart_contract_mms::vlp_note::VlpNote;
 use crate::{order_tab::OrderTab, perpetual::perp_position::PerpPosition, utils::notes::Note};
 
 use crate::utils::crypto_utils::pedersen;
@@ -43,6 +44,49 @@ impl FirebaseNoteObject {
             commitment: pedersen(&BigUint::from_u64(note.amount).unwrap(), &note.blinding)
                 .to_string(),
             hidden_amount: hidden_amount.to_string(),
+            index: note.index.to_string(),
+            token: note.token.to_string(),
+        };
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FirebaseVlpNoteObject {
+    pub address: [String; 2],
+    pub commitment: String,
+    pub init_val_commitment: String,
+    pub hidden_amount: String,
+    pub hidden_init_val: String,
+    pub index: String,
+    pub token: String,
+}
+
+impl FirebaseVlpNoteObject {
+    pub fn from_note(note: &VlpNote) -> FirebaseVlpNoteObject {
+        // let hash8 = trimHash(yt, 64);
+        // let hiddentAmount = bigInt(amount).xor(hash8).value;
+
+        let yt_digits = note.blinding.to_u64_digits();
+        let yt_trimmed = if yt_digits.len() == 0 {
+            0
+        } else {
+            yt_digits[0]
+        };
+        let hidden_amount = note.amount ^ yt_trimmed;
+
+        let hidden_init_val = note.initial_value ^ yt_trimmed;
+
+        return FirebaseVlpNoteObject {
+            address: [note.address.x.to_string(), note.address.y.to_string()],
+            commitment: pedersen(&BigUint::from_u64(note.amount).unwrap(), &note.blinding)
+                .to_string(),
+            init_val_commitment: pedersen(
+                &BigUint::from_u64(note.initial_value).unwrap(),
+                &note.blinding,
+            )
+            .to_string(),
+            hidden_amount: hidden_amount.to_string(),
+            hidden_init_val: hidden_init_val.to_string(),
             index: note.index.to_string(),
             token: note.token.to_string(),
         };
@@ -111,6 +155,44 @@ pub fn delete_note_at_address(
 
     let delete_path = format!("addr2idx/addresses/{}/{}", address, idx);
     let _r = documents::delete(session, delete_path.as_str(), true);
+}
+
+pub fn store_new_vlp_note(
+    session: &ServiceSession,
+    backup_storage: &Arc<Mutex<BackupStorage>>,
+    note: &VlpNote,
+) {
+    let obj = FirebaseVlpNoteObject::from_note(note);
+
+    let write_path = format!("notes");
+    let res = documents::write(
+        session,
+        write_path.as_str(),
+        Some(note.index.to_string()),
+        &obj,
+        documents::WriteOptions::default(),
+    );
+
+    if let Err(e) = res {
+        println!(
+            "Error occured, storing note in backup storage. ERROR: {:?}",
+            e
+        );
+        let s = backup_storage.lock();
+        // TODO: if let Err(_e) = s.store_note(note) {};
+        drop(s);
+    }
+
+    // ? ----------------------------------------
+
+    let write_path = format!("addr2idx/addresses/{}", note.address.x.to_string());
+    let _res = documents::write(
+        session,
+        write_path.as_str(),
+        Some(note.index.to_string()),
+        &json!({}),
+        documents::WriteOptions::default(),
+    );
 }
 
 // * POSITIONS ---------------------------------------------------------------------------
@@ -388,8 +470,3 @@ pub fn delete_order_tab(
     let delete_path = format!("addr2idx/addresses/{}/{}", pub_key, idx);
     let _r = documents::delete(session, delete_path.as_str(), true);
 }
-
-
-
-
-

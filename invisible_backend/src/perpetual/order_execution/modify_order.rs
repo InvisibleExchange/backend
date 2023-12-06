@@ -2,11 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     perpetual::{
-        get_price,
-        perp_helpers::perp_swap_helpers::{block_until_prev_fill_finished, get_max_leverage},
-        perp_order::PerpOrder,
-        perp_position::PerpPosition,
-        DUST_AMOUNT_PER_ASSET,
+        get_price, perp_helpers::perp_swap_helpers::get_max_leverage, perp_order::PerpOrder,
+        perp_position::PerpPosition, DUST_AMOUNT_PER_ASSET,
     },
     transaction_batch::tx_batch_structs::SwapFundingInfo,
     utils::{
@@ -24,21 +21,13 @@ pub fn execute_modify_order(
     index_price: u64,
     fee_taken: u64,
     partialy_filled_positions_m: &Arc<Mutex<HashMap<String, (PerpPosition, u64)>>>,
-    perpetual_partial_fill_tracker_m: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
-    blocked_perp_order_ids_m: &Arc<Mutex<HashMap<u64, bool>>>,
     order: &PerpOrder,
     signature: &Signature,
     spent_collateral: u64,
     spent_synthetic: u64,
     prev_position: &PerpPosition,
+    partial_fill_info: Option<(Option<Note>, u64, u64)>,
 ) -> Result<(PerpPosition, (Option<Note>, u64, u64), u64, u32, bool), PerpSwapExecutionError> {
-    // ? In case of sequential partial fills block threads updating the same order id untill previous thread is finsihed and fetch the previous partial fill info
-    let partial_fill_info = block_until_prev_fill_finished(
-        perpetual_partial_fill_tracker_m,
-        blocked_perp_order_ids_m,
-        order.order_id,
-    )?;
-
     // ? Get the new total amount filled after this swap
     let new_amount_filled = if partial_fill_info.is_some() {
         partial_fill_info.as_ref().unwrap().1 + spent_synthetic

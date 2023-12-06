@@ -7,6 +7,7 @@ use serde_json::json;
 use tokio::sync::Mutex as TokioMutex;
 
 use parking_lot::Mutex;
+use tokio::sync::oneshot::Sender;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::matching_engine::orderbook::{Failed, Success};
@@ -262,6 +263,7 @@ pub async fn process_and_execute_perp_swaps(
     backup_storage: &Arc<Mutex<BackupStorage>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
     privileged_ws_connections: &Arc<TokioMutex<Vec<u64>>>,
+    response_sender: Option<Sender<Vec<(Option<PerpPosition>, Option<PerpPosition>)>>>,
     processed_res: &mut Vec<std::result::Result<Success, Failed>>,
     user_id: u64,
 ) -> std::result::Result<(Vec<SwapErrorInfo>, u64), String> {
@@ -275,6 +277,8 @@ pub async fn process_and_execute_perp_swaps(
 
     // ? Execute the swaps if any orders were matched
     let mut retry_messages = Vec::new();
+    let mut updated_positions: Vec<(Option<PerpPosition>, Option<PerpPosition>)> = Vec::new();
+    let is_open_channel = response_sender.is_some(); // Wheter we should send a response back through the channel
     if let Some(mut swaps) = processed_result.perp_swaps {
         loop {
             if swaps.len() == 0 {
@@ -300,8 +304,19 @@ pub async fn process_and_execute_perp_swaps(
             if let Some(msg) = retry_msg {
                 retry_messages.push(msg);
             } else if let Some((pos_a, pos_b)) = position_pair {
+                if is_open_channel {
+                    updated_positions.push((pos_a.clone(), pos_b.clone()))
+                }
+
                 _update_order_positions_in_swaps(&mut swaps, user_id_a, pos_a, user_id_b, pos_b);
             }
+        }
+
+        //
+        if let Some(sender) = response_sender {
+            if let Err(e) = sender.send(updated_positions) {
+                println!("error sending swap response through channel: {:?}", e)
+            };
         }
     }
 
@@ -527,6 +542,7 @@ pub async fn retry_failed_perp_swaps(
             backup_storage,
             ws_connections,
             privileged_ws_connections,
+            None,
             &mut processed_res,
             user_id,
         )

@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    tx_batch_structs::{FundingInfo, GlobalConfig, GlobalDexState},
+    tx_batch_structs::{FundingInfo, GlobalConfig, GlobalDexState, ProgramInputCounts},
     LeafNodeType,
 };
 
@@ -43,46 +43,92 @@ where
 ///
 pub fn get_final_updated_counts(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-) -> [u32; 5] {
-    let mut num_output_notes: u32 = 0; //= self.updated_state_hashes.len() as u32;
-    let mut num_output_positions: u32 = 0; // = self.perpetual_updated_position_hashes.len() as u32;
-    let mut num_output_tabs: u32 = 0;
-    let mut num_zero_indexes: u32 = 0;
-    let mut num_mm_registrations: u32 = 0;
+    swap_output_json: &Vec<Map<String, Value>>,
+) -> ProgramInputCounts {
+    let mut n_output_notes: u32 = 0; //= self.updated_state_hashes.len() as u32;
+    let mut n_output_positions: u32 = 0; // = self.perpetual_updated_position_hashes.len() as u32;
+    let mut n_output_tabs: u32 = 0;
+    let mut n_zero_indexes: u32 = 0;
+    let mut n_mm_registrations: u32 = 0;
 
     for (_, (leaf_type, leaf_hash)) in updated_state_hashes.iter() {
         if leaf_hash == &BigUint::zero() {
-            num_zero_indexes += 1;
+            n_zero_indexes += 1;
         } else {
             match leaf_type {
                 LeafNodeType::Note => {
-                    num_output_notes += 1;
+                    n_output_notes += 1;
                 }
                 LeafNodeType::Position => {
-                    num_output_positions += 1;
+                    n_output_positions += 1;
                 }
                 LeafNodeType::OrderTab => {
-                    num_output_tabs += 1;
+                    n_output_tabs += 1;
                 }
                 LeafNodeType::MMSpotRegistration => {
-                    num_mm_registrations += 1;
-                    num_output_tabs += 1;
+                    n_mm_registrations += 1;
+                    n_output_tabs += 1;
                 }
                 LeafNodeType::MMPerpRegistration => {
-                    num_mm_registrations += 1;
-                    num_output_positions += 1;
+                    n_mm_registrations += 1;
+                    n_output_positions += 1;
                 }
             }
         }
     }
 
-    return [
-        num_output_notes,
-        num_output_positions,
-        num_output_tabs,
-        num_zero_indexes,
-        num_mm_registrations,
-    ];
+    let mut n_deposits: u32 = 0;
+    let mut n_withdrawals: u32 = 0;
+    let mut n_note_escapes: u32 = 0;
+    let mut n_position_escapes: u32 = 0;
+    let mut n_tab_escapes: u32 = 0;
+
+    for transaction in swap_output_json {
+        let transaction_type = transaction
+            .get("transaction_type")
+            .unwrap()
+            .as_str()
+            .unwrap();
+
+        match transaction_type {
+            "deposit" => {
+                n_deposits += 1;
+            }
+            "withdrawal" => {
+                n_withdrawals += 1;
+            }
+            "forced_escape" => match transaction.get("escape_type").unwrap().as_str().unwrap() {
+                "note_escape" => {
+                    n_note_escapes += 1;
+                }
+                "order_tab_escape" => {
+                    n_tab_escapes += 1;
+                }
+                "position_escape" => {
+                    n_position_escapes += 1;
+                }
+                _ => {
+                    continue;
+                }
+            },
+            _ => {
+                continue;
+            }
+        }
+    }
+
+    ProgramInputCounts {
+        n_output_notes,
+        n_output_positions,
+        n_output_tabs,
+        n_zero_indexes,
+        n_deposits,
+        n_withdrawals,
+        n_mm_registrations,
+        n_note_escapes,
+        n_position_escapes,
+        n_tab_escapes,
+    }
 }
 //
 

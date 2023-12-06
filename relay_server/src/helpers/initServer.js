@@ -63,9 +63,9 @@ function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
   setInterval(() => {
     try {
       let updates = compileLiqUpdateMessage(orderBooks);
-      let message = JSON.stringify({
+      let liqMessage = JSON.stringify({
         message_id: "LIQUIDITY_UPDATE",
-        liquidity_updates: updates,
+        liquidity: updates,
       });
 
       let fillMessage = fillUpdates.length
@@ -78,6 +78,7 @@ function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
       update24HInfo(fillUpdates);
       fillUpdates = [];
 
+      // TODO: Maybe we can send these updates less often?
       let priceChanges;
       if (Object.keys(PRICE_FEEDS).length > 0) {
         priceChanges = JSON.stringify({
@@ -87,7 +88,9 @@ function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
       }
 
       for (const ws of wsConnections) {
-        ws.send(message);
+        if (updates.length > 0) {
+          ws.send(liqMessage);
+        }
         if (fillMessage) {
           ws.send(fillMessage);
         }

@@ -136,7 +136,6 @@ impl OrderBook {
 
                 let order_id = (seq_id as u64) * 2_u64.pow(16) + self.market_id as u64;
 
-
                 proc_result.push(Ok(Success::Accepted {
                     id: order_id,
                     order_type: OrderType::Limit,
@@ -249,7 +248,6 @@ impl OrderBook {
                             break;
                         }
                     }
-
 
                     for (order, ts) in other_orders.into_iter().rev() {
                         opposite_queue.insert(
@@ -394,8 +392,9 @@ impl OrderBook {
             match side {
                 // verify bid/ask price overlap
                 OrderSide::Bid => {
+
                     if price
-                        <= opposite_order
+                        < opposite_order
                             .order
                             .get_price(opposite_order.order_side, Some(true))
                     {
@@ -403,8 +402,9 @@ impl OrderBook {
                     }
                 }
                 OrderSide::Ask => {
+
                     if price
-                        >= opposite_order
+                        > opposite_order
                             .order
                             .get_price(opposite_order.order_side, Some(false))
                     {

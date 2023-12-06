@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use num_bigint::BigUint;
 
+use crate::perpetual::perp_order::OpenOrderFields;
 use crate::perpetual::perp_position::PerpPosition;
 use crate::perpetual::{
     OrderSide, PositionEffectType, COLLATERAL_TOKEN, DECIMALS_PER_ASSET, DUST_AMOUNT_PER_ASSET,
@@ -73,17 +74,18 @@ pub fn get_max_leverage(token: u32, amount: u64) -> u64 {
 
 /// Checks the tokens of all notes are the collateral token being spent \
 /// and that the sum of inputs is at least equal to the initial margin + refund amount
-pub fn _check_note_sums(order: &PerpOrder) -> Result<(), PerpSwapExecutionError> {
+pub fn _check_note_sums(
+    open_order_fields: &OpenOrderFields,
+    order_id: u64,
+) -> Result<(), PerpSwapExecutionError> {
     // ? Sum all the notes and check if they all have the same collateral token
-
-    let open_order_fields = order.open_order_fields.as_ref().unwrap();
 
     let mut sum_notes: u64 = 0;
     for note in open_order_fields.notes_in.iter() {
         if note.token != open_order_fields.collateral_token {
             return Err(send_perp_swap_error(
                 "note and collateral token mismatch".to_string(),
-                Some(order.order_id),
+                Some(order_id),
                 Some(format!(
                     "token mismatch: note token: {}, collateral token: {}",
                     note.token, open_order_fields.collateral_token
@@ -103,7 +105,7 @@ pub fn _check_note_sums(order: &PerpOrder) -> Result<(), PerpSwapExecutionError>
     if sum_notes != refund_amount + open_order_fields.initial_margin {
         return Err(send_perp_swap_error(
             "sum of inputs does not match amount spent".to_string(),
-            Some(order.order_id),
+            Some(order_id),
             Some(format!(
                 "note sum: {} < refund amount: {} + initial margin: {}",
                 sum_notes, refund_amount, open_order_fields.initial_margin
@@ -203,7 +205,7 @@ pub fn block_until_prev_fill_finished(
 
     let mut count = 0;
     while is_blocked {
-        if count >= 12 {
+        if count >= 10 {
             return Err(send_perp_swap_error(
                 "previous fill is taking too long".to_string(),
                 None,
@@ -211,7 +213,7 @@ pub fn block_until_prev_fill_finished(
             ));
         }
 
-        sleep(Duration::from_millis(5));
+        sleep(Duration::from_millis(10));
         let blocked_perp_order_ids = blocked_perp_order_ids_m.lock();
         is_blocked = blocked_perp_order_ids
             .get(&order_id)
@@ -297,6 +299,7 @@ pub fn finalize_updates(
 
     // ? allow other threads with this order id to continue
     let mut blocked_perp_order_ids = blocked_perp_order_ids_m.lock();
+
     blocked_perp_order_ids.remove(&order.order_id);
     drop(blocked_perp_order_ids);
 }

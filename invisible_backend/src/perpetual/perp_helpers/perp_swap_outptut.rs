@@ -115,7 +115,7 @@ impl PerpSwapOutput<'_> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PerpSwapResponse {
     pub position_a: Option<PerpPosition>,
     pub position_b: Option<PerpPosition>,

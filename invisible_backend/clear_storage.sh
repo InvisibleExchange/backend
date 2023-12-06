@@ -19,6 +19,9 @@ mkdir merkle_trees
 cd ../../relay_server/src
 rm ./orderBooks.db
 
+# cd ../../../marketmaker/
+# rm ./OrderBooks
+
 echo "Storage was cleared, all files deleted..."
 
 

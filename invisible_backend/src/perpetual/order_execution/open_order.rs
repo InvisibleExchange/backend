@@ -8,8 +8,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     perpetual::{
         perp_helpers::perp_swap_helpers::{
-            _check_note_sums, _check_prev_fill_consistencies, block_until_prev_fill_finished,
-            get_max_leverage, refund_partial_fill,
+            _check_note_sums, _check_prev_fill_consistencies, get_max_leverage, refund_partial_fill,
         },
         perp_order::PerpOrder,
         perp_position::PerpPosition,
@@ -24,9 +23,7 @@ use crate::{
 
 pub fn execute_open_order(
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
-    perpetual_partial_fill_tracker_m: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
     partialy_filled_positions_m: &Arc<Mutex<HashMap<String, (PerpPosition, u64)>>>,
-    blocked_perp_order_ids_m: &Arc<Mutex<HashMap<u64, bool>>>,
     order: &PerpOrder,
     fee_taken: u64,
     perp_state_zero_index: u64,
@@ -34,6 +31,7 @@ pub fn execute_open_order(
     spent_synthetic: u64,
     spent_collateral: u64,
     init_margin: u64,
+    partial_fill_info: Option<(Option<Note>, u64, u64)>,
 ) -> Result<
     (
         Option<PerpPosition>,
@@ -46,13 +44,6 @@ pub fn execute_open_order(
     ),
     PerpSwapExecutionError,
 > {
-    // ? In case of sequential partial fills block threads updating the same order id untill previous thread is finsihed and fetch the previous partial fill info
-    let partial_fill_info = block_until_prev_fill_finished(
-        perpetual_partial_fill_tracker_m,
-        blocked_perp_order_ids_m,
-        order.order_id,
-    )?;
-
     let is_first_fill = partial_fill_info.is_none();
 
     // ? Get the new total amount filled after this swap
@@ -67,7 +58,7 @@ pub fn execute_open_order(
     // ? Check if the note sums are sufficient for amount spent
     let prev_pfr_note: Option<Note>;
     if is_first_fill {
-        _check_note_sums(order)?;
+        _check_note_sums(open_order_fields, order.order_id)?;
 
         if open_order_fields.refund_note.is_some() {
             if open_order_fields.notes_in[0].index
@@ -214,7 +205,7 @@ fn open_new_position(
     let position: PerpPosition;
 
     let leverage = (spent_collateral as u128 * 10_u128.pow(LEVERAGE_DECIMALS as u32)
-        / init_margin as u128) as u64;
+        / (init_margin - fee_taken) as u128) as u64;
 
     // ? Check that leverage is valid relative to the notional position size
     let max_leverage = get_max_leverage(order.synthetic_token, spent_synthetic);
@@ -310,7 +301,6 @@ fn add_margin_to_position(
     let leverage = (spent_collateral as u128 * 10_u128.pow(LEVERAGE_DECIMALS as u32)
         / init_margin as u128) as u64;
 
-    
     position.add_margin_to_position(init_margin, spent_synthetic, leverage, fee_taken);
 
     // ? Check that leverage is valid relative to the notional position size

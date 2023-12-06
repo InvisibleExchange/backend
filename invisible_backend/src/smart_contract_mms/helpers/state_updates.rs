@@ -5,7 +5,8 @@ use num_traits::Zero;
 use parking_lot::Mutex;
 
 use crate::{
-    order_tab::OrderTab, perpetual::perp_position::PerpPosition, transaction_batch::LeafNodeType,
+    order_tab::OrderTab, perpetual::perp_position::PerpPosition,
+    smart_contract_mms::vlp_note::VlpNote, transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree, utils::notes::Note,
 };
 
@@ -15,7 +16,7 @@ pub fn onchain_register_mm_state_updates(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     order_tab: &Option<OrderTab>,
     position: &Option<PerpPosition>,
-    vlp_note: &Note,
+    vlp_note: &VlpNote,
 ) {
     let mut state_tree_m = state_tree.lock();
     let mut updated_state_hashes_m = updated_state_hashes.lock();
@@ -102,7 +103,7 @@ pub fn onchain_position_add_liquidity_state_updates(
     position: &PerpPosition,
     collateral_notes_in: &Vec<Note>,
     collateral_refund_note: &Option<Note>,
-    vlp_note: &Note,
+    vlp_note: &VlpNote,
 ) {
     // ? Remove the notes from the state tree and add the refund notes ------------------
     let mut state_tree_m = state_tree.lock();
@@ -181,7 +182,7 @@ pub fn onchain_position_remove_liquidity_state_updates(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     pos_idx: u64,
     new_position: &Option<PerpPosition>,
-    vlp_notes_in: &Vec<Note>,
+    vlp_notes_in: &Vec<VlpNote>,
     collateral_return_note: &Note,
 ) {
     let mut state_tree_m = state_tree.lock();

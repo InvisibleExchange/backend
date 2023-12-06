@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use self::{
     admin::{finalize_batch_inner, restore_orderbook_inner, update_index_price_inner},
     note_position_helpers::{change_position_margin_inner, split_notes_inner},
-    onchain_interaction::{execute_deposit_inner, execute_withdrawal_inner},
+    onchain_interaction::{execute_deposit_inner, execute_escape_inner, execute_withdrawal_inner},
     onchain_order_tabs::{
         add_liquidity_mm_inner, onchain_register_mm_inner, remove_liquidity_mm_inner,
     },
@@ -21,7 +21,7 @@ use self::{
 use super::grpc::engine_proto::{
     AddLiqOrderTabRes, AmendOrderRequest, AmendOrderResponse, CancelOrderMessage,
     CancelOrderResponse, CloseOrderTabReq, DepositMessage, DepositResponse, EmptyReq,
-    FinalizeBatchResponse, FundingReq, FundingRes, IndexPriceRes, LimitOrderMessage,
+    EscapeMessage, FinalizeBatchResponse, FundingReq, FundingRes, IndexPriceRes, LimitOrderMessage,
     LiquidationOrderMessage, LiquidationOrderResponse, LiquidityReq, LiquidityRes, MarginChangeReq,
     MarginChangeRes, OnChainAddLiqTabReq, OnChainRegisterMmReq, OnChainRegisterMmRes,
     OnChainRemoveLiqTabReq, OpenOrderTabReq, OracleUpdateReq, OrderResponse, OrdersReq, OrdersRes,
@@ -90,11 +90,14 @@ impl Engine for EngineService {
         &self,
         request: Request<PerpOrderMessage>,
     ) -> Result<Response<OrderResponse>, Status> {
+        let request: PerpOrderMessage = request.into_inner();
+
         return submit_perpetual_order_inner(
             &self.transaction_batch,
             &self.perp_order_books,
             &self.ws_connections,
             &self.privileged_ws_connections,
+            None,
             &self.semaphore,
             &self.is_paused,
             request,
@@ -201,6 +204,23 @@ impl Engine for EngineService {
     // * ===================================================================================================================================
     //
 
+    async fn execute_escape(
+        &self,
+        request: Request<EscapeMessage>,
+    ) -> Result<Response<SuccessResponse>, Status> {
+        return execute_escape_inner(
+            &self.transaction_batch,
+            &self.semaphore,
+            &self.is_paused,
+            request,
+        )
+        .await;
+    }
+
+    //
+    // * ===================================================================================================================================
+    //
+
     async fn split_notes(
         &self,
         req: Request<SplitNotesReq>,
@@ -259,6 +279,8 @@ impl Engine for EngineService {
         &self,
         req: Request<CloseOrderTabReq>,
     ) -> Result<Response<CloseOrderTabRes>, Status> {
+        let req: CloseOrderTabReq = req.into_inner();
+
         return close_order_tab_inner(
             &self.transaction_batch,
             &self.semaphore,
@@ -315,6 +337,8 @@ impl Engine for EngineService {
         &self,
         req: Request<OnChainRemoveLiqTabReq>,
     ) -> Result<Response<RemoveLiqOrderTabRes>, Status> {
+        let req: OnChainRemoveLiqTabReq = req.into_inner();
+
         return remove_liquidity_mm_inner(
             &self.transaction_batch,
             &self.order_books,
