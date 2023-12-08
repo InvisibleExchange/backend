@@ -20,7 +20,7 @@ use crate::{
         perp_position::PerpPosition,
         perp_swap::PerpSwap,
     },
-    server::grpc::{OrderTabActionMessage, OrderTabActionResponse},
+    server::grpc::{OrderTabActionMessage, OrderTabActionResponse, SCMMActionMessage},
     transactions::Transaction,
 };
 use crate::{
@@ -54,7 +54,7 @@ use self::{
         batch_transition::{_finalize_batch_inner, _transition_state},
         state_modifications::{
             _change_position_margin_inner, _execute_order_tab_modification_inner,
-            _split_notes_inner,
+            _execute_sc_mm_modification_inner, _split_notes_inner,
         },
     },
     escapes::verify_escapes::{_execute_forced_escape_inner, _get_position_close_escape_info},
@@ -82,8 +82,6 @@ pub enum LeafNodeType {
     Note,
     Position,
     OrderTab,
-    MMSpotRegistration,
-    MMPerpRegistration,
 }
 pub struct TransactionBatch {
     pub state_tree: Arc<Mutex<SuperficialTree>>, // current state tree (superficial tree only stores the leaves)
@@ -395,8 +393,21 @@ impl TransactionBatch {
             &self.firebase_session,
             &self.backup_storage,
             &self.swap_output_json,
-            &self.latest_index_price,
             tab_action_message,
+        );
+    }
+
+    pub fn execute_sc_mm_modification_inner(
+        &mut self,
+        scmm_action_message: SCMMActionMessage,
+    ) -> JoinHandle<std::result::Result<PerpPosition, String>> {
+        return _execute_sc_mm_modification_inner(
+            &self.state_tree,
+            &self.updated_state_hashes,
+            &self.firebase_session,
+            &self.backup_storage,
+            &self.swap_output_json,
+            scmm_action_message,
         );
     }
 

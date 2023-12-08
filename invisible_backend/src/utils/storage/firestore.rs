@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use crate::{
     order_tab::OrderTab,
     perpetual::perp_position::PerpPosition,
-    smart_contract_mms::vlp_note::VlpNote,
     transactions::transaction_helpers::transaction_output::{FillInfo, PerpFillInfo},
     trees::superficial_tree::SuperficialTree,
     utils::notes::Note,
@@ -22,7 +21,7 @@ use crate::{
 use super::{
     firestore_helpers::{
         delete_note_at_address, delete_order_tab, delete_position_at_address, store_new_note,
-        store_new_position, store_new_vlp_note, store_order_tab,
+        store_new_position, store_order_tab,
     },
     local_storage::BackupStorage,
 };
@@ -178,24 +177,6 @@ pub fn start_add_note_thread(
         // let backup_storage = backup_storage.lock();
 
         store_new_note(&session_, &backup, &note);
-        drop(session_);
-    });
-    return handle;
-}
-
-pub fn start_add_vlp_note_thread(
-    note: VlpNote,
-    session: &Arc<Mutex<ServiceSession>>,
-    backup_storage: &Arc<Mutex<BackupStorage>>,
-) -> JoinHandle<()> {
-    let s = Arc::clone(&session);
-    let backup = Arc::clone(&backup_storage);
-
-    let handle = spawn(move || {
-        let session_ = s.lock();
-        // let backup_storage = backup_storage.lock();
-
-        store_new_vlp_note(&session_, &backup, &note);
         drop(session_);
     });
     return handle;

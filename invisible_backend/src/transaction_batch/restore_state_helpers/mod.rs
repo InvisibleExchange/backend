@@ -4,10 +4,7 @@ use num_bigint::BigUint;
 use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
-use crate::{
-    trees::superficial_tree::SuperficialTree,
-    utils::{notes::Note, storage::local_storage::MainStorage},
-};
+use crate::{trees::superficial_tree::SuperficialTree, utils::notes::Note};
 
 use self::{
     helpers::{restore_margin_update, restore_note_split},

@@ -35,11 +35,13 @@ service Engine {
     rpc close_order_tab (CloseOrderTabReq) returns (CloseOrderTabRes);
 
     // On chain initiated order tabs --------------- ----------------- ----------------
-    rpc onchain_register_mm (OnChainRegisterMMReq) returns (OnChainRegisterMMRes);
+    rpc register_onchain_mm (OnChainRegisterMMReq) returns (OnChainScmmRes);
 
-    rpc add_liquidity_mm (OnChainAddLiqReq) returns (SuccessResponse);
+    rpc add_liquidity_mm (OnChainAddLiqReq) returns (OnChainScmmRes);
 
-    rpc remove_liquidity_mm (OnChainRemoveLiqReq) returns (SuccessResponse);
+    rpc remove_liquidity_mm (OnChainRemoveLiqReq) returns (OnChainScmmRes);
+
+    rpc close_onchain_mm (OnChainCloseMmReq) returns (OnChainScmmRes);
 
     // admin --------------- ----------------- ----------------
     rpc finalize_batch (EmptyReq) returns (FinalizeBatchResponse);
@@ -60,8 +62,6 @@ service Engine {
     rpc get_state_info (StateInfoReq) returns (StateInfoRes);
 
 }
-
-
 
 // * TRANSACTION ENGINE =======================================================================================
 
@@ -197,7 +197,7 @@ message PerpOrderMessage {
     uint64 expiration_timestamp = 1;
     GrpcPerpPosition position = 2;
     uint32 position_effect_type = 3; // 0-open, 1-modify, 2-close, 3-liquidate
-    uint32 order_side = 4; // 0-buy, 1-sell
+    bool order_side = 4;  // true-BID, false-ASK
     uint32 synthetic_token = 5;
     uint32 collateral_token = 6;
     uint64 synthetic_amount = 7;
@@ -213,7 +213,7 @@ message PerpOrderMessage {
 
 
 message GrpcPerpPosition {
-    uint32 order_side = 1;
+    bool order_side = 1;  // true-BID, false-ASK
     GrcpPositionHeader position_header = 2;
     uint64 position_size = 3;
     uint64 margin = 4;
@@ -240,14 +240,14 @@ message GrcpPositionHeader {
 
 
 message LiquidationOrderMessage {
-    GrpcPerpPosition position = 2;
-    uint32 order_side = 4; // 0-buy, 1-sell
-    uint32 synthetic_token = 5;
-    uint64 synthetic_amount = 7;
-    uint64 collateral_amount = 8;
-    GrpcOpenOrderFields open_order_fields = 10;
-    Signature signature = 12;
-    uint64 user_id = 14; // used to send a response thorugh a ws
+    GrpcPerpPosition position = 1;
+    bool order_side = 2;  // true-BID, false-ASK
+    uint32 synthetic_token = 3;
+    uint64 synthetic_amount = 4;
+    uint64 collateral_amount = 5;
+    GrpcOpenOrderFields open_order_fields = 6;
+    Signature signature = 7;
+    uint64 user_id = 8; // used to send a response thorugh a ws
 }
 
 
@@ -301,23 +301,21 @@ message CloseOrderTabRes {
 // SMART CONTRACT MMS ==================================================================================
 
 message OnChainRegisterMMReq {
-    GrpcOrderTab order_tab = 1;
-    GrpcPerpPosition position = 2;
-    uint32 vlp_token = 3;
-    uint64 max_vlp_supply = 4;
-    GrpcCloseOrderFields vlp_close_order_fields = 5;
-    Signature signature = 6;
-    uint32 market_id = 7;
-    uint32 base_token = 8;
+    GrpcPerpPosition position = 1;
+    uint32 vlp_token = 2;
+    uint64 max_vlp_supply = 3;
+    Signature signature = 4;
+    uint32 market_id = 5;
+    uint32 synthetic_token = 6;
 }
 
-message OnChainRegisterMMRes {
+
+message OnChainScmmRes {
     bool successful = 1;
     string error_message = 2;
-    GrpcOrderTab order_tab = 3;
-    GrpcPerpPosition position = 4;
-    GrpcVlpNote vlp_note = 5;
+    GrpcPerpPosition position = 3;
 }
+
 
 // -------------------------------------------------------
 
@@ -326,6 +324,8 @@ message OnChainAddLiqReq {
     string depositor = 2;
     uint64 initial_value = 3;
     Signature signature = 4;
+    uint32 market_id = 5;
+    uint32 synthetic_token = 6;
 }
 
 message OnChainRemoveLiqReq { 
@@ -334,6 +334,17 @@ message OnChainRemoveLiqReq {
     uint64 initial_value = 3;
     uint64 vlp_amount = 4;
     Signature signature = 5;
+    uint32 market_id = 6;
+    uint32 synthetic_token = 7;
+}
+
+message OnChainCloseMmReq { 
+    GrpcPerpPosition position = 1;
+    uint64 initial_value_sum = 3;
+    uint64 vlp_amount_sum = 4;
+    Signature signature = 5;
+    uint32 market_id = 6;
+    uint32 synthetic_token = 7;
 }
 
 // ------ --------------------------------------------
@@ -433,14 +444,7 @@ message Signature {
     string s = 2;
 }
 
-message GrpcVlpNote {
-    uint64 index = 1;
-    Address address = 2;
-    uint32 token = 3;
-    uint64 amount = 4;
-    uint64 initial_value = 5;
-    string blinding = 6;
-}
+
 
 // * LIQUIDITY ---------------------------------------------------
 

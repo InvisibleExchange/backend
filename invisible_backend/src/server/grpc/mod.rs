@@ -14,7 +14,6 @@ use crate::{
         perp_helpers::perp_swap_outptut::PerpSwapResponse, perp_order::CloseOrderFields,
         perp_position::PerpPosition,
     },
-    smart_contract_mms::{remove_liquidity::RemoveLiqRes, vlp_note::VlpNote},
     transactions::swap::SwapResponse,
     utils::crypto_utils::Signature,
     utils::{
@@ -24,8 +23,8 @@ use crate::{
 };
 
 use self::engine_proto::{
-    CloseOrderTabReq, OnChainAddLiqTabReq, OnChainRegisterMmReq, OnChainRemoveLiqTabReq,
-    OpenOrderTabReq,
+    CloseOrderTabReq, OnChainAddLiqReq, OnChainCloseMmReq, OnChainRegisterMmReq,
+    OnChainRemoveLiqReq, OpenOrderTabReq,
 };
 
 pub mod helpers;
@@ -84,17 +83,17 @@ pub struct ChangeMarginMessage {
 pub struct OrderTabActionMessage {
     pub open_order_tab_req: Option<OpenOrderTabReq>,
     pub close_order_tab_req: Option<CloseOrderTabReq>,
-    pub onchain_register_mm_req: Option<OnChainRegisterMmReq>,
-    pub onchain_add_liq_req: Option<OnChainAddLiqTabReq>,
-    pub onchain_remove_liq_req: Option<OnChainRemoveLiqTabReq>,
 }
 
 pub struct OrderTabActionResponse {
     pub open_tab_response: Option<std::result::Result<OrderTab, String>>,
     pub close_tab_response: Option<std::result::Result<(Note, Note), String>>,
-    pub register_mm_response:
-        Option<std::result::Result<(Option<OrderTab>, Option<PerpPosition>, VlpNote), String>>,
-    pub add_liq_response:
-        Option<std::result::Result<(Option<OrderTab>, Option<PerpPosition>, VlpNote), String>>,
-    pub remove_liq_response: Option<std::result::Result<RemoveLiqRes, String>>,
+}
+
+// Smart Contract initiated Market Maker actions
+pub struct SCMMActionMessage {
+    pub onchain_register_mm_req: Option<OnChainRegisterMmReq>,
+    pub onchain_add_liq_req: Option<OnChainAddLiqReq>,
+    pub onchain_remove_liq_req: Option<OnChainRemoveLiqReq>,
+    pub onchain_close_mm_req: Option<OnChainCloseMmReq>,
 }

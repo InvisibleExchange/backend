@@ -72,9 +72,6 @@ pub async fn open_order_tab_inner(
     let tab_action_message = OrderTabActionMessage {
         open_order_tab_req: Some(req),
         close_order_tab_req: None,
-        onchain_add_liq_req: None,
-        onchain_register_mm_req: None,
-        onchain_remove_liq_req: None,
     };
 
     let mut tx_batch_m = tx_batch.lock().await;
@@ -145,9 +142,6 @@ pub async fn close_order_tab_inner(
     let tab_action_message = OrderTabActionMessage {
         open_order_tab_req: None,
         close_order_tab_req: Some(req),
-        onchain_add_liq_req: None,
-        onchain_register_mm_req: None,
-        onchain_remove_liq_req: None,
     };
 
     let mut tx_batch_m = tx_batch.lock().await;

@@ -15,10 +15,10 @@ use crate::{
         perp_helpers::perp_swap_helpers::get_max_leverage, perp_position::PerpPosition,
         COLLATERAL_TOKEN,
     },
-    server::grpc::{OrderTabActionMessage, OrderTabActionResponse},
+    server::grpc::{OrderTabActionMessage, OrderTabActionResponse, SCMMActionMessage},
     smart_contract_mms::{
-        add_liquidity::add_liquidity_to_mm, register_mm::onchain_register_mm,
-        remove_liquidity::remove_liquidity_from_order_tab,
+        add_liquidity::add_liquidity_to_mm, close_mm::close_onchain_mm,
+        register_mm::onchain_register_mm, remove_liquidity::remove_liquidity_from_order_tab,
     },
     transaction_batch::LeafNodeType,
     transactions::transaction_helpers::db_updates::{update_db_after_note_split, DbNoteUpdater},
@@ -331,7 +331,6 @@ pub fn _execute_order_tab_modification_inner(
     firebase_session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
-    latest_index_price: &HashMap<u32, u64>,
     tab_action_message: OrderTabActionMessage,
 ) -> JoinHandle<OrderTabActionResponse> {
     let state_tree = state_tree.clone();
@@ -339,7 +338,6 @@ pub fn _execute_order_tab_modification_inner(
     let session = firebase_session.clone();
     let backup_storage = backup_storage.clone();
     let swap_output_json = swap_output_json.clone();
-    let latest_index_price = latest_index_price.clone();
 
     let handle = thread::spawn(move || {
         if tab_action_message.open_order_tab_req.is_some() {
@@ -357,13 +355,10 @@ pub fn _execute_order_tab_modification_inner(
             let order_tab_action_response = OrderTabActionResponse {
                 open_tab_response: Some(new_order_tab),
                 close_tab_response: None,
-                add_liq_response: None,
-                register_mm_response: None,
-                remove_liq_response: None,
             };
 
             return order_tab_action_response;
-        } else if tab_action_message.close_order_tab_req.is_some() {
+        } else {
             let close_order_tab_req = tab_action_message.close_order_tab_req.unwrap();
 
             let close_tab_response = close_order_tab(
@@ -378,90 +373,74 @@ pub fn _execute_order_tab_modification_inner(
             let order_tab_action_response = OrderTabActionResponse {
                 open_tab_response: None,
                 close_tab_response: Some(close_tab_response),
-                add_liq_response: None,
-                register_mm_response: None,
-                remove_liq_response: None,
             };
 
             return order_tab_action_response;
-        } else if tab_action_message.onchain_register_mm_req.is_some() {
-            let register_mm_req = tab_action_message.onchain_register_mm_req.unwrap();
+        }
+    });
 
-            let index_price = *latest_index_price
-                .get(&register_mm_req.base_token)
-                .unwrap_or(&0);
+    return handle;
+}
 
-            let register_mm_response = onchain_register_mm(
+pub fn _execute_sc_mm_modification_inner(
+    state_tree: &Arc<Mutex<SuperficialTree>>,
+    updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    firebase_session: &Arc<Mutex<ServiceSession>>,
+    backup_storage: &Arc<Mutex<BackupStorage>>,
+    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    scmm_action_message: SCMMActionMessage,
+) -> JoinHandle<std::result::Result<PerpPosition, String>> {
+    let state_tree = state_tree.clone();
+    let updated_state_hashes = updated_state_hashes.clone();
+    let session = firebase_session.clone();
+    let backup_storage = backup_storage.clone();
+    let swap_output_json = swap_output_json.clone();
+
+    let handle = thread::spawn(move || {
+        if scmm_action_message.onchain_register_mm_req.is_some() {
+            let register_mm_req = scmm_action_message.onchain_register_mm_req.unwrap();
+
+            return onchain_register_mm(
                 &session,
                 &backup_storage,
                 register_mm_req,
                 &state_tree,
                 &updated_state_hashes,
                 &swap_output_json,
-                index_price,
             );
+        } else if scmm_action_message.onchain_add_liq_req.is_some() {
+            let add_liquidity_req = scmm_action_message.onchain_add_liq_req.unwrap();
 
-            let order_tab_action_response = OrderTabActionResponse {
-                open_tab_response: None,
-                close_tab_response: None,
-                add_liq_response: None,
-                register_mm_response: Some(register_mm_response),
-                remove_liq_response: None,
-            };
-
-            return order_tab_action_response;
-        } else if tab_action_message.onchain_add_liq_req.is_some() {
-            let add_liquidity_req = tab_action_message.onchain_add_liq_req.unwrap();
-
-            let index_price = *latest_index_price
-                .get(&add_liquidity_req.base_token)
-                .unwrap_or(&0);
-
-            let result = add_liquidity_to_mm(
+            return add_liquidity_to_mm(
                 &session,
                 &backup_storage,
                 add_liquidity_req,
                 &state_tree,
                 &updated_state_hashes,
                 &swap_output_json,
-                index_price,
             );
+        } else if scmm_action_message.onchain_close_mm_req.is_some() {
+            let remove_liquidity_req = scmm_action_message.onchain_remove_liq_req.unwrap();
 
-            let order_tab_action_response = OrderTabActionResponse {
-                open_tab_response: None,
-                close_tab_response: None,
-                add_liq_response: Some(result),
-                register_mm_response: None,
-                remove_liq_response: None,
-            };
-
-            return order_tab_action_response;
-        } else {
-            let remove_liquidity_req = tab_action_message.onchain_remove_liq_req.unwrap();
-
-            let index_price = *latest_index_price
-                .get(&remove_liquidity_req.base_token)
-                .unwrap_or(&0);
-
-            let remove_liq_response = remove_liquidity_from_order_tab(
+            return remove_liquidity_from_order_tab(
                 &session,
                 &backup_storage,
                 remove_liquidity_req,
                 &state_tree,
                 &updated_state_hashes,
                 &swap_output_json,
-                index_price,
             );
+        } else {
+            let close_req = scmm_action_message.onchain_close_mm_req.unwrap();
 
-            let order_tab_action_response = OrderTabActionResponse {
-                open_tab_response: None,
-                close_tab_response: None,
-                add_liq_response: None,
-                register_mm_response: None,
-                remove_liq_response: Some(remove_liq_response),
-            };
-
-            return order_tab_action_response;
+            return close_onchain_mm(
+                &session,
+                &backup_storage,
+                close_req,
+                &state_tree,
+                &updated_state_hashes,
+                &swap_output_json,
+            );
         }
     });
 

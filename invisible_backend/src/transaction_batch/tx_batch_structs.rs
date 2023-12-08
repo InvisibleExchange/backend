@@ -360,15 +360,15 @@ impl GlobalDexState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgramInputCounts {
     pub n_output_notes: u32,
-    pub n_output_positions: u32,
-    pub n_output_tabs: u32,
+    pub n_output_positions: u16,
+    pub n_output_tabs: u16,
     pub n_zero_indexes: u32,
-    pub n_deposits: u32,
-    pub n_withdrawals: u32,
-    pub n_mm_registrations: u32,
-    pub n_note_escapes: u32,
-    pub n_position_escapes: u32,
-    pub n_tab_escapes: u32,
+    pub n_deposits: u16,
+    pub n_withdrawals: u16,
+    pub n_onchain_mm_actions: u16,
+    pub n_note_escapes: u16,
+    pub n_position_escapes: u16,
+    pub n_tab_escapes: u16,
 }
 
 // * Global Config

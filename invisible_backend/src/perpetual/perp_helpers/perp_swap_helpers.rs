@@ -368,41 +368,70 @@ pub fn consistency_checks(
         ));
     }
 
-    if order_a.position.is_some()
-        && order_a
+    if order_a.position.is_some() {
+        if order_a
             .position
             .as_ref()
             .unwrap()
             .position_header
             .synthetic_token
             != order_a.synthetic_token
-    {
-        return Err(send_perp_swap_error(
-            "order and position token mismatch".to_string(),
-            Some(order_a.order_id),
-            Some(format!(
-                "synthetic token mismatch {:?} != {:?}",
-                order_a.synthetic_token, order_b.synthetic_token
-            )),
-        ));
+        {
+            return Err(send_perp_swap_error(
+                "order and position token mismatch".to_string(),
+                Some(order_a.order_id),
+                Some(format!(
+                    "synthetic token mismatch {:?} != {:?}",
+                    order_a.synthetic_token, order_b.synthetic_token
+                )),
+            ));
+        }
+
+        if order_a.position_effect_type == PositionEffectType::Close
+            && order_a.position.as_ref().unwrap().vlp_supply > 0
+        {
+            return Err(send_perp_swap_error(
+                "cannot close position with vlp supply".to_string(),
+                Some(order_a.order_id),
+                Some(format!(
+                    "cannot close position with vlp supply: {:?}",
+                    order_a.position.as_ref().unwrap().vlp_supply
+                )),
+            ));
+        }
     }
-    if order_b.position.is_some()
-        && order_b
+
+    if order_b.position.is_some() {
+        if order_b
             .position
             .as_ref()
             .unwrap()
             .position_header
             .synthetic_token
             != order_b.synthetic_token
-    {
-        return Err(send_perp_swap_error(
-            "order and position token mismatch".to_string(),
-            Some(order_b.order_id),
-            Some(format!(
-                "synthetic token mismatch {:?} != {:?}",
-                order_b.synthetic_token, order_b.synthetic_token
-            )),
-        ));
+        {
+            return Err(send_perp_swap_error(
+                "order and position token mismatch".to_string(),
+                Some(order_b.order_id),
+                Some(format!(
+                    "synthetic token mismatch {:?} != {:?}",
+                    order_b.synthetic_token, order_b.synthetic_token
+                )),
+            ));
+        }
+
+        if order_b.position_effect_type == PositionEffectType::Close
+            && order_b.position.as_ref().unwrap().vlp_supply > 0
+        {
+            return Err(send_perp_swap_error(
+                "cannot close position with vlp supply".to_string(),
+                Some(order_b.order_id),
+                Some(format!(
+                    "cannot close position with vlp supply: {:?}",
+                    order_b.position.as_ref().unwrap().vlp_supply
+                )),
+            ));
+        }
     }
 
     // ? Check that the orders are the opposite sides

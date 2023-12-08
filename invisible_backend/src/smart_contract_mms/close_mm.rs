@@ -8,7 +8,7 @@ use firestore_db_and_auth::ServiceSession;
 
 use crate::{
     perpetual::perp_position::PerpPosition,
-    server::grpc::engine_proto::OnChainRemoveLiqReq,
+    server::grpc::engine_proto::OnChainCloseMmReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
     utils::storage::{firestore::start_add_position_thread, local_storage::BackupStorage},
@@ -17,25 +17,25 @@ use crate::{
 use crate::utils::crypto_utils::Signature;
 
 use super::helpers::{
-    json_output::onchain_position_remove_liquidity_json_output,
+    json_output::onchain_position_close_json_output,
     mm_helpers::{
-        get_return_collateral_amount, onchain_register_mm_state_updates,
-        verfiy_remove_liquidity_sig, verify_position_validity,
+        get_return_collateral_amount, onchain_register_mm_state_updates, verfiy_mm_pos_close_sig,
+        verify_position_validity,
     },
 };
 
 /// Claim the deposit that was created onchain
-pub fn remove_liquidity_from_order_tab(
+pub fn close_onchain_mm(
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    remove_liquidity_req: OnChainRemoveLiqReq,
+    close_req: OnChainCloseMmReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
 ) -> std::result::Result<PerpPosition, String> {
     //
 
-    let position = verify_position_validity(&remove_liquidity_req.position, &state_tree)?;
+    let position = verify_position_validity(&close_req.position, &state_tree)?;
 
     // ? Verify this is not a smart_contract initiated position
     if position.vlp_supply <= 0 {
@@ -43,30 +43,26 @@ pub fn remove_liquidity_from_order_tab(
     }
 
     // ? Verify the signature ---------------------------------------------------------------------
-    let signature = Signature::try_from(remove_liquidity_req.signature.unwrap_or_default())
+    let signature = Signature::try_from(close_req.signature.unwrap_or_default())
         .map_err(|err| err.to_string())?;
-    let valid = verfiy_remove_liquidity_sig(
+    let valid = verfiy_mm_pos_close_sig(
         &position,
-        &remove_liquidity_req.depositor,
-        remove_liquidity_req.initial_value,
-        remove_liquidity_req.vlp_amount,
+        close_req.initial_value_sum,
+        close_req.vlp_amount_sum,
         &signature,
     );
     if !valid {
         return Err("Invalid Signature".to_string());
     }
 
-    // let is_full_close =
-    //     vlp_amount >= position.vlp_supply - DUST_AMOUNT_PER_ASSET[&COLLATERAL_TOKEN.to_string()];
-
     let return_collateral_amount = get_return_collateral_amount(
-        remove_liquidity_req.vlp_amount,
+        close_req.vlp_amount_sum,
         position.vlp_supply,
         position.margin,
     );
 
     let mm_fee: i64 =
-        (return_collateral_amount as i64 - remove_liquidity_req.initial_value as i64) * 20 / 100; // 20% fee
+        (return_collateral_amount as i64 - close_req.initial_value_sum as i64) * 20 / 100; // 20% fee
     let mm_fee = std::cmp::max(0, mm_fee) as u64;
 
     // ? Adding to an existing order tab
@@ -75,17 +71,16 @@ pub fn remove_liquidity_from_order_tab(
     let mut new_position = prev_position.clone();
 
     new_position.margin -= return_collateral_amount;
-    new_position.vlp_supply -= remove_liquidity_req.vlp_amount;
+    new_position.vlp_supply = 0;
     new_position.update_position_info();
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
-    onchain_position_remove_liquidity_json_output(
+    onchain_position_close_json_output(
         swap_output_json_m,
         &prev_position,
         &new_position,
-        &remove_liquidity_req.depositor,
-        remove_liquidity_req.initial_value,
-        remove_liquidity_req.vlp_amount,
+        close_req.initial_value_sum,
+        close_req.vlp_amount_sum,
         return_collateral_amount,
         mm_fee,
         &signature,

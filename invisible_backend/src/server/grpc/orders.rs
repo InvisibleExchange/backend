@@ -246,7 +246,7 @@ impl TryFrom<PerpOrderMessage> for PerpOrder {
                 result = PerpOrder::new_open_order(
                     0,
                     req.expiration_timestamp,
-                    if req.order_side == 1 {
+                    if req.order_side {
                         OrderSide::Long
                     } else {
                         OrderSide::Short
@@ -263,7 +263,7 @@ impl TryFrom<PerpOrderMessage> for PerpOrder {
                     0,
                     req.expiration_timestamp,
                     PerpPosition::try_from(req.position.ok_or(GrpcMessageError {})?)?,
-                    if req.order_side == 1 {
+                    if req.order_side {
                         OrderSide::Long
                     } else {
                         OrderSide::Short
@@ -282,7 +282,7 @@ impl TryFrom<PerpOrderMessage> for PerpOrder {
                     0,
                     req.expiration_timestamp,
                     PerpPosition::try_from(req.position.ok_or(GrpcMessageError {})?)?,
-                    if req.order_side == 1 {
+                    if req.order_side {
                         OrderSide::Long
                     } else {
                         OrderSide::Short
@@ -293,6 +293,11 @@ impl TryFrom<PerpOrderMessage> for PerpOrder {
                     req.fee_limit,
                     close_order_fields,
                 );
+
+                if result.position.is_none() || result.position.as_ref().unwrap().vlp_supply > 0 {
+                    return Err(Report::new(GrpcMessageError {})
+                        .attach("Invalid position, can't close a position with vlp tokens"));
+                }
             }
             _ => {
                 return Err(Report::new(GrpcMessageError {}).attach("Invalid position effect type"))
@@ -365,7 +370,7 @@ impl TryFrom<LiquidationOrderMessage> for LiquidationOrder {
 
         let result = LiquidationOrder::new(
             position,
-            if req.order_side == 1 {
+            if req.order_side {
                 OrderSide::Long
             } else {
                 OrderSide::Short
