@@ -18,7 +18,11 @@ pub fn onchain_register_json_output(
     let mut json_map = serde_json::map::Map::new();
     json_map.insert(
         String::from("transaction_type"),
-        serde_json::to_value(&"onchain_register_mm").unwrap(),
+        serde_json::to_value(&"onchain_mm_action").unwrap(),
+    );
+    json_map.insert(
+        String::from("action_type"),
+        serde_json::to_value(&"regsiter_mm").unwrap(),
     );
     json_map.insert(
         String::from("prev_position"),
@@ -61,6 +65,10 @@ pub fn onchain_position_add_liquidity_json_output(
     let mut json_map = serde_json::map::Map::new();
     json_map.insert(
         String::from("transaction_type"),
+        serde_json::to_value(&"onchain_mm_action").unwrap(),
+    );
+    json_map.insert(
+        String::from("action_type"),
         serde_json::to_value(&"add_liquidity").unwrap(),
     );
     json_map.insert(
@@ -110,6 +118,10 @@ pub fn onchain_position_remove_liquidity_json_output(
     let mut json_map = serde_json::map::Map::new();
     json_map.insert(
         String::from("transaction_type"),
+        serde_json::to_value(&"onchain_mm_action").unwrap(),
+    );
+    json_map.insert(
+        String::from("action_type"),
         serde_json::to_value(&"remove_liquidity").unwrap(),
     );
     json_map.insert(
@@ -166,6 +178,10 @@ pub fn onchain_position_close_json_output(
     let mut json_map = serde_json::map::Map::new();
     json_map.insert(
         String::from("transaction_type"),
+        serde_json::to_value(&"onchain_mm_action").unwrap(),
+    );
+    json_map.insert(
+        String::from("action_type"),
         serde_json::to_value(&"close_mm_position").unwrap(),
     );
     json_map.insert(

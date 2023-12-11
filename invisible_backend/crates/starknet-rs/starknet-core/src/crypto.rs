@@ -1,6 +1,8 @@
 use crate::types::FieldElement;
 
-pub use starknet_crypto::{pedersen_hash, ExtendedSignature, Signature};
+pub use starknet_crypto::{
+    pedersen_hash, poseidon_hash, poseidon_hash_many, ExtendedSignature, Signature,
+};
 use starknet_crypto::{rfc6979_generate_k, sign, verify, SignError, VerifyError};
 use thiserror::Error;
 

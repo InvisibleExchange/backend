@@ -3,10 +3,12 @@ use std::str::FromStr;
 use num_bigint::{BigInt, BigUint};
 use starknet::core::{
     crypto::{
-        compute_hash_on_elements, ecdsa_verify, pedersen_hash, Signature as StarknetSignature,
+        compute_hash_on_elements, ecdsa_verify, pedersen_hash, poseidon_hash, poseidon_hash_many,
+        Signature as StarknetSignature,
     },
     types::FieldElement,
 };
+// use starknet::
 
 use starknet::curve::AffinePoint;
 
@@ -29,6 +31,31 @@ pub fn pedersen_on_vec(arr: &Vec<&BigUint>) -> BigUint {
     let input: &[FieldElement] = &input.as_slice();
 
     let res = compute_hash_on_elements(input);
+
+    let hash = BigUint::from_str(&res.to_string()).unwrap();
+
+    return hash;
+}
+
+pub fn hash(a: &BigUint, b: &BigUint) -> BigUint {
+    let left = FieldElement::from_dec_str(&a.to_string()).unwrap();
+    let right = FieldElement::from_dec_str(&b.to_string()).unwrap();
+
+    let res = poseidon_hash(left, right);
+
+    let hash = BigUint::from_str(&res.to_string()).unwrap();
+
+    return hash;
+}
+
+pub fn hash_many(arr: &Vec<&BigUint>) -> BigUint {
+    let input = arr
+        .iter()
+        .map(|el| FieldElement::from_dec_str(&el.to_string()).unwrap())
+        .collect::<Vec<FieldElement>>();
+    let input: &[FieldElement] = &input.as_slice();
+
+    let res = poseidon_hash_many(input);
 
     let hash = BigUint::from_str(&res.to_string()).unwrap();
 

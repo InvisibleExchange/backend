@@ -12,8 +12,7 @@ use self::{
         restore_forced_note_escape, restore_forced_position_escape, restore_forced_tab_escape,
     },
     restore_order_tabs::{
-        restore_add_liquidity, restore_close_order_tab, restore_open_order_tab,
-        restore_register_mm, restore_remove_liquidity,
+        restore_close_order_tab, restore_onchain_mm_action, restore_open_order_tab,
     },
     restore_perp_swaps::{restore_liquidation_order_execution, restore_perp_order_execution},
     restore_spot_swap::{
@@ -124,14 +123,8 @@ pub fn _restore_state_inner(
             "close_order_tab" => {
                 restore_close_order_tab(&state_tree, &updated_state_hashes, &transaction)
             }
-            "onchain_register_mm" => {
-                restore_register_mm(&state_tree, &updated_state_hashes, &transaction)
-            }
-            "add_liquidity" => {
-                restore_add_liquidity(&state_tree, &updated_state_hashes, &transaction)
-            }
-            "remove_liquidity" => {
-                restore_remove_liquidity(&state_tree, &updated_state_hashes, &transaction)
+            "onchain_mm_action" => {
+                restore_onchain_mm_action(&state_tree, &updated_state_hashes, &transaction)
             }
             "forced_escape" => match transaction.get("escape_type").unwrap().as_str().unwrap() {
                 "note_escape" => {

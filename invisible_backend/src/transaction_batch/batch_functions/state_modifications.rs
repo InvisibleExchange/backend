@@ -419,7 +419,7 @@ pub fn _execute_sc_mm_modification_inner(
                 &updated_state_hashes,
                 &swap_output_json,
             );
-        } else if scmm_action_message.onchain_close_mm_req.is_some() {
+        } else if scmm_action_message.onchain_remove_liq_req.is_some() {
             let remove_liquidity_req = scmm_action_message.onchain_remove_liq_req.unwrap();
 
             return remove_liquidity_from_order_tab(

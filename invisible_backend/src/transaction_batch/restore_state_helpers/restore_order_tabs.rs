@@ -123,13 +123,13 @@ pub fn restore_close_order_tab(
 }
 
 // * REGISTER MM RESTORE FUNCTIONS ================================================================================
-pub fn restore_register_mm(
-    tree_m: &Arc<Mutex<SuperficialTree>>,
-    updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+pub fn restore_onchain_mm_action(
+    state_tree: &Arc<Mutex<SuperficialTree>>,
+    updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     transaction: &Map<String, Value>,
 ) {
-    let mut state_tree = tree_m.lock();
-    let mut updated_state_hashes = updated_state_hashes_m.lock();
+    let mut state_tree_m = state_tree.lock();
+    let mut updated_state_hashes_m = updated_state_hashes.lock();
 
     // ? Position
     let position = transaction.get("prev_position").unwrap();
@@ -142,59 +142,9 @@ pub fn restore_register_mm(
         .unwrap();
     let pos_hash = BigUint::from_str(pos_hash).unwrap();
 
-    state_tree.update_leaf_node(&pos_hash, idx);
-    updated_state_hashes.insert(idx, (LeafNodeType::Position, pos_hash));
+    state_tree_m.update_leaf_node(&pos_hash, idx);
+    updated_state_hashes_m.insert(idx, (LeafNodeType::Position, pos_hash));
 
-    drop(state_tree);
-    drop(updated_state_hashes);
-}
-
-// * ADD LIQUIDITY RESTORE FUNCTIONS ================================================================================
-
-pub fn restore_add_liquidity(
-    tree_m: &Arc<Mutex<SuperficialTree>>,
-    updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    transaction: &Map<String, Value>,
-) {
-    let mut state_tree = tree_m.lock();
-    let mut updated_state_hashes = updated_state_hashes_m.lock();
-
-    // ? Position
-    let position = transaction.get("prev_position").unwrap();
-    let idx: u64 = position.get("index").unwrap().as_u64().unwrap();
-    let pos_hash = transaction
-        .get("new_position_hash")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    let pos_hash = BigUint::from_str(pos_hash).unwrap();
-
-    state_tree.update_leaf_node(&pos_hash, idx);
-    updated_state_hashes.insert(idx, (LeafNodeType::Position, pos_hash));
-
-    drop(state_tree);
-    drop(updated_state_hashes);
-}
-
-// * REMOVE LIQUIDITY RESTORE FUNCTIONS ================================================================================
-
-pub fn restore_remove_liquidity(
-    tree_m: &Arc<Mutex<SuperficialTree>>,
-    updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    transaction: &Map<String, Value>,
-) {
-    let mut state_tree = tree_m.lock();
-    let mut updated_state_hashes = updated_state_hashes_m.lock();
-
-    // ? Position
-    let position = transaction.get("prev_position").unwrap();
-    let idx: u64 = position.get("index").unwrap().as_u64().unwrap();
-    let pos_hash = transaction.get("new_position_hash").unwrap();
-    let pos_hash = BigUint::from_str(pos_hash.as_str().unwrap()).unwrap();
-
-    state_tree.update_leaf_node(&pos_hash, idx);
-    updated_state_hashes.insert(idx, (LeafNodeType::Position, pos_hash));
-
-    drop(state_tree);
-    drop(updated_state_hashes);
+    drop(state_tree_m);
+    drop(updated_state_hashes_m);
 }
