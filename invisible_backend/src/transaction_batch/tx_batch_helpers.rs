@@ -46,10 +46,9 @@ pub fn get_final_updated_counts(
     swap_output_json: &Vec<Map<String, Value>>,
 ) -> ProgramInputCounts {
     let mut n_output_notes: u32 = 0; //= self.updated_state_hashes.len() as u32;
-    let mut n_output_positions: u32 = 0; // = self.perpetual_updated_position_hashes.len() as u32;
-    let mut n_output_tabs: u32 = 0;
+    let mut n_output_positions: u16 = 0; // = self.perpetual_updated_position_hashes.len() as u32;
+    let mut n_output_tabs: u16 = 0;
     let mut n_zero_indexes: u32 = 0;
-    let mut n_mm_registrations: u32 = 0;
 
     for (_, (leaf_type, leaf_hash)) in updated_state_hashes.iter() {
         if leaf_hash == &BigUint::zero() {
@@ -65,23 +64,16 @@ pub fn get_final_updated_counts(
                 LeafNodeType::OrderTab => {
                     n_output_tabs += 1;
                 }
-                LeafNodeType::MMSpotRegistration => {
-                    n_mm_registrations += 1;
-                    n_output_tabs += 1;
-                }
-                LeafNodeType::MMPerpRegistration => {
-                    n_mm_registrations += 1;
-                    n_output_positions += 1;
-                }
             }
         }
     }
 
-    let mut n_deposits: u32 = 0;
-    let mut n_withdrawals: u32 = 0;
-    let mut n_note_escapes: u32 = 0;
-    let mut n_position_escapes: u32 = 0;
-    let mut n_tab_escapes: u32 = 0;
+    let mut n_deposits: u16 = 0;
+    let mut n_withdrawals: u16 = 0;
+    let mut n_onchain_mm_actions: u16 = 0;
+    let mut n_note_escapes: u16 = 0;
+    let mut n_position_escapes: u16 = 0;
+    let mut n_tab_escapes: u16 = 0;
 
     for transaction in swap_output_json {
         let transaction_type = transaction
@@ -96,6 +88,18 @@ pub fn get_final_updated_counts(
             }
             "withdrawal" => {
                 n_withdrawals += 1;
+            }
+            "onchain_register_mm" => {
+                n_onchain_mm_actions += 1;
+            }
+            "add_liquidity" => {
+                n_onchain_mm_actions += 1;
+            }
+            "remove_liquidity" => {
+                n_onchain_mm_actions += 1;
+            }
+            "close_mm_position" => {
+                n_onchain_mm_actions += 1;
             }
             "forced_escape" => match transaction.get("escape_type").unwrap().as_str().unwrap() {
                 "note_escape" => {
@@ -124,7 +128,7 @@ pub fn get_final_updated_counts(
         n_zero_indexes,
         n_deposits,
         n_withdrawals,
-        n_mm_registrations,
+        n_onchain_mm_actions,
         n_note_escapes,
         n_position_escapes,
         n_tab_escapes,

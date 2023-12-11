@@ -217,9 +217,9 @@ pub fn send_matching_error(err_msg: String) -> Report<MatchingEngineError> {
 use tonic::{Response, Status};
 
 use crate::server::grpc::engine_proto::{
-    AddLiqOrderTabRes, AmendOrderResponse, CancelOrderResponse, CloseOrderTabRes, DepositResponse,
-    FundingRes, LiquidationOrderResponse, LiquidityRes, MarginChangeRes, OnChainRegisterMmRes,
-    OpenOrderTabRes, OrderResponse, RemoveLiqOrderTabRes, SplitNotesRes, SuccessResponse,
+    AmendOrderResponse, CancelOrderResponse, CloseOrderTabRes, DepositResponse, FundingRes,
+    LiquidationOrderResponse, LiquidityRes, MarginChangeRes, OnChainScmmRes, OpenOrderTabRes,
+    OrderResponse, SplitNotesRes, SuccessResponse,
 };
 
 // * ERROR GRPC REPLIES
@@ -342,29 +342,21 @@ pub fn send_open_tab_error_reply(err_msg: String) -> Result<Response<OpenOrderTa
 
 //
 
-pub fn send_regster_mm_error_reply(
-    err_msg: String,
-) -> Result<Response<OnChainRegisterMmRes>, Status> {
-    let reply = OnChainRegisterMmRes {
+pub fn send_regster_mm_error_reply(err_msg: String) -> Result<Response<OnChainScmmRes>, Status> {
+    let reply = OnChainScmmRes {
         successful: false,
         error_message: err_msg,
-        order_tab: None,
         position: None,
-        vlp_note: None,
     };
 
     return Ok(Response::new(reply));
 }
 
-pub fn send_add_liq_tab_error_reply(
-    err_msg: String,
-) -> Result<Response<AddLiqOrderTabRes>, Status> {
-    let reply = AddLiqOrderTabRes {
+pub fn send_add_liq_tab_error_reply(err_msg: String) -> Result<Response<OnChainScmmRes>, Status> {
+    let reply = OnChainScmmRes {
         successful: false,
         error_message: err_msg,
-        order_tab: None,
         position: None,
-        vlp_note: None,
     };
 
     return Ok(Response::new(reply));
@@ -372,12 +364,11 @@ pub fn send_add_liq_tab_error_reply(
 
 pub fn send_remove_liq_tab_error_reply(
     err_msg: String,
-) -> Result<Response<RemoveLiqOrderTabRes>, Status> {
-    let reply = RemoveLiqOrderTabRes {
+) -> Result<Response<OnChainScmmRes>, Status> {
+    let reply = OnChainScmmRes {
         successful: false,
         error_message: err_msg,
-        tab_res: None,
-        position_res: None,
+        position: None,
     };
 
     return Ok(Response::new(reply));

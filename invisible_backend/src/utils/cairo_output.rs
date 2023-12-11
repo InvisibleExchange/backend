@@ -22,7 +22,7 @@ pub struct ProgramOutput {
     pub accumulated_hashes: Vec<AccumulatedHashesOutput>,
     pub deposit_outputs: Vec<DepositOutput>,
     pub withdrawal_outputs: Vec<WithdrawalOutput>,
-    pub mm_registrations: Vec<MMRegistrationOutput>,
+    pub mm_onchain_actions: Vec<OnChainMMActionOutput>,
     pub escape_outputs: Vec<EscapeOutput>,
     pub position_escape_outputs: Vec<PositionEscapeOutput>,
     pub note_outputs: Vec<NoteOutput>,
@@ -65,9 +65,9 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
         parse_withdrawal_outputs(&cairo_output, dex_state.program_input_counts.n_withdrawals);
 
     // ? Parse MM registrations
-    let (mm_registrations, cairo_output) = parse_mm_registration_outputs(
+    let (mm_onchain_actions, cairo_output) = parse_onchain_mm_actions(
         &cairo_output,
-        dex_state.program_input_counts.n_mm_registrations,
+        dex_state.program_input_counts.n_onchain_mm_actions,
     );
 
     // ? Parse escapes
@@ -107,7 +107,7 @@ pub fn parse_cairo_output(raw_program_output: Vec<&str>) -> ProgramOutput {
         accumulated_hashes,
         deposit_outputs,
         withdrawal_outputs,
-        mm_registrations,
+        mm_onchain_actions,
         escape_outputs,
         position_escape_outputs,
         note_outputs,
@@ -125,36 +125,32 @@ fn parse_dex_state(output: &[BigUint]) -> (GlobalDexState, &[BigUint]) {
     // & assert config_output_ptr[0] = dex_state.init_state_root;
     // & assert config_output_ptr[1] = dex_state.final_state_root;
 
-    // & 1: | state_tree_depth (8 bits) | global_expiration_timestamp (32 bits) | config_code (128 bits) |
-    // & 2: | n_deposits (32 bits) | n_withdrawals (32 bits) | n_mm_registrations (32 bits) | n_output_notes (32 bits) |
-    // &    | n_output_positions (32 bits) | n_output_tabs (32 bits) | n_zero_indexes (32 bits) |
-
     let init_state_root = &output[0];
     let final_state_root = &output[1];
 
+    // & 1: | state_tree_depth (8 bits) | global_expiration_timestamp (32 bits) | tx_batch_id (32 bits) |
     let batched_output_info = &output[2];
     let res_vec = split_by_bytes(batched_output_info, vec![8, 32, 32]);
     let state_tree_depth = res_vec[0].to_u32().unwrap();
     let global_expiration_timestamp = res_vec[1].to_u32().unwrap();
     let config_code = res_vec[2].to_u32().unwrap();
 
+    // & n_output_notes (32 bits) | n_output_positions (16 bits) | n_output_tabs (16 bits) | n_zero_indexes (32 bits) | n_deposits (16 bits) | n_withdrawals (16 bits) |
+    // & n_onchain_mm_actions (16 bits) | n_note_escapes (16 bits) | n_position_escapes (16 bits) | n_tab_escapes (16 bits) |
     let output_counts1 = &output[3];
-    let res_vec = split_by_bytes(output_counts1, vec![32, 32, 32, 32, 32, 32]);
-    let n_deposits = res_vec[0].to_u32().unwrap();
-    let n_withdrawals = res_vec[1].to_u32().unwrap();
-    let n_mm_registrations = res_vec[2].to_u32().unwrap();
-    let n_output_notes = res_vec[3].to_u32().unwrap();
-    let n_output_positions = res_vec[4].to_u32().unwrap();
-    let n_output_tabs = res_vec[5].to_u32().unwrap();
+    let res_vec = split_by_bytes(output_counts1, vec![32, 16, 16, 32, 16, 16, 16, 16, 16, 16]);
+    let n_output_notes = res_vec[0].to_u32().unwrap();
+    let n_output_positions = res_vec[1].to_u16().unwrap();
+    let n_output_tabs = res_vec[2].to_u16().unwrap();
+    let n_zero_indexes = res_vec[3].to_u32().unwrap();
+    let n_deposits = res_vec[4].to_u16().unwrap();
+    let n_withdrawals = res_vec[5].to_u16().unwrap();
+    let n_onchain_mm_actions = res_vec[6].to_u16().unwrap();
+    let n_note_escapes = res_vec[7].to_u16().unwrap();
+    let n_position_escapes = res_vec[8].to_u16().unwrap();
+    let n_tab_escapes = res_vec[9].to_u16().unwrap();
 
-    let output_counts2 = &output[4];
-    let res_vec = split_by_bytes(output_counts2, vec![32, 32, 32, 32]);
-    let n_zero_indexes = res_vec[0].to_u32().unwrap();
-    let n_note_escapes = res_vec[1].to_u32().unwrap();
-    let n_position_escapes = res_vec[2].to_u32().unwrap();
-    let n_tab_escapes = res_vec[3].to_u32().unwrap();
-
-    let shifted_output = &output[5..];
+    let shifted_output = &output[4..];
 
     let program_input_counts = ProgramInputCounts {
         n_output_notes,
@@ -163,11 +159,13 @@ fn parse_dex_state(output: &[BigUint]) -> (GlobalDexState, &[BigUint]) {
         n_zero_indexes,
         n_deposits,
         n_withdrawals,
-        n_mm_registrations,
+        n_onchain_mm_actions,
         n_note_escapes,
         n_position_escapes,
         n_tab_escapes,
     };
+
+    println!("program_input_counts: {:?}", program_input_counts);
 
     return (
         GlobalDexState::new(
@@ -341,7 +339,7 @@ pub struct DepositOutput {
 
 fn parse_deposit_outputs(
     output: &[BigUint],
-    num_deposits: u32,
+    num_deposits: u16,
 ) -> (Vec<DepositOutput>, &[BigUint]) {
     // output is offset by 12 (dex state)
 
@@ -387,7 +385,7 @@ pub struct WithdrawalOutput {
 
 fn parse_withdrawal_outputs(
     output: &[BigUint],
-    num_wthdrawals: u32,
+    num_wthdrawals: u16,
 ) -> (Vec<WithdrawalOutput>, &[BigUint]) {
     // output is offset by 12 (dex state)
 
@@ -422,46 +420,46 @@ fn parse_withdrawal_outputs(
 // * =====================================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MMRegistrationOutput {
-    pub is_perp: bool,
-    pub vlp_token: u32,
-    pub max_vlp_supply: u64,
-    pub address: String,
+pub struct OnChainMMActionOutput {
+    pub mm_position_address: BigUint,
+    pub depositor: BigUint,
+    pub batched_action_info: BigUint,
 }
 
-fn parse_mm_registration_outputs(
+fn parse_onchain_mm_actions(
     output: &[BigUint],
-    num_registrations: u32,
-) -> (Vec<MMRegistrationOutput>, &[BigUint]) {
-    // & address
-    // & batched_registration_info format: | is_perp (1 bits) | vlp_token (32 bits) | max_vlp_supply (64 bits) |
+    num_actions: u16,
+) -> (Vec<OnChainMMActionOutput>, &[BigUint]) {
+    // & batched_registration_info format: | vlp_token (32 bits) | max_vlp_supply (64 bits) | vlp_amount (64 bits) | action_type (8 bits) |
+    // & batched_add_liq_info format:  usdcAmount (64 bits) | vlp_amount (64 bits) | action_type (8 bits) |
+    // & batched_remove_liq_info format:  | initialValue (64 bits) | vlpAmount (64 bits) | returnAmount (64 bits) | action_type (8 bits) |
+    // & batched_close_mm_info format:  | initialValueSum (64 bits) | vlpAmountSum (64 bits) | returnAmount (64 bits) | action_type (8 bits) |
 
-    let mut mm_registrations: Vec<MMRegistrationOutput> = Vec::new();
+    let mut mm_actions: Vec<OnChainMMActionOutput> = Vec::new();
 
-    for i in 0..num_registrations {
-        let batch_registrations_info = output[(i * 2) as usize].clone();
+    for i in 0..num_actions {
+        let mm_position_address = output[(i * 2) as usize].clone();
+        let depositor = output[(i * 2 + 1) as usize].clone();
 
-        let split_vec = split_by_bytes(&batch_registrations_info, vec![1, 32, 64]);
+        let batched_action_info = output[(i * 3 + 2) as usize].clone();
 
-        let is_perp = split_vec[0].to_u8().unwrap() == 1;
-        let vlp_token = split_vec[1].to_u32().unwrap();
-        let max_vlp_supply = split_vec[2].to_u64().unwrap();
+        // let split_vec = split_by_bytes(&batch_registrations_info, vec![1, 32, 64]);
+        // let is_perp = split_vec[0].to_u8().unwrap() == 1;
+        // let vlp_token = split_vec[1].to_u32().unwrap();
+        // let max_vlp_supply = split_vec[2].to_u64().unwrap();
 
-        let address = output[(i * 2 + 1) as usize].to_string();
-
-        let registration = MMRegistrationOutput {
-            is_perp,
-            vlp_token,
-            max_vlp_supply,
-            address,
+        let registration = OnChainMMActionOutput {
+            mm_position_address,
+            depositor,
+            batched_action_info,
         };
 
-        mm_registrations.push(registration);
+        mm_actions.push(registration);
     }
 
-    let shifted_output = &output[2 * num_registrations as usize..];
+    let shifted_output = &output[2 * num_actions as usize..];
 
-    return (mm_registrations, shifted_output);
+    return (mm_actions, shifted_output);
 }
 
 // * =====================================================================================
@@ -483,7 +481,7 @@ pub struct EscapeOutput {
 
 fn parse_escape_outputs(
     output: &[BigUint],
-    num_escape_outputs: u32,
+    num_escape_outputs: u16,
 ) -> (Vec<EscapeOutput>, &[BigUint]) {
     let mut escape_outputs: Vec<EscapeOutput> = Vec::new();
 
@@ -533,7 +531,7 @@ pub struct PositionEscapeOutput {
 
 fn parse_position_escape_outputs(
     output: &[BigUint],
-    num_escape_outputs: u32,
+    num_escape_outputs: u16,
 ) -> (Vec<PositionEscapeOutput>, &[BigUint]) {
     let mut escape_outputs: Vec<PositionEscapeOutput> = Vec::new();
 
@@ -645,7 +643,7 @@ pub struct PerpPositionOutput {
 
 fn parse_position_outputs(
     output: &[BigUint],
-    num_positions: u32,
+    num_positions: u16,
 ) -> (Vec<PerpPositionOutput>, &[BigUint]) {
     let mut positions: Vec<PerpPositionOutput> = Vec::new();
 
@@ -769,7 +767,7 @@ pub struct OrderTabOutput {
 // & format: | index (56 bits) | base_token (32 bits) | quote_token (32 bits) | base hidden amount (64 bits)
 // &          | quote hidden amount (64 bits) |  is_smart_contract (1 bits) | is_perp (1 bits) |
 
-fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u32) -> (Vec<OrderTabOutput>, &[BigUint]) {
+fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOutput>, &[BigUint]) {
     let mut order_tabs: Vec<OrderTabOutput> = Vec::new();
 
     for i in 0..num_tabs {
