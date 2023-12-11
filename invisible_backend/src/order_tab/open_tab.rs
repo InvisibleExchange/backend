@@ -12,7 +12,7 @@ use crate::{
     server::grpc::engine_proto::OpenOrderTabReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::pedersen_on_vec, notes::Note, storage::local_storage::BackupStorage},
+    utils::{crypto_utils::hash_many, notes::Note, storage::local_storage::BackupStorage},
 };
 
 use crate::utils::crypto_utils::{verify, EcPoint, Signature};
@@ -285,7 +285,7 @@ pub fn verfiy_open_order_sig(
     };
     hash_inputs.push(&quote_refund_note_hash);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     let valid = verify(pub_key, &hash, signature);
 

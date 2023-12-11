@@ -8,7 +8,7 @@ use crate::{
     order_tab::OrderTab,
     transaction_batch::LeafNodeType,
     utils::{
-        crypto_utils::{pedersen, verify, Signature},
+        crypto_utils::{hash, verify, Signature},
         storage::firestore::start_delete_order_tab_thread,
     },
 };
@@ -44,7 +44,6 @@ pub fn verify_order_tab_escape(
     let is_valid = leaf_node == order_tab.hash;
 
     if !verify_tab_signature(&order_tab, &signature, escape_id) {
-
         return OrderTabEscape {
             escape_id,
             is_valid,
@@ -80,7 +79,7 @@ pub fn verify_order_tab_escape(
 }
 
 fn verify_tab_signature(order_tab: &OrderTab, signature: &Signature, escape_id: u32) -> bool {
-    let message_hash = pedersen(&order_tab.hash, &BigUint::from_u32(escape_id).unwrap());
+    let message_hash = hash(&order_tab.hash, &BigUint::from_u32(escape_id).unwrap());
     let valid = verify(&order_tab.tab_header.pub_key, &message_hash, signature);
     return valid;
 }

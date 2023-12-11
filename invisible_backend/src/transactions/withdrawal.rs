@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
-use crate::utils::crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature};
+use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
 use crate::utils::errors::{
     send_withdrawal_error, TransactionExecutionError, WithdrawalThreadExecutionError,
 };
@@ -176,7 +176,7 @@ impl Withdrawal {
         let chain_id = BigUint::from_u32(self.withdrawal_chain_id).unwrap();
         note_hashes.push(&chain_id);
 
-        let withdrawal_hash = pedersen_on_vec(&note_hashes);
+        let withdrawal_hash = hash_many(&note_hashes);
 
         return withdrawal_hash;
     }

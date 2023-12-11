@@ -31,7 +31,7 @@ use crate::{
 };
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::utils::crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature};
+use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
 
 use crate::utils::notes::Note;
 
@@ -169,7 +169,7 @@ fn hash_margin_change_message(margin_change: &ChangeMarginMessage) -> BigUint {
 
         hash_inputs.push(&margin_change.position.hash);
 
-        let hash = pedersen_on_vec(&hash_inputs);
+        let hash = hash_many(&hash_inputs);
 
         return hash;
     } else {
@@ -189,7 +189,7 @@ fn hash_margin_change_message(margin_change: &ChangeMarginMessage) -> BigUint {
 
         hash_inputs.push(&margin_change.position.hash);
 
-        let hash = pedersen_on_vec(&hash_inputs);
+        let hash = hash_many(&hash_inputs);
 
         return hash;
     }

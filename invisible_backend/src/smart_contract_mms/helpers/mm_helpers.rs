@@ -9,7 +9,7 @@ use crate::{
     server::grpc::engine_proto::GrpcPerpPosition,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::crypto_utils::{pedersen_on_vec, verify, Signature},
+    utils::crypto_utils::{hash_many, verify, Signature},
 };
 
 // * ----------------------------------------------------------------------------
@@ -66,7 +66,7 @@ pub fn verfiy_register_mm_sig(
     let max_vlp_supply = BigUint::from(max_vlp_supply);
     hash_inputs.push(&max_vlp_supply);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     let valid = verify(&position.position_header.position_address, &hash, signature);
 
@@ -120,7 +120,7 @@ pub fn verfiy_remove_liquidity_sig(
     let vlp_amount = BigUint::from_u64(vlp_amount).unwrap();
     hash_inputs.push(&vlp_amount);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     let valid = verify(&position.position_header.position_address, &hash, signature);
 
@@ -164,7 +164,7 @@ pub fn verfiy_pos_add_liquidity_sig(
     let collateral_amount = BigUint::from_u64(collateral_amount).unwrap();
     hash_inputs.push(&collateral_amount);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     let valid = verify(&position.position_header.position_address, &hash, signature);
 
@@ -191,7 +191,7 @@ pub fn verfiy_mm_pos_close_sig(
     let vlp_amount_sum = BigUint::from_u64(vlp_amount_sum).unwrap();
     hash_inputs.push(&vlp_amount_sum);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     let valid = verify(&position.position_header.position_address, &hash, signature);
 

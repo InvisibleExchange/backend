@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     transaction_batch::LeafNodeType,
     utils::{
-        crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature},
+        crypto_utils::{hash_many, verify, EcPoint, Signature},
         storage::firestore::start_delete_note_thread,
     },
 };
@@ -46,7 +46,6 @@ pub fn verify_note_escape(
 
     // ? Verify the signatures
     if invalid_note.is_some() || !is_signature_valid {
-
         return NoteEscape {
             escape_id,
             escape_notes,
@@ -137,7 +136,7 @@ fn hash_note_escape_message(escape_id: u32, escape_notes: &Vec<Note>) -> BigUint
         .iter()
         .for_each(|note| hash_inputs.push(&note.hash));
 
-    let order_hash = pedersen_on_vec(&hash_inputs);
+    let order_hash = hash_many(&hash_inputs);
 
     return order_hash;
 }

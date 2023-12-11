@@ -4,7 +4,7 @@ use num_bigint::{BigInt, BigUint};
 use num_traits::FromPrimitive;
 use serde::Deserialize as DeserializeTrait;
 
-use crate::utils::crypto_utils::{pedersen, pedersen_on_vec, EcPoint};
+use crate::utils::crypto_utils::{hash, hash_many, EcPoint};
 
 #[derive(Debug, Clone)]
 pub struct Note {
@@ -42,13 +42,13 @@ fn hash_note(amount: u64, blinding: &BigUint, token: u32, address: &EcPoint) -> 
         return BigUint::from_i8(0).unwrap();
     }
 
-    let commitment = pedersen(&BigUint::from_u64(amount).unwrap(), blinding);
+    let commitment = hash(&BigUint::from_u64(amount).unwrap(), blinding);
 
     let address_x = address.x.to_biguint().unwrap();
     let token = BigUint::from_u32(token).unwrap();
     let hash_input = vec![&address_x, &token, &commitment];
 
-    let note_hash = pedersen_on_vec(&hash_input);
+    let note_hash = hash_many(&hash_input);
 
     return note_hash;
 }

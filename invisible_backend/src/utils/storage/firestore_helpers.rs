@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::utils::crypto_utils::pedersen;
+use crate::utils::crypto_utils::hash;
 use crate::{order_tab::OrderTab, perpetual::perp_position::PerpPosition, utils::notes::Note};
 
 use super::local_storage::BackupStorage;
@@ -39,8 +39,7 @@ impl FirebaseNoteObject {
 
         return FirebaseNoteObject {
             address: [note.address.x.to_string(), note.address.y.to_string()],
-            commitment: pedersen(&BigUint::from_u64(note.amount).unwrap(), &note.blinding)
-                .to_string(),
+            commitment: hash(&BigUint::from_u64(note.amount).unwrap(), &note.blinding).to_string(),
             hidden_amount: hidden_amount.to_string(),
             index: note.index.to_string(),
             token: note.token.to_string(),
@@ -279,7 +278,7 @@ impl OrderTabObject {
             let b2 = &order_tab.tab_header.quote_blinding % BigUint::from(2_u32).pow(128);
 
             let blindings_sum = &b1 + &b2;
-            vlp_supply_commitment = pedersen(&BigUint::from(order_tab.vlp_supply), &blindings_sum);
+            vlp_supply_commitment = hash(&BigUint::from(order_tab.vlp_supply), &blindings_sum);
 
             let vlp_supply_yt_digits = blindings_sum.to_u64_digits();
             let vlp_supply_yt_trimmed = if vlp_supply_yt_digits.len() == 0 {
@@ -301,13 +300,13 @@ impl OrderTabObject {
             base_token: order_tab.tab_header.base_token,
             quote_token: order_tab.tab_header.quote_token,
             pub_key: order_tab.tab_header.pub_key.to_string(),
-            base_commitment: pedersen(
+            base_commitment: hash(
                 &BigUint::from_u64(order_tab.base_amount).unwrap(),
                 &order_tab.tab_header.base_blinding,
             )
             .to_string(),
             base_hidden_amount: base_hidden_amount.to_string(),
-            quote_commitment: pedersen(
+            quote_commitment: hash(
                 &BigUint::from_u64(order_tab.quote_amount).unwrap(),
                 &order_tab.tab_header.quote_blinding,
             )

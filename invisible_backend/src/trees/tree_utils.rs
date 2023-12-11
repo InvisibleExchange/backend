@@ -1,6 +1,6 @@
 use num_bigint::BigUint;
 
-use crate::utils::crypto_utils::pedersen;
+use crate::utils::crypto_utils::hash;
 
 pub fn pairwise_hash(array: &Vec<BigUint>) -> Vec<BigUint> {
     if array.len() % 2 != 0 {
@@ -9,7 +9,7 @@ pub fn pairwise_hash(array: &Vec<BigUint>) -> Vec<BigUint> {
 
     let mut hashes: Vec<BigUint> = Vec::new();
     for i in (0..array.len()).step_by(2) {
-        let hash: BigUint = pedersen(&array[i], &array[i + 1]);
+        let hash: BigUint = hash(&array[i], &array[i + 1]);
         hashes.push(hash);
     }
 

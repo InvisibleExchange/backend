@@ -3,8 +3,8 @@ use std::str::FromStr;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 
-use crate::utils::crypto_utils::pedersen;
-use crate::utils::crypto_utils::pedersen_on_vec;
+use crate::utils::crypto_utils::hash;
+use crate::utils::crypto_utils::hash_many;
 
 pub mod close_tab;
 pub mod db_updates;
@@ -68,10 +68,10 @@ fn hash_tab(
 
     hash_inputs.push(&tab_header.hash);
 
-    let base_commitment = pedersen(&BigUint::from(base_amount), &tab_header.base_blinding);
+    let base_commitment = hash(&BigUint::from(base_amount), &tab_header.base_blinding);
     hash_inputs.push(&base_commitment);
 
-    let quote_commitment = pedersen(&BigUint::from(quote_amount), &tab_header.quote_blinding);
+    let quote_commitment = hash(&BigUint::from(quote_amount), &tab_header.quote_blinding);
     hash_inputs.push(&quote_commitment);
 
     let b1 = &tab_header.base_blinding % BigUint::from(2_u32).pow(128);
@@ -79,13 +79,13 @@ fn hash_tab(
 
     let blindings_sum = &b1 + &b2;
     let vlp_supply_commitment = if vlp_supply > 0 {
-        pedersen(&BigUint::from(vlp_supply), &blindings_sum)
+        hash(&BigUint::from(vlp_supply), &blindings_sum)
     } else {
         BigUint::zero()
     };
     hash_inputs.push(&vlp_supply_commitment);
 
-    let tab_hash = pedersen_on_vec(&hash_inputs);
+    let tab_hash = hash_many(&hash_inputs);
 
     return tab_hash;
 }
@@ -180,7 +180,7 @@ fn hash_header(
 
     hash_inputs.push(&pub_key);
 
-    let order_hash = pedersen_on_vec(&hash_inputs);
+    let order_hash = hash_many(&hash_inputs);
 
     return order_hash;
 }

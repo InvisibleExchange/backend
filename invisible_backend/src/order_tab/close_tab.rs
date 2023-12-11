@@ -12,7 +12,7 @@ use crate::{
     server::grpc::engine_proto::CloseOrderTabReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::pedersen_on_vec, notes::Note, storage::local_storage::BackupStorage},
+    utils::{crypto_utils::hash_many, notes::Note, storage::local_storage::BackupStorage},
 };
 
 use crate::utils::crypto_utils::{verify, Signature};
@@ -194,7 +194,7 @@ pub fn verfiy_close_order_hash(
     let quote_close_order_fields_hash = quote_close_order_fields.hash();
     hash_inputs.push(&quote_close_order_fields_hash);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     println!("hash: {:?}", hash);
     println!("signature: {:?}", signature);

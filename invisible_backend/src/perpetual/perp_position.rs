@@ -13,7 +13,7 @@ use crate::perpetual::{
 };
 use crate::utils::errors::{send_perp_swap_error, PerpSwapExecutionError};
 
-use crate::utils::crypto_utils::pedersen_on_vec;
+use crate::utils::crypto_utils::hash_many;
 
 // position should have address or something
 #[derive(Debug, Clone)]
@@ -1093,7 +1093,7 @@ pub fn _hash_position(
     let vlp_supply = BigUint::from_u64(vlp_supply).unwrap();
     hash_inputs.push(&vlp_supply);
 
-    let position_hash = pedersen_on_vec(&hash_inputs);
+    let position_hash = hash_many(&hash_inputs);
 
     return position_hash;
 }
@@ -1122,7 +1122,7 @@ fn _hash_position_header(
     let vlp_config = BigUint::from_u128(vlp_config).unwrap();
     hash_inputs.push(&vlp_config);
 
-    let position_hash = pedersen_on_vec(&hash_inputs);
+    let position_hash = hash_many(&hash_inputs);
 
     return position_hash;
 }

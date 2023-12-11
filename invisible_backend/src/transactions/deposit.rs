@@ -10,7 +10,7 @@ use crate::utils::errors::{
     send_deposit_error, DepositThreadExecutionError, TransactionExecutionError,
 };
 
-use crate::utils::crypto_utils::{pedersen_on_vec, verify, Signature};
+use crate::utils::crypto_utils::{hash_many, verify, Signature};
 use crate::utils::storage::local_storage::{BackupStorage, MainStorage};
 use num_bigint::BigUint;
 use serde_json::Value;
@@ -183,9 +183,9 @@ impl Deposit {
         let mut note_hashes: Vec<&BigUint> = self.notes.iter().map(|note| &note.hash).collect();
         let deposit_id_bn =
             BigUint::from_str(self.deposit_id.to_string().as_str()).unwrap_or_default();
-        note_hashes.insert(0, &deposit_id_bn);
+        note_hashes.push(&deposit_id_bn);
 
-        return pedersen_on_vec(&note_hashes);
+        return hash_many(&note_hashes);
     }
 }
 
