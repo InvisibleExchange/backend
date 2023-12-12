@@ -454,11 +454,11 @@ impl OrderQueue {
         }
         let (sig, side, qty, user_id) = self.pending_orders.remove(&order_id).unwrap();
 
-        let new_qty = qty - reduce_qty;
-
-        if new_qty <= 0 || force {
+        if qty <= reduce_qty || force {
             self.pending_orders.remove(&order_id);
         } else {
+            let new_qty = qty - reduce_qty;
+
             self.pending_orders
                 .insert(order_id, (sig, side, new_qty, user_id));
         }

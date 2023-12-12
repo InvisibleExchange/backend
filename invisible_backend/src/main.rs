@@ -15,64 +15,9 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // let program_output = test_program_output2();
+    let h = pedersen(&BigUint::zero(), &BigUint::zero());
 
-    // let program_output = format_cairo_ouput(program_output);
-    // // let program_output = preprocess_cairo_output(program_output);
-
-    // // for (i, output) in program_output.iter().enumerate() {
-    // //     println!("{},", output);
-    // // }
-
-    // let output = parse_cairo_output(program_output);
-    // println!("output: {:?} \n", output.mm_onchain_actions);
-
-    let arr = vec![
-        BigUint::from_str(
-            "892356257239756198358065209856295762385265783258162785126378512357263857",
-        )
-        .unwrap(),
-        BigUint::from_str(
-            "189246198172401851074121892461981724018510741243252189246198172401851074",
-        )
-        .unwrap(),
-        BigUint::from_str(
-            "263664821936291892461981724018510741218924619817240185104619817240185107",
-        )
-        .unwrap(),
-        BigUint::from_str(
-            "189246198172401851074124189246198172401851074124074085542858078217863492",
-        )
-        .unwrap(),
-        BigUint::from_str(
-            "263189246198172401851074124366189246198172401851074126198172401851074124",
-        )
-        .unwrap(),
-        BigUint::from_str(
-            "263618924619817240118924619817240181892461981724018510741247240185107444",
-        )
-        .unwrap(),
-        BigUint::from_str(
-            "263664821936297185028342543436642737036272536579074085542858078217863492",
-        )
-        .unwrap(),
-    ];
-    let arr = arr.iter().collect::<Vec<&BigUint>>();
-
-    // let res = hash(
-    //     &BigUint::from_str(
-    //         "2636648219362971850283425434366427370362725365790740855428580782178634926362",
-    //     )
-    //     .unwrap(),
-    //     &BigUint::from_str(
-    //         "2636648219362971850283425434366427370362725365790740855428580782178634926362",
-    //     )
-    //     .unwrap(),
-    // );
-
-    let res = hash_many(&arr);
-
-    println!("poseidon: {:?} \n", res);
+    println!("h: {}", h);
 
     Ok(())
 }
@@ -253,3 +198,14 @@ fn test_program_output2() -> &'static str {
     1571518249481932923260906299462758204245944960281784438868661894750375958570
     1";
 }
+// let program_output = test_program_output2();
+
+// let program_output = format_cairo_ouput(program_output);
+// // let program_output = preprocess_cairo_output(program_output);
+
+// // for (i, output) in program_output.iter().enumerate() {
+// //     println!("{},", output);
+// // }
+
+// let output = parse_cairo_output(program_output);
+// println!("output: {:?} \n", output.mm_onchain_actions);
