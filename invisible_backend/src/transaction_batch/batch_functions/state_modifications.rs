@@ -109,6 +109,22 @@ pub fn _split_notes_inner(
         return Err("New note amounts exceed old note amounts".to_string());
     }
 
+    // *  Make Updates * //
+
+    let mut json_map = serde_json::map::Map::new();
+    json_map.insert(
+        String::from("transaction_type"),
+        serde_json::to_value("note_split").unwrap(),
+    );
+    json_map.insert(
+            String::from("note_split"),
+            json!({"token": token, "notes_in": notes_in, "new_note": new_note, "refund_note": refund_note}),
+        );
+
+    let mut swap_output_json = swap_output_json.lock();
+    swap_output_json.push(json_map);
+    drop(swap_output_json);
+
     // ? Remove notes in from state
     let mut updated_state_hashes = updated_state_hashes.lock();
     for note in notes_in.iter() {
@@ -116,7 +132,7 @@ pub fn _split_notes_inner(
         updated_state_hashes.insert(note.index, (LeafNodeType::Note, BigUint::zero()));
     }
 
-    // ? Add return in to state
+    // ? Add return note in to state
     state_tree.update_leaf_node(&new_note.hash, new_note.index);
     updated_state_hashes.insert(new_note.index, (LeafNodeType::Note, new_note.hash.clone()));
 
@@ -137,22 +153,6 @@ pub fn _split_notes_inner(
         new_note.clone(),
         refund_note.clone(),
     );
-
-    // ----------------------------------------------
-
-    let mut json_map = serde_json::map::Map::new();
-    json_map.insert(
-        String::from("transaction_type"),
-        serde_json::to_value("note_split").unwrap(),
-    );
-    json_map.insert(
-            String::from("note_split"),
-            json!({"token": token, "notes_in": notes_in, "new_note": new_note, "refund_note": refund_note}),
-        );
-
-    let mut swap_output_json = swap_output_json.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
 
     Ok(new_indexes)
 }
@@ -225,6 +225,30 @@ pub fn _change_position_margin_inner(
             return Err("Invalid amount in".to_string());
         }
 
+        // ----------------------------------------------
+
+        let mut json_map = serde_json::map::Map::new();
+        json_map.insert(
+            String::from("transaction_type"),
+            serde_json::to_value("margin_change").unwrap(),
+        );
+        json_map.insert(
+            String::from("margin_change"),
+            serde_json::to_value(&margin_change).unwrap(),
+        );
+        json_map.insert(
+            String::from("new_position_hash"),
+            serde_json::to_value(position.hash.to_string()).unwrap(),
+        );
+        json_map.insert(
+            String::from("zero_idx"),
+            serde_json::to_value(z_index).unwrap(),
+        );
+
+        let mut swap_output_json = swap_output_json.lock();
+        swap_output_json.push(json_map);
+        drop(swap_output_json);
+
         add_margin_state_updates(
             &state_tree,
             &updated_state_hashes,
@@ -281,6 +305,30 @@ pub fn _change_position_margin_inner(
                 .clone(),
         );
 
+        // ----------------------------------------------
+
+        let mut json_map = serde_json::map::Map::new();
+        json_map.insert(
+            String::from("transaction_type"),
+            serde_json::to_value("margin_change").unwrap(),
+        );
+        json_map.insert(
+            String::from("margin_change"),
+            serde_json::to_value(margin_change).unwrap(),
+        );
+        json_map.insert(
+            String::from("new_position_hash"),
+            serde_json::to_value(position.hash.to_string()).unwrap(),
+        );
+        json_map.insert(
+            String::from("zero_idx"),
+            serde_json::to_value(z_index).unwrap(),
+        );
+
+        let mut swap_output_json = swap_output_json.lock();
+        swap_output_json.push(json_map);
+        drop(swap_output_json);
+
         reduce_margin_state_updates(
             &state_tree,
             &updated_state_hashes,
@@ -297,30 +345,6 @@ pub fn _change_position_margin_inner(
 
         z_index = index;
     }
-
-    // ----------------------------------------------
-
-    let mut json_map = serde_json::map::Map::new();
-    json_map.insert(
-        String::from("transaction_type"),
-        serde_json::to_value("margin_change").unwrap(),
-    );
-    json_map.insert(
-        String::from("margin_change"),
-        serde_json::to_value(margin_change).unwrap(),
-    );
-    json_map.insert(
-        String::from("new_position_hash"),
-        serde_json::to_value(position.hash.to_string()).unwrap(),
-    );
-    json_map.insert(
-        String::from("zero_idx"),
-        serde_json::to_value(z_index).unwrap(),
-    );
-
-    let mut swap_output_json = swap_output_json.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
 
     Ok((z_index, position))
 }
@@ -446,3 +470,5 @@ pub fn _execute_sc_mm_modification_inner(
 
     return handle;
 }
+
+// * HELPERS * // ==================================================================================
