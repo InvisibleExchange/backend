@@ -125,14 +125,21 @@ impl SuperficialTree {
     // -----------------------------------------------------------------
     // * GETTERS * //
     pub fn first_zero_idx(&mut self) -> u64 {
+        let idx;
         if self.zero_idxs.len() == 0 {
-            let idx = self.count;
+            idx = self.count;
             self.count += 1;
-
-            return idx;
         } else {
-            return self.zero_idxs.pop().unwrap();
+            idx = self.zero_idxs.pop().unwrap_or_default();
         }
+
+        if let Some(leaf) = self.leaf_nodes.get(idx as usize) {
+            if leaf != &BigUint::zero() {
+                return self.first_zero_idx();
+            }
+        }
+
+        return idx;
     }
 
     pub fn get_leaf_by_index(&self, index: u64) -> BigUint {

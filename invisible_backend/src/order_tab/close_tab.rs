@@ -12,7 +12,7 @@ use crate::{
     server::grpc::engine_proto::CloseOrderTabReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::pedersen_on_vec, notes::Note, storage::local_storage::BackupStorage},
+    utils::{crypto_utils::hash_many, notes::Note, storage::local_storage::BackupStorage},
 };
 
 use crate::utils::crypto_utils::{verify, Signature};
@@ -65,11 +65,6 @@ pub fn close_order_tab(
 
     if base_amount_change > order_tab.base_amount || quote_amount_change > order_tab.quote_amount {
         return Err("amount change is greater than the tab amount".to_string());
-    }
-
-    // ? Verify this is not a smart_contract initiated order tab
-    if order_tab.tab_header.is_smart_contract {
-        return Err("This is a smart contract initiated order tab".to_string());
     }
 
     // ? CHECK THAT THE ORDER TAB EXISTS ---------------------------------------------------
@@ -126,7 +121,6 @@ pub fn close_order_tab(
             order_tab.tab_header.clone(),
             updated_base_amount,
             updated_quote_amount,
-            0,
         ));
     } else {
         updated_order_tab = None;
@@ -194,7 +188,7 @@ pub fn verfiy_close_order_hash(
     let quote_close_order_fields_hash = quote_close_order_fields.hash();
     hash_inputs.push(&quote_close_order_fields_hash);
 
-    let hash = pedersen_on_vec(&hash_inputs);
+    let hash = hash_many(&hash_inputs);
 
     println!("hash: {:?}", hash);
     println!("signature: {:?}", signature);

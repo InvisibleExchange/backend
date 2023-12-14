@@ -9,7 +9,7 @@ use crate::utils::errors::{send_perp_swap_error, PerpSwapExecutionError};
 
 use super::super::perp_position::PerpPosition;
 use crate::perpetual::OrderSide;
-use crate::utils::crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature};
+use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
 
 #[derive(Debug, Clone)]
 pub struct LiquidationOrder {
@@ -143,7 +143,7 @@ fn hash_order(
     let fields_hash = open_order_fields.hash();
     hash_inputs.push(&fields_hash);
 
-    let order_hash = pedersen_on_vec(&hash_inputs);
+    let order_hash = hash_many(&hash_inputs);
 
     return order_hash;
 }

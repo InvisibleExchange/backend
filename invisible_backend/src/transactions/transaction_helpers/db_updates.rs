@@ -83,9 +83,8 @@ fn _update_non_tab_order<'a>(
     }
 
     // ? Delete prev partially fill refund notes (*if necessary)
-    if prev_pfr_note.is_some() {
-        let n = prev_pfr_note.as_ref().unwrap();
-        delete_notes.push((n.index, n.address.x.to_string()));
+    if let Some(note) = prev_pfr_note {
+        delete_notes.push((note.index, note.address.x.to_string()));
     }
 
     // ? Store swap notes

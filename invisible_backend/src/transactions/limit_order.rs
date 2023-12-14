@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::order_tab::OrderTab;
-use crate::utils::crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature};
+use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
 use crate::utils::errors::{send_swap_error, SwapThreadExecutionError};
 
 use error_stack::Result;
@@ -159,7 +159,7 @@ fn hash_order(
         let note_info_hash = spot_note_info.as_ref().unwrap().hash();
         hash_inputs.push(&note_info_hash);
 
-        let order_hash = pedersen_on_vec(&hash_inputs);
+        let order_hash = hash_many(&hash_inputs);
 
         return order_hash;
     } else {
@@ -168,7 +168,7 @@ fn hash_order(
 
         hash_inputs.push(&tab_pub_key);
 
-        let order_hash = pedersen_on_vec(&hash_inputs);
+        let order_hash = hash_many(&hash_inputs);
 
         return order_hash;
     }
@@ -209,7 +209,7 @@ impl SpotNotesInfo {
         hash_inputs.push(&dra_x);
         hash_inputs.push(&self.dest_received_blinding);
 
-        let order_hash = pedersen_on_vec(&hash_inputs);
+        let order_hash = hash_many(&hash_inputs);
 
         return order_hash;
     }

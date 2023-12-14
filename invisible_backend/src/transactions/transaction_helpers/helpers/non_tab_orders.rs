@@ -114,7 +114,7 @@ pub fn execute_non_tab_order_modifications(
         partial_fill_info,
         tree_m,
         is_first_fill,
-        &order.spot_note_info.as_ref().unwrap(),
+        &note_info,
         order.token_received,
         spent_amount_y,
         fee_taken_x,
@@ -148,18 +148,13 @@ pub fn execute_non_tab_order_modifications(
     if is_partially_filled {
         //? Order A was partially filled, we must refund the rest
 
-        let partial_refund_idx: u64;
-        if note_info.notes_in.len() > 2 && is_first_fill {
-            partial_refund_idx = note_info.notes_in[2].index
-        } else {
-            let mut tree = tree_m.lock();
-            partial_refund_idx = tree.first_zero_idx();
-            drop(tree);
-        };
+        let mut tree = tree_m.lock();
+        let partial_refund_idx = tree.first_zero_idx();
+        drop(tree);
 
         let new_partial_refund_note_ = refund_partial_fill(
             spend_amount_left,
-            &order.spot_note_info.as_ref().unwrap(),
+            note_info,
             order.token_spent,
             spent_amount_x,
             partial_refund_idx,

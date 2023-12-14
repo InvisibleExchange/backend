@@ -45,16 +45,9 @@ pub fn update_state_after_swap_first_fill(
         tree.update_leaf_node(&note.hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note.hash.clone()));
         //
-    } else if notes_in.len() > 1 {
-        //
-        let idx = notes_in[1].index;
-
-        tree.update_leaf_node(&BigUint::zero(), idx);
-        updated_state_hashes.insert(idx, (LeafNodeType::Note, BigUint::zero()));
-        //
     }
 
-    for i in 2..notes_in.len() {
+    for i in 1..notes_in.len() {
         let idx = notes_in[i].index;
 
         tree.update_leaf_node(&BigUint::zero(), idx);

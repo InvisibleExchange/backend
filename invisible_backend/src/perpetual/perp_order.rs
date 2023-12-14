@@ -9,7 +9,7 @@ use crate::utils::notes::Note;
 //
 use crate::perpetual::{OrderSide, PositionEffectType};
 
-use crate::utils::crypto_utils::{pedersen, pedersen_on_vec, verify, EcPoint, Signature};
+use crate::utils::crypto_utils::{hash, hash_many, verify, EcPoint, Signature};
 
 #[derive(Debug, Clone)]
 pub struct PerpOrder {
@@ -333,7 +333,7 @@ impl OpenOrderFields {
         };
         hash_inputs.push(&allow_partial_liquidations);
 
-        return pedersen_on_vec(&hash_inputs);
+        return hash_many(&hash_inputs);
     }
 }
 
@@ -368,7 +368,7 @@ impl CloseOrderFields {
     pub fn hash(&self) -> BigUint {
         let addr_x = self.dest_received_address.x.to_biguint().unwrap();
 
-        return pedersen(&addr_x, &self.dest_received_blinding);
+        return hash(&addr_x, &self.dest_received_blinding);
     }
 }
 
@@ -436,12 +436,12 @@ fn hash_order(
     let fee_limit = BigUint::from_u64(fee_limit).unwrap();
     hash_inputs.push(&fee_limit);
 
-    let order_hash = pedersen_on_vec(&hash_inputs);
+    let order_hash = hash_many(&hash_inputs);
 
     if *position_effect_type == PositionEffectType::Open {
-        return pedersen(&order_hash, &open_order_fields.as_ref().unwrap().hash());
+        return hash(&order_hash, &open_order_fields.as_ref().unwrap().hash());
     } else if *position_effect_type == PositionEffectType::Close {
-        return pedersen(&order_hash, &close_order_fields.as_ref().unwrap().hash());
+        return hash(&order_hash, &close_order_fields.as_ref().unwrap().hash());
     } else {
         return order_hash;
     }

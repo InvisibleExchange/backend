@@ -216,10 +216,10 @@ function compileLiqUpdateMessage(orderBooks) {
     if (!isBidQueueSame || !isAskQueueSame) {
       updates.push(
         JSON.stringify({
-          is_perp: book.is_perp,
-          market_id: book.market_id,
-          bid_queue: !isBidQueueSame ? bidQueue : null,
-          ask_queue: !isAskQueueSame ? askQueue : null,
+          type: book.is_perp ? "perpetual" : "spot",
+          market: book.market_id,
+          bid_liquidity: !isBidQueueSame ? bidQueue : null,
+          ask_liquidity: !isAskQueueSame ? askQueue : null,
         })
       );
     }

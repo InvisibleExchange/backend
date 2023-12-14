@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use firestore_db_and_auth::{documents, errors::FirebaseError, ServiceSession};
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, Zero};
+use num_traits::FromPrimitive;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::utils::crypto_utils::pedersen;
+use crate::utils::crypto_utils::hash;
 use crate::{order_tab::OrderTab, perpetual::perp_position::PerpPosition, utils::notes::Note};
 
 use super::local_storage::BackupStorage;
@@ -39,8 +39,7 @@ impl FirebaseNoteObject {
 
         return FirebaseNoteObject {
             address: [note.address.x.to_string(), note.address.y.to_string()],
-            commitment: pedersen(&BigUint::from_u64(note.amount).unwrap(), &note.blinding)
-                .to_string(),
+            commitment: hash(&BigUint::from_u64(note.amount).unwrap(), &note.blinding).to_string(),
             hidden_amount: hidden_amount.to_string(),
             index: note.index.to_string(),
             token: note.token.to_string(),
@@ -231,19 +230,14 @@ pub fn store_new_position(
 pub struct OrderTabObject {
     pub index: u32,
     // header
-    pub is_smart_contract: bool,
     pub base_token: u32,
     pub quote_token: u32,
-    pub vlp_token: u32,
-    pub max_vlp_supply: u64,
     pub pub_key: String,
     //
     pub base_commitment: String,
     pub base_hidden_amount: String,
     pub quote_commitment: String,
     pub quote_hidden_amount: String,
-    pub vlp_supply_commitment: String,
-    pub vlp_supply_hidden_amount: String,
     pub hash: String,
 }
 
@@ -270,51 +264,23 @@ impl OrderTabObject {
         };
         let quote_hidden_amount = order_tab.quote_amount ^ quote_yt_trimmed;
 
-        let vlp_supply_hidden_amount;
-        let vlp_supply_commitment;
-        if order_tab.vlp_supply > 0 {
-            // ? Hide vlp supply
-
-            let b1 = &order_tab.tab_header.base_blinding % BigUint::from(2_u32).pow(128);
-            let b2 = &order_tab.tab_header.quote_blinding % BigUint::from(2_u32).pow(128);
-
-            let blindings_sum = &b1 + &b2;
-            vlp_supply_commitment = pedersen(&BigUint::from(order_tab.vlp_supply), &blindings_sum);
-
-            let vlp_supply_yt_digits = blindings_sum.to_u64_digits();
-            let vlp_supply_yt_trimmed = if vlp_supply_yt_digits.len() == 0 {
-                0
-            } else {
-                vlp_supply_yt_digits[0]
-            };
-            vlp_supply_hidden_amount = order_tab.vlp_supply ^ vlp_supply_yt_trimmed;
-        } else {
-            vlp_supply_hidden_amount = 0;
-            vlp_supply_commitment = BigUint::zero();
-        }
-
         return OrderTabObject {
             index: order_tab.tab_idx,
-            vlp_token: order_tab.tab_header.vlp_token,
-            max_vlp_supply: order_tab.tab_header.max_vlp_supply,
-            is_smart_contract: order_tab.tab_header.is_smart_contract,
             base_token: order_tab.tab_header.base_token,
             quote_token: order_tab.tab_header.quote_token,
             pub_key: order_tab.tab_header.pub_key.to_string(),
-            base_commitment: pedersen(
+            base_commitment: hash(
                 &BigUint::from_u64(order_tab.base_amount).unwrap(),
                 &order_tab.tab_header.base_blinding,
             )
             .to_string(),
             base_hidden_amount: base_hidden_amount.to_string(),
-            quote_commitment: pedersen(
+            quote_commitment: hash(
                 &BigUint::from_u64(order_tab.quote_amount).unwrap(),
                 &order_tab.tab_header.quote_blinding,
             )
             .to_string(),
             quote_hidden_amount: quote_hidden_amount.to_string(),
-            vlp_supply_commitment: vlp_supply_commitment.to_string(),
-            vlp_supply_hidden_amount: vlp_supply_hidden_amount.to_string(),
             hash: order_tab.hash.to_string(),
         };
     }

@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::{crypto_utils::pedersen_on_vec, storage::firestore::upload_file_to_storage};
+use super::{crypto_utils::hash_many, storage::firestore::upload_file_to_storage};
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -617,7 +617,7 @@ fn hash_note(token: u32, commitment: &BigUint, address_x: &BigUint) -> BigUint {
     let token = BigUint::from_u32(token).unwrap();
     let hash_input: Vec<&BigUint> = vec![&address_x, &token, &commitment];
 
-    let note_hash = pedersen_on_vec(&hash_input);
+    let note_hash = hash_many(&hash_input);
 
     return note_hash;
 }
@@ -725,7 +725,7 @@ fn _hash_position(
         &synthetic_token,
         position_address,
     ];
-    let header_hash = pedersen_on_vec(&hash_inputs);
+    let header_hash = hash_many(&hash_inputs);
 
     // & hash = H({header_hash, order_side, position_size, entry_price, liquidation_price, current_funding_idx})
 
@@ -743,7 +743,7 @@ fn _hash_position(
         &current_funding_idx,
     ];
 
-    let position_hash = pedersen_on_vec(&hash_inputs);
+    let position_hash = hash_many(&hash_inputs);
 
     return position_hash;
 }
@@ -852,11 +852,11 @@ fn hash_order_tab(
         &quote_token,
         pub_key,
     ];
-    let header_hash = pedersen_on_vec(&hash_inputs);
+    let header_hash = hash_many(&hash_inputs);
 
     // & H({header_hash, base_commitment, quote_commitment})
     let hash_inputs: Vec<&BigUint> = vec![&header_hash, base_commitment, quote_commitment];
-    let tab_hash = pedersen_on_vec(&hash_inputs);
+    let tab_hash = hash_many(&hash_inputs);
 
     return tab_hash;
 }

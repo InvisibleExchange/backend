@@ -13,7 +13,7 @@ use crate::{
     },
     transaction_batch::{tx_batch_structs::SwapFundingInfo, LeafNodeType},
     utils::{
-        crypto_utils::{pedersen_on_vec, verify, EcPoint, Signature},
+        crypto_utils::{hash_many, verify, EcPoint, Signature},
         storage::firestore::{
             start_add_note_thread, start_add_position_thread, start_delete_note_thread,
             start_delete_position_thread,
@@ -453,7 +453,7 @@ fn hash_position_escape_message(
     }
     hash_inputs.push(&hash_inp);
 
-    let order_hash = pedersen_on_vec(&hash_inputs);
+    let order_hash = hash_many(&hash_inputs);
 
     return order_hash;
 }

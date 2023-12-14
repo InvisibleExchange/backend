@@ -53,13 +53,13 @@ pub fn _split_notes_inner(
 
     let mut sum_in: u64 = 0;
 
-    let mut state_tree = state_tree.lock();
+    let mut state_tree_m = state_tree.lock();
     for note in notes_in.iter() {
         if note.token != token {
             return Err("Invalid token".to_string());
         }
 
-        let leaf_hash = state_tree.get_leaf_by_index(note.index);
+        let leaf_hash = state_tree_m.get_leaf_by_index(note.index);
 
         if leaf_hash != note.hash {
             return Err("Note does not exist".to_string());
@@ -79,7 +79,7 @@ pub fn _split_notes_inner(
     let new_amount = new_note.amount;
 
     // ? get and set new index
-    let new_index = state_tree.first_zero_idx();
+    let new_index = note_in1.index;
     new_note.index = new_index;
 
     let mut new_indexes = vec![new_index];
@@ -100,7 +100,11 @@ pub fn _split_notes_inner(
 
         refund_amount = refund_note.amount;
 
-        let new_index = state_tree.first_zero_idx();
+        let new_index = if notes_in.len() > 1 {
+            notes_in[1].index
+        } else {
+            state_tree_m.first_zero_idx()
+        };
         refund_note.index = new_index;
         new_indexes.push(new_index)
     }
@@ -109,36 +113,7 @@ pub fn _split_notes_inner(
         return Err("New note amounts exceed old note amounts".to_string());
     }
 
-    // ? Remove notes in from state
-    let mut updated_state_hashes = updated_state_hashes.lock();
-    for note in notes_in.iter() {
-        state_tree.update_leaf_node(&BigUint::zero(), note.index);
-        updated_state_hashes.insert(note.index, (LeafNodeType::Note, BigUint::zero()));
-    }
-
-    // ? Add return in to state
-    state_tree.update_leaf_node(&new_note.hash, new_note.index);
-    updated_state_hashes.insert(new_note.index, (LeafNodeType::Note, new_note.hash.clone()));
-
-    if let Some(note) = refund_note.as_ref() {
-        state_tree.update_leaf_node(&note.hash, note.index);
-        updated_state_hashes.insert(note.index, (LeafNodeType::Note, note.hash.clone()));
-    }
-
-    drop(updated_state_hashes);
-    drop(state_tree);
-
-    // ----------------------------------------------
-
-    update_db_after_note_split(
-        &firebase_session,
-        &backup_storage,
-        &notes_in,
-        new_note.clone(),
-        refund_note.clone(),
-    );
-
-    // ----------------------------------------------
+    // *  Make Updates * //
 
     let mut json_map = serde_json::map::Map::new();
     json_map.insert(
@@ -152,7 +127,37 @@ pub fn _split_notes_inner(
 
     let mut swap_output_json = swap_output_json.lock();
     swap_output_json.push(json_map);
+
+    let mut updated_state_hashes_m = updated_state_hashes.lock();
+
+    // ? Add return note in to state
+    state_tree_m.update_leaf_node(&new_note.hash, new_note.index);
+    updated_state_hashes_m.insert(new_note.index, (LeafNodeType::Note, new_note.hash.clone()));
+
+    // ? Remove notes in from state
+    for note in notes_in.iter().skip(1) {
+        state_tree_m.update_leaf_node(&BigUint::zero(), note.index);
+        updated_state_hashes_m.insert(note.index, (LeafNodeType::Note, BigUint::zero()));
+    }
+
+    if let Some(note) = refund_note.as_ref() {
+        state_tree_m.update_leaf_node(&note.hash, note.index);
+        updated_state_hashes_m.insert(note.index, (LeafNodeType::Note, note.hash.clone()));
+    }
+
+    drop(updated_state_hashes_m);
+    drop(state_tree_m);
     drop(swap_output_json);
+
+    // ----------------------------------------------
+
+    update_db_after_note_split(
+        &firebase_session,
+        &backup_storage,
+        &notes_in,
+        new_note.clone(),
+        refund_note.clone(),
+    );
 
     Ok(new_indexes)
 }
@@ -225,6 +230,30 @@ pub fn _change_position_margin_inner(
             return Err("Invalid amount in".to_string());
         }
 
+        // ----------------------------------------------
+
+        let mut json_map = serde_json::map::Map::new();
+        json_map.insert(
+            String::from("transaction_type"),
+            serde_json::to_value("margin_change").unwrap(),
+        );
+        json_map.insert(
+            String::from("margin_change"),
+            serde_json::to_value(&margin_change).unwrap(),
+        );
+        json_map.insert(
+            String::from("new_position_hash"),
+            serde_json::to_value(position.hash.to_string()).unwrap(),
+        );
+        json_map.insert(
+            String::from("zero_idx"),
+            serde_json::to_value(z_index).unwrap(),
+        );
+
+        let mut swap_output_json = swap_output_json.lock();
+        swap_output_json.push(json_map);
+        drop(swap_output_json);
+
         add_margin_state_updates(
             &state_tree,
             &updated_state_hashes,
@@ -281,6 +310,30 @@ pub fn _change_position_margin_inner(
                 .clone(),
         );
 
+        // ----------------------------------------------
+
+        let mut json_map = serde_json::map::Map::new();
+        json_map.insert(
+            String::from("transaction_type"),
+            serde_json::to_value("margin_change").unwrap(),
+        );
+        json_map.insert(
+            String::from("margin_change"),
+            serde_json::to_value(margin_change).unwrap(),
+        );
+        json_map.insert(
+            String::from("new_position_hash"),
+            serde_json::to_value(position.hash.to_string()).unwrap(),
+        );
+        json_map.insert(
+            String::from("zero_idx"),
+            serde_json::to_value(z_index).unwrap(),
+        );
+
+        let mut swap_output_json = swap_output_json.lock();
+        swap_output_json.push(json_map);
+        drop(swap_output_json);
+
         reduce_margin_state_updates(
             &state_tree,
             &updated_state_hashes,
@@ -297,30 +350,6 @@ pub fn _change_position_margin_inner(
 
         z_index = index;
     }
-
-    // ----------------------------------------------
-
-    let mut json_map = serde_json::map::Map::new();
-    json_map.insert(
-        String::from("transaction_type"),
-        serde_json::to_value("margin_change").unwrap(),
-    );
-    json_map.insert(
-        String::from("margin_change"),
-        serde_json::to_value(margin_change).unwrap(),
-    );
-    json_map.insert(
-        String::from("new_position_hash"),
-        serde_json::to_value(position.hash.to_string()).unwrap(),
-    );
-    json_map.insert(
-        String::from("zero_idx"),
-        serde_json::to_value(z_index).unwrap(),
-    );
-
-    let mut swap_output_json = swap_output_json.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
 
     Ok((z_index, position))
 }
@@ -446,3 +475,5 @@ pub fn _execute_sc_mm_modification_inner(
 
     return handle;
 }
+
+// * HELPERS * // ==================================================================================

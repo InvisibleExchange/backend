@@ -51,7 +51,7 @@ function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
   // & WEBSOCKET SERVER
   const WebSocket = require("ws");
   const wss = new WebSocket.Server({ port: 4040 });
-  const SEND_LIQUIDITY_PERIOD = 1000;
+  const SEND_LIQUIDITY_PERIOD = 2000;
 
   wss.on("connection", (ws) => {
     ws.on("message", (message) => {});
