@@ -67,11 +67,6 @@ pub fn close_order_tab(
         return Err("amount change is greater than the tab amount".to_string());
     }
 
-    // ? Verify this is not a smart_contract initiated order tab
-    if order_tab.tab_header.is_smart_contract {
-        return Err("This is a smart contract initiated order tab".to_string());
-    }
-
     // ? CHECK THAT THE ORDER TAB EXISTS ---------------------------------------------------
     let mut state_tree_m = state_tree.lock();
     let leaf_hash = state_tree_m.get_leaf_by_index(order_tab.tab_idx as u64);
@@ -126,7 +121,6 @@ pub fn close_order_tab(
             order_tab.tab_header.clone(),
             updated_base_amount,
             updated_quote_amount,
-            0,
         ));
     } else {
         updated_order_tab = None;

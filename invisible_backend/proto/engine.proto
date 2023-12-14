@@ -355,19 +355,15 @@ message GrpcOrderTab {
     GrpcTabHeader tab_header = 2;
     uint64 base_amount = 3;
     uint64 quote_amount = 4;
-    uint64 vlp_supply = 5;
     
 }
 
 message GrpcTabHeader {
-    bool is_smart_contract = 3;
-    uint32 base_token = 4;
-    uint32 quote_token = 5;
-    string base_blinding = 6;
-    string quote_blinding = 7;
-    uint32 vlp_token = 8;
-    uint64 max_vlp_supply = 9;
-    string pub_key = 10;
+    uint32 base_token = 1;
+    uint32 quote_token = 2;
+    string base_blinding = 3;
+    string quote_blinding = 4;
+    string pub_key = 5;
 }
 
 

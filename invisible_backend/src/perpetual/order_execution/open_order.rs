@@ -109,16 +109,9 @@ pub fn execute_open_order(
         }
 
         // ! Order was partially filled
-
-        let new_pfr_idx: u64;
-        if open_order_fields.notes_in.len() > 1 && is_first_fill {
-            new_pfr_idx = open_order_fields.notes_in[1].index;
-        } else {
-            let mut state_tree = state_tree_m.lock();
-            let zero_index = state_tree.first_zero_idx();
-
-            new_pfr_idx = zero_index
-        };
+        let mut state_tree = state_tree_m.lock();
+        let new_pfr_idx = state_tree.first_zero_idx();
+        drop(state_tree);
 
         new_partial_refund_note = refund_partial_fill(
             open_order_fields.collateral_token,

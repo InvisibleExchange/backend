@@ -138,10 +138,11 @@ fn close_position(
 
     let new_spent_synthetic = spent_synthetic + prev_spent_synthetic;
 
+    let is_full_close = position.position_size - spent_synthetic
+        <= DUST_AMOUNT_PER_ASSET[&order.synthetic_token.to_string()];
+
     let collateral_returned: u64;
-    // TODO: should check that the spent synthetic is close enough to position size (but not greater)
-    // Todo: change this (>=) later to something like abs(self.spent_synthetic >= position.position_size) < 000 or 99.5%
-    if spent_synthetic >= position.position_size {
+    if is_full_close {
         let idx_diff = position.last_funding_idx - swap_funding_info.min_swap_funding_idx;
 
         let applicable_funding_rates = &swap_funding_info.swap_funding_rates[idx_diff as usize..];

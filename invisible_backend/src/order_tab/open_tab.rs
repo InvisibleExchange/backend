@@ -44,11 +44,6 @@ pub fn open_order_tab(
     let base_token = tab_header.base_token;
     let quote_token = tab_header.quote_token;
 
-    // ? Verify this is not a smart_contract initiated order tab
-    if tab_header.is_smart_contract {
-        return Err("This is a smart contract initiated order tab".to_string());
-    }
-
     let mut base_amount = 0;
     let mut base_refund_note: Option<Note> = None;
     let mut quote_amount = 0;

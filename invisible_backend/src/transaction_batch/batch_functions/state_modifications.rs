@@ -53,13 +53,13 @@ pub fn _split_notes_inner(
 
     let mut sum_in: u64 = 0;
 
-    let mut state_tree = state_tree.lock();
+    let mut state_tree_m = state_tree.lock();
     for note in notes_in.iter() {
         if note.token != token {
             return Err("Invalid token".to_string());
         }
 
-        let leaf_hash = state_tree.get_leaf_by_index(note.index);
+        let leaf_hash = state_tree_m.get_leaf_by_index(note.index);
 
         if leaf_hash != note.hash {
             return Err("Note does not exist".to_string());
@@ -79,7 +79,7 @@ pub fn _split_notes_inner(
     let new_amount = new_note.amount;
 
     // ? get and set new index
-    let new_index = state_tree.first_zero_idx();
+    let new_index = note_in1.index;
     new_note.index = new_index;
 
     let mut new_indexes = vec![new_index];
@@ -100,7 +100,11 @@ pub fn _split_notes_inner(
 
         refund_amount = refund_note.amount;
 
-        let new_index = state_tree.first_zero_idx();
+        let new_index = if notes_in.len() > 1 {
+            notes_in[1].index
+        } else {
+            state_tree_m.first_zero_idx()
+        };
         refund_note.index = new_index;
         new_indexes.push(new_index)
     }
@@ -123,26 +127,27 @@ pub fn _split_notes_inner(
 
     let mut swap_output_json = swap_output_json.lock();
     swap_output_json.push(json_map);
-    drop(swap_output_json);
 
-    // ? Remove notes in from state
-    let mut updated_state_hashes = updated_state_hashes.lock();
-    for note in notes_in.iter() {
-        state_tree.update_leaf_node(&BigUint::zero(), note.index);
-        updated_state_hashes.insert(note.index, (LeafNodeType::Note, BigUint::zero()));
-    }
+    let mut updated_state_hashes_m = updated_state_hashes.lock();
 
     // ? Add return note in to state
-    state_tree.update_leaf_node(&new_note.hash, new_note.index);
-    updated_state_hashes.insert(new_note.index, (LeafNodeType::Note, new_note.hash.clone()));
+    state_tree_m.update_leaf_node(&new_note.hash, new_note.index);
+    updated_state_hashes_m.insert(new_note.index, (LeafNodeType::Note, new_note.hash.clone()));
 
-    if let Some(note) = refund_note.as_ref() {
-        state_tree.update_leaf_node(&note.hash, note.index);
-        updated_state_hashes.insert(note.index, (LeafNodeType::Note, note.hash.clone()));
+    // ? Remove notes in from state
+    for note in notes_in.iter().skip(1) {
+        state_tree_m.update_leaf_node(&BigUint::zero(), note.index);
+        updated_state_hashes_m.insert(note.index, (LeafNodeType::Note, BigUint::zero()));
     }
 
-    drop(updated_state_hashes);
-    drop(state_tree);
+    if let Some(note) = refund_note.as_ref() {
+        state_tree_m.update_leaf_node(&note.hash, note.index);
+        updated_state_hashes_m.insert(note.index, (LeafNodeType::Note, note.hash.clone()));
+    }
+
+    drop(updated_state_hashes_m);
+    drop(state_tree_m);
+    drop(swap_output_json);
 
     // ----------------------------------------------
 
