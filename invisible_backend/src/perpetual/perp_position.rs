@@ -1074,7 +1074,6 @@ pub fn _hash_position(
     let mut hash_inputs: Vec<&BigUint> = Vec::new();
 
     // & hash = H({header_hash, order_side, position_size, entry_price, liquidation_price, current_funding_idx, vlp_supply})
-
     hash_inputs.push(&header_hash);
 
     let order_side = BigUint::from_u8(if *order_side == OrderSide::Long { 1 } else { 0 }).unwrap();
@@ -1107,8 +1106,7 @@ fn _hash_position_header(
 ) -> BigUint {
     let mut hash_inputs: Vec<&BigUint> = Vec::new();
 
-    // & hash = H({allow_partial_liquidations, synthetic_token, position_address,  vlp_token * 2**32 + max_vlp_supply})
-
+    // & hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token, max_vlp_supply})
     let allow_partial_liquidations =
         BigUint::from_u8(if allow_partial_liquidations { 1 } else { 0 }).unwrap();
     hash_inputs.push(&allow_partial_liquidations);
@@ -1118,9 +1116,11 @@ fn _hash_position_header(
 
     hash_inputs.push(position_address);
 
-    let vlp_config = vlp_token as u128 * 2_u128.pow(32) + max_vlp_supply as u128;
-    let vlp_config = BigUint::from_u128(vlp_config).unwrap();
-    hash_inputs.push(&vlp_config);
+    let vlp_token = BigUint::from_u32(vlp_token).unwrap();
+    hash_inputs.push(&vlp_token);
+
+    let max_vlp_supply = BigUint::from_u64(max_vlp_supply).unwrap();
+    hash_inputs.push(&max_vlp_supply);
 
     let position_hash = hash_many(&hash_inputs);
 

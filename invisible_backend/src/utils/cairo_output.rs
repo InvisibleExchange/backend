@@ -1,6 +1,6 @@
 use num_bigint::{BigInt, BigUint, Sign};
 use num_integer::Integer;
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 use crate::{
     perpetual::OrderSide,
@@ -522,6 +522,7 @@ pub struct PositionEscapeOutput {
     pub escape_id: u32,
     pub is_valid: bool,
     pub escape_value: u64,
+    pub recipient: u64,
     pub escape_message_hash: BigUint,
     pub signature_a_r: BigUint,
     pub signature_a_s: BigUint,
@@ -549,17 +550,18 @@ fn parse_position_escape_outputs(
             escape_id,
             is_valid,
             escape_value,
-            escape_message_hash: output[(i * 2 + 1) as usize].clone(),
-            signature_a_r: output[(i * 2 + 2) as usize].clone(),
-            signature_a_s: output[(i * 2 + 3) as usize].clone(),
-            signature_b_r: output[(i * 2 + 4) as usize].clone(),
-            signature_b_s: output[(i * 2 + 5) as usize].clone(),
+            recipient: output[(i * 2 + 1) as usize].to_u64().unwrap(),
+            escape_message_hash: output[(i * 2 + 2) as usize].clone(),
+            signature_a_r: output[(i * 2 + 3) as usize].clone(),
+            signature_a_s: output[(i * 2 + 4) as usize].clone(),
+            signature_b_r: output[(i * 2 + 5) as usize].clone(),
+            signature_b_s: output[(i * 2 + 6) as usize].clone(),
         };
 
         escape_outputs.push(escape);
     }
 
-    let shifted_output = &output[4 * num_escape_outputs as usize..];
+    let shifted_output = &output[7 * num_escape_outputs as usize..];
 
     return (escape_outputs, shifted_output);
 }
@@ -756,43 +758,34 @@ pub struct OrderTabOutput {
     pub quote_token: u32,
     pub base_hidden_amount: u64,
     pub quote_hidden_amount: u64,
-    pub is_smart_contract: bool,
-    pub is_perp: bool,
     pub base_commitment: String,
     pub quote_commitment: String,
     pub public_key: String,
     pub hash: String,
 }
 
-// & format: | index (56 bits) | base_token (32 bits) | quote_token (32 bits) | base hidden amount (64 bits)
-// &          | quote hidden amount (64 bits) |  is_smart_contract (1 bits) | is_perp (1 bits) |
-
+// & format: | index (59 bits) | base_token (32 bits) | quote_token (32 bits) | base_hidden_amount (64 bits) | quote_hidden_amount (64 bits)
 fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOutput>, &[BigUint]) {
     let mut order_tabs: Vec<OrderTabOutput> = Vec::new();
 
     for i in 0..num_tabs {
         let batched_tab_info = output[(i * 4) as usize].clone();
-        let split_vec = split_by_bytes(&batched_tab_info, vec![56, 32, 32, 64, 64, 1, 1]);
+        let split_vec = split_by_bytes(&batched_tab_info, vec![59, 32, 32, 64, 64]);
 
         let index = split_vec[0].to_u64().unwrap();
         let base_token = split_vec[1].to_u32().unwrap();
         let quote_token = split_vec[2].to_u32().unwrap();
         let base_hidden_amount = split_vec[3].to_u64().unwrap();
         let quote_hidden_amount = split_vec[4].to_u64().unwrap();
-        let is_smart_contract = split_vec[5] != BigUint::zero();
-        let is_perp = split_vec[6] != BigUint::zero();
 
         let base_commitment = &output[(i * 4 + 1) as usize];
         let quote_commitment = &output[(i * 4 + 2) as usize];
         let public_key = &output[(i * 4 + 3) as usize];
 
         let hash = hash_order_tab(
-            is_perp,
-            is_smart_contract,
             base_token,
             quote_token,
             &public_key,
-            //
             &base_commitment,
             &quote_commitment,
         )
@@ -804,8 +797,6 @@ fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOu
             quote_token,
             base_hidden_amount,
             quote_hidden_amount,
-            is_smart_contract,
-            is_perp,
             base_commitment: base_commitment.to_string(),
             quote_commitment: quote_commitment.to_string(),
             public_key: public_key.to_string(),
@@ -821,8 +812,6 @@ fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOu
 }
 
 fn hash_order_tab(
-    is_perp: bool,
-    is_smart_contract: bool,
     base_token: u32,
     quote_token: u32,
     pub_key: &BigUint,
@@ -830,28 +819,12 @@ fn hash_order_tab(
     base_commitment: &BigUint,
     quote_commitment: &BigUint,
 ) -> BigUint {
-    // & header_hash = H({is_perp, is_smart_contract, base_token, quote_token, pub_key})
+    // & header_hash = H({base_token, quote_token, pub_key})
 
-    let is_perp = if is_perp {
-        BigUint::one()
-    } else {
-        BigUint::zero()
-    };
-    let is_smart_contract = if is_smart_contract {
-        BigUint::one()
-    } else {
-        BigUint::zero()
-    };
     let base_token = BigUint::from_u32(base_token).unwrap();
     let quote_token = BigUint::from_u32(quote_token).unwrap();
 
-    let hash_inputs: Vec<&BigUint> = vec![
-        &is_perp,
-        &is_smart_contract,
-        &base_token,
-        &quote_token,
-        pub_key,
-    ];
+    let hash_inputs: Vec<&BigUint> = vec![&base_token, &quote_token, pub_key];
     let header_hash = hash_many(&hash_inputs);
 
     // & H({header_hash, base_commitment, quote_commitment})
