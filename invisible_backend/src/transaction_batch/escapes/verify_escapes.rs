@@ -132,6 +132,8 @@ pub fn _execute_forced_escape_inner(
 
         let swap_funding_info = swap_funding_info.as_ref().unwrap();
 
+        let recipient = close_position_message.recipient;
+
         let position_escape = verify_position_escape(
             state_tree,
             updated_state_hashes,
@@ -142,10 +144,12 @@ pub fn _execute_forced_escape_inner(
             close_price,
             open_order_fields_b,
             position_b,
+            recipient,
             signature_a,
             signature_b,
             swap_funding_info,
             index_price,
+            
         );
 
         let mut json_map = serde_json::map::Map::new();

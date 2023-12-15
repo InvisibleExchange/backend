@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{
     perpetual::{
@@ -43,6 +43,7 @@ pub struct PositionEscape {
     is_position_valid_b: bool,
     position_b: Option<PerpPosition>,
     valid_leaf_b: String, // valid leaf - if position does not exist, this is the leaf that was found
+    recipient: String,
     signature_a: Signature,
     signature_b: Signature,
     new_funding_idx: u32,
@@ -61,6 +62,7 @@ pub fn verify_position_escape(
     close_price: u64,
     open_order_fields_b: Option<OpenOrderFields>,
     position_b: Option<PerpPosition>,
+    recipient: String,
     signature_a: Signature,
     signature_b: Signature,
     swap_funding_info: &SwapFundingInfo,
@@ -78,6 +80,7 @@ pub fn verify_position_escape(
         is_position_valid_b: true,
         position_b: position_b.clone(),
         valid_leaf_b: "".to_string(),
+        recipient: recipient.clone(),
         signature_a: signature_a.clone(),
         signature_b: signature_b.clone(),
         new_funding_idx: swap_funding_info.current_funding_idx,
@@ -93,6 +96,7 @@ pub fn verify_position_escape(
         close_price,
         &open_order_fields_b,
         &position_b,
+        recipient,
     );
     if !verify_signatures(
         &position_a,
@@ -434,10 +438,11 @@ fn hash_position_escape_message(
     close_price: u64,
     open_order_fields_b: &Option<OpenOrderFields>,
     position_b: &Option<PerpPosition>,
+    recipient: String,
 ) -> BigUint {
     let mut hash_inputs: Vec<&BigUint> = Vec::new();
 
-    // & H = pedersen(escape_id, position_a.hash, close_price, (open_order_fields_b.hash or position_b.hash) )
+    // & H = pedersen(escape_id, position_a.hash, close_price, (open_order_fields_b.hash or position_b.hash), recipient)
 
     let escape_id = BigUint::from_u32(escape_id).unwrap();
     hash_inputs.push(&escape_id);
@@ -452,6 +457,9 @@ fn hash_position_escape_message(
         hash_inp = position_b.as_ref().unwrap().hash.clone()
     }
     hash_inputs.push(&hash_inp);
+
+    let recipient = BigUint::from_str(&recipient).unwrap();
+    hash_inputs.push(&recipient);
 
     let order_hash = hash_many(&hash_inputs);
 

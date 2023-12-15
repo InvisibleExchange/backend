@@ -186,8 +186,9 @@ message ForcePositionCloseMessage {
     uint64 close_price = 2; // Price at which to close the position
     GrpcOpenOrderFields open_order_fields_b = 3; // user B Open order fields
     GrpcPerpPosition position_b = 4; // user B Position to close
-    Signature signature_a = 5;
-    Signature signature_b = 6;
+    string recipient = 5; // recipient of the funds
+    Signature signature_a = 6;
+    Signature signature_b = 7;
 }
 
 
