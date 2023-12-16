@@ -4,7 +4,6 @@ use parking_lot::Mutex;
 use serde_json::{Map, Value};
 use std::{
     collections::HashMap,
-    fs,
     sync::Arc,
     thread::{self, JoinHandle},
 };
@@ -207,19 +206,6 @@ impl TransactionBatch {
             let swap_output_json = storage.read_storage(0);
             drop(storage);
             self.restore_state(swap_output_json);
-        }
-    }
-
-    pub fn revert_current_tx_batch(&mut self) {
-        // TODO: Copy the state_tree_backup file to the current state_tree file
-
-        // ? Attempt to delete the file
-        let latest_batch_index = self.main_storage.lock().latest_batch;
-        match fs::remove_file(
-            "./storage/transaction_data/".to_string() + latest_batch_index.to_string().as_str(),
-        ) {
-            Ok(()) => println!("File deleted successfully"),
-            Err(err) => eprintln!("Error deleting file: {}", err),
         }
     }
 

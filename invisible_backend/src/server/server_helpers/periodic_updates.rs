@@ -1,7 +1,7 @@
 use serde_json::json;
+use std::thread;
 use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
-use std::{println, thread};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::matching_engine::orderbook::OrderBook;
@@ -114,7 +114,7 @@ pub async fn start_periodic_updates(
         drop(sess);
     });
 
-    // * SEND LIQUIDITY UPDATE EVERY SECOND
+    // * SEND LIQUIDITY UPDATE 300ms
     let order_books_ = order_books.clone();
     let perp_order_books_ = perp_order_books.clone();
     let ws_connections_ = ws_connections.clone();

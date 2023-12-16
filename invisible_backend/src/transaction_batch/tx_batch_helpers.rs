@@ -379,7 +379,7 @@ pub fn _per_minute_funding_update_inner(
 
     let deviation: i64 = max(0, impact_bid as i64 - index_price as i64) as i64
         - max(0, index_price as i64 - impact_ask as i64) as i64;
-    let update = deviation * 100_000 / (index_price as i64 * 3); // accourate to 5 decimal places
+    let update = deviation * 100_000 / (index_price as i64); // accourate to 5 decimal places
 
     return sum + update;
 }
@@ -392,20 +392,16 @@ pub fn _per_minute_funding_update_inner(
 pub fn _calculate_funding_rates(
     running_funding_tick_sums: &mut HashMap<u32, i64>,
 ) -> HashMap<u32, i64> {
-    // Should do once every 8 hours (480 minutes)
+    // Should do once every hour (60 minutes)
 
     let mut funding_rates: HashMap<u32, i64> = HashMap::new();
 
     for t in SYNTHETIC_ASSETS {
         let twap_sum = running_funding_tick_sums.remove(&t).unwrap_or(0);
-        funding_rates.insert(t, twap_sum / 480);
+
+        let funding_premium = twap_sum / 60; // divide by 60 to get the average funding premium
+        funding_rates.insert(t, funding_premium / 8); // scale to a realization period of 8 hours
     }
-
-    // for (token, twap_sum) in running_funding_tick_sums.drain() {
-    //     let funding_rate = twap_sum / 60; // 60 minutes per 1 hours
-
-    //     funding_rates.insert(token, funding_rate);
-    // }
 
     return funding_rates;
 }

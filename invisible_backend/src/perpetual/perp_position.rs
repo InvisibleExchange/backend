@@ -812,17 +812,18 @@ impl PerpPosition {
             let funding_price = prices[i];
 
             // funding rate has 5 decimal places
-            let funding = self.position_size as i64 * funding_rate / 100_000;
-            let funding_in_usd = funding as i128 * funding_price as i128 / multiplier as i128;
+            let funding = funding_rate as i128 * funding_price as i128 / 100_000;
 
-            funding_sum += funding_in_usd;
+            funding_sum += funding;
         }
 
+        let funding_sum_usd = self.position_size as i128 * funding_sum / multiplier as i128;
+
         let margin_after_funding = if self.order_side == OrderSide::Long {
-            (self.margin as i128 - funding_sum) as u128
+            (self.margin as i128 - funding_sum_usd) as u128
         } else {
-            (self.margin as i128 + funding_sum) as u128
-        }; // Todo: check which is correct + or - depending on order_side
+            (self.margin as i128 + funding_sum_usd) as u128
+        };
 
         // ? Make updates to the position
         self.margin = margin_after_funding as u64;

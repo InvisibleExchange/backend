@@ -57,6 +57,9 @@ pub fn _init_inner(
     *state_tree = Arc::new(Mutex::new(state_tree_));
 }
 
+/// Get the funding rate every minute.
+/// At the end of the hour calculate the TWAP and scale
+/// it to have a realization period of 8 hours.
 pub fn _per_minute_funding_updates(
     running_funding_tick_sums: &mut HashMap<u32, i64>,
     latest_index_price: &mut HashMap<u32, u64>,
@@ -86,8 +89,7 @@ pub fn _per_minute_funding_updates(
 
     *current_funding_count += 1;
 
-    if *current_funding_count == 480 {
-        // Do we want 1 or 8 hours
+    if *current_funding_count == 60 {
         let fundings = _calculate_funding_rates(running_funding_tick_sums);
 
         for (token, funding) in fundings.iter() {
