@@ -20,6 +20,7 @@ use self::swap::SwapResponse;
 
 pub mod deposit;
 pub mod limit_order;
+mod order_execution;
 pub mod swap;
 mod swap_execution;
 pub mod transaction_helpers;

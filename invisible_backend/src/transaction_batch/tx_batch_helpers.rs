@@ -399,7 +399,8 @@ pub fn _calculate_funding_rates(
     for t in SYNTHETIC_ASSETS {
         let twap_sum = running_funding_tick_sums.remove(&t).unwrap_or(0);
 
-        let funding_premium = twap_sum / 60; // divide by 60 to get the average funding premium
+        // TODO: let funding_premium = twap_sum / 60; // divide by 60 to get the average funding premium
+        let funding_premium = twap_sum / 1;
         funding_rates.insert(t, funding_premium / 8); // scale to a realization period of 8 hours
     }
 

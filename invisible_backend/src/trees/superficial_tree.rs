@@ -134,7 +134,7 @@ impl SuperficialTree {
         }
 
         if let Some(leaf) = self.leaf_nodes.get(idx as usize) {
-            if leaf != &BigUint::zero() {
+            if *leaf != BigUint::zero() {
                 return self.first_zero_idx();
             }
         }

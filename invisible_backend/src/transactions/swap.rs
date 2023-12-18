@@ -6,23 +6,20 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use serde_json::Value;
 
-use crossbeam::thread;
 use error_stack::{Report, Result};
 
 use super::Transaction;
 //
 use super::limit_order::LimitOrder;
-use super::swap_execution::{execute_order, reverify_existances, update_state_after_order};
-use super::transaction_helpers::db_updates::update_db_after_spot_swap;
-use super::transaction_helpers::swap_helpers::{
-    consistency_checks, finalize_updates, unblock_order, NoteInfoExecutionOutput,
-    TxExecutionThreadOutput,
+use super::swap_execution::{
+    execute_swap_transaction, update_json_output, update_state_and_finalize,
 };
+use super::transaction_helpers::swap_helpers::{consistency_checks, NoteInfoExecutionOutput};
 use super::transaction_helpers::transaction_output::TransactionOutptut;
 use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
-use crate::utils::errors::{send_swap_error, SwapThreadExecutionError, TransactionExecutionError};
+use crate::utils::errors::{SwapThreadExecutionError, TransactionExecutionError};
 use crate::utils::notes::Note;
 use crate::utils::storage::local_storage::{BackupStorage, MainStorage};
 
@@ -99,7 +96,6 @@ impl Swap {
             order_tab_mutex_a = Some(tab_lock);
         }
         let prev_order_tab_a = order_tab_a.clone();
-        let prev_order_tab_a2 = order_tab_a.clone();
 
         let mut order_tab_mutex_b = None;
         let mut order_tab_b = None;
@@ -110,256 +106,65 @@ impl Swap {
             order_tab_mutex_b = Some(tab_lock);
         }
         let prev_order_tab_b = order_tab_b.clone();
-        let prev_order_tab_b2 = order_tab_b.clone();
 
-        let blocked_order_ids_c = blocked_order_ids_m.clone();
+        // * Execute the swap transaction =================================
+        let execution_result = execute_swap_transaction(
+            &tree_m,
+            &partial_fill_tracker_m,
+            &blocked_order_ids_m,
+            &self.order_a,
+            &self.order_b,
+            order_tab_a,
+            order_tab_b,
+            &self.signature_a,
+            &self.signature_b,
+            self.spent_amount_a,
+            self.spent_amount_b,
+            self.fee_taken_a,
+            self.fee_taken_b,
+        )?;
 
-        // * Execute the swap in a thread scope ===============================================================
+        println!("7");
 
-        let swap_execution_handle = thread::scope(move |s| {
-            let tree = tree_m.clone();
-            let partial_fill_tracker = partial_fill_tracker_m.clone();
-            let blocked_order_ids = blocked_order_ids_m.clone();
+        // ? Lock the json output before updating the state to prevent another transaction from
+        // ? squeezing in between and updating the json output before this transaction is done
+        let mut swap_output_json = swap_output_json_m.lock();
 
-            let order_handle_a = s.spawn(move |_| {
-                // ? Exececute order a -----------------------------------------------------
+        println!("8");
 
-                let execution_output: TxExecutionThreadOutput;
+        // * Update the state if transaction was successful ===============
+        update_state_and_finalize(
+            &tree_m,
+            &partial_fill_tracker_m,
+            &updated_state_hashes_m,
+            &blocked_order_ids_m,
+            session,
+            backup_storage,
+            &execution_result,
+            &self.order_a,
+            &self.order_b,
+            &prev_order_tab_a,
+            &prev_order_tab_b,
+        )?;
 
-                let (is_partially_filled, note_info_output, updated_order_tab, new_amount_filled) =
-                    execute_order(
-                        &tree,
-                        &partial_fill_tracker,
-                        &blocked_order_ids,
-                        &self.order_a,
-                        order_tab_a,
-                        &self.signature_a,
-                        self.spent_amount_a,
-                        self.spent_amount_b,
-                        self.fee_taken_a,
-                    )?;
+        // * Construct and store the JSON Output ===========================
+        let swap_output = TransactionOutptut::new(&self);
 
-                execution_output = TxExecutionThreadOutput {
-                    is_partially_filled,
-                    note_info_output,
-                    updated_order_tab,
-                    new_amount_filled,
-                };
+        let execution_output_a = execution_result.0;
+        let execution_output_b = execution_result.1;
 
-                return Ok(execution_output);
-            });
+        update_json_output(
+            &mut swap_output_json,
+            &swap_output,
+            &execution_output_a,
+            &execution_output_b,
+            &prev_order_tab_a,
+            &prev_order_tab_b,
+        );
 
-            let tree = tree_m.clone();
-            let partial_fill_tracker = partial_fill_tracker_m.clone();
-            let blocked_order_ids = blocked_order_ids_m.clone();
+        println!("9");
 
-            let order_handle_b = s.spawn(move |_| {
-                // ? Exececute order b -----------------------------------------------------
-
-                let execution_output: TxExecutionThreadOutput;
-
-                let (is_partially_filled, note_info_output, updated_order_tab, new_amount_filled) =
-                    execute_order(
-                        &tree,
-                        &partial_fill_tracker,
-                        &blocked_order_ids,
-                        &self.order_b,
-                        order_tab_b,
-                        &self.signature_b,
-                        self.spent_amount_b,
-                        self.spent_amount_a,
-                        self.fee_taken_b,
-                    )?;
-
-                execution_output = TxExecutionThreadOutput {
-                    is_partially_filled,
-                    note_info_output,
-                    updated_order_tab,
-                    new_amount_filled,
-                };
-
-                return Ok(execution_output);
-            });
-
-            // ? Get the result of thread_a execution or return an error
-            let order_a_output = order_handle_a
-                .join()
-                .or_else(|_| {
-                    // ? Un unknown error occured executing order a thread
-                    Err(send_swap_error(
-                        "Unknow Error Occured".to_string(),
-                        None,
-                        None,
-                    ))
-                })?
-                .or_else(|err: Report<SwapThreadExecutionError>| {
-                    // ? An error occured executing order a thread
-                    Err(err)
-                })?;
-
-            // ? Get the result of thread_b execution or return an error
-            let order_b_output = order_handle_b
-                .join()
-                .or_else(|_| {
-                    // ? Un unknown error occured executing order a thread
-                    Err(send_swap_error(
-                        "Unknow Error Occured".to_string(),
-                        None,
-                        None,
-                    ))
-                })?
-                .or_else(|err: Report<SwapThreadExecutionError>| {
-                    // ? An error occured executing order a thread
-                    Err(err)
-                })?;
-
-            // * AFTER BOTH orders have been verified successfully update the state —————————————————————————————————————
-            reverify_existances(
-                &tree_m,
-                &self.order_a,
-                &prev_order_tab_a,
-                &order_a_output.note_info_output,
-                &self.order_b,
-                &prev_order_tab_b,
-                &order_b_output.note_info_output,
-            )?;
-
-            // ? Order a ----------------------------------------
-            let tree = tree_m.clone();
-            let updated_state_hashes = updated_state_hashes_m.clone();
-            let partial_fill_tracker = partial_fill_tracker_m.clone();
-            let blocked_order_ids = blocked_order_ids_m.clone();
-
-            let order_a_output_clone = order_a_output.clone();
-
-            let update_state_handle_a = s.spawn(move |_| {
-                update_state_after_order(
-                    &tree,
-                    &updated_state_hashes,
-                    &self.order_a.spot_note_info,
-                    &order_a_output_clone.note_info_output,
-                    &order_a_output_clone.updated_order_tab,
-                );
-
-                update_db_after_spot_swap(
-                    &session,
-                    &backup_storage,
-                    &self.order_a,
-                    &order_a_output_clone.note_info_output,
-                    &order_a_output_clone.updated_order_tab,
-                );
-
-                // ? update the  partial_fill_tracker map and allow other threads to continue filling the same order
-                finalize_updates(
-                    &partial_fill_tracker,
-                    &blocked_order_ids,
-                    self.order_a.order_id,
-                    prev_order_tab_a.is_some(),
-                    &order_a_output_clone,
-                );
-
-                Ok(())
-            });
-
-            // ? Order b ----------------------------------------
-            let tree = tree_m.clone();
-            let updated_state_hashes = updated_state_hashes_m.clone();
-            let partial_fill_tracker = partial_fill_tracker_m.clone();
-            let blocked_order_ids = blocked_order_ids_m.clone();
-            let order_b_output_clone = order_b_output.clone();
-
-            let update_state_handle_b = s.spawn(move |_| {
-                update_state_after_order(
-                    &tree,
-                    &updated_state_hashes,
-                    &self.order_b.spot_note_info,
-                    &order_b_output_clone.note_info_output,
-                    &order_b_output_clone.updated_order_tab,
-                );
-
-                update_db_after_spot_swap(
-                    &session,
-                    &backup_storage,
-                    &self.order_b,
-                    &order_b_output_clone.note_info_output,
-                    &order_b_output_clone.updated_order_tab,
-                );
-
-                // ? update the  partial_fill_tracker map and allow other threads to continue filling the same order
-                finalize_updates(
-                    &partial_fill_tracker,
-                    &blocked_order_ids,
-                    self.order_b.order_id,
-                    prev_order_tab_b.is_some(),
-                    &order_b_output_clone,
-                );
-
-                Ok(())
-            });
-
-            // ? Run the update state thread_a or return an error
-            update_state_handle_a
-                .join()
-                .or_else(|_| {
-                    // ? Un unknown error occured executing order a thread
-                    Err(send_swap_error(
-                        "Unknow Error Occured".to_string(),
-                        None,
-                        None,
-                    ))
-                })?
-                .or_else(|err: Report<SwapThreadExecutionError>| {
-                    // ? An error occured executing order a thread
-                    Err(err)
-                })?;
-
-            // ? Run the update state thread_b or return an error
-            update_state_handle_b
-                .join()
-                .or_else(|e| {
-                    // ? Un unknown error occured executing order a thread
-                    Err(send_swap_error(
-                        "Unknow Error Occured".to_string(),
-                        None,
-                        Some(format!("error occured executing spot swap:  {:?}", e)),
-                    ))
-                })?
-                .or_else(|err: Report<SwapThreadExecutionError>| {
-                    // ? An error occured executing order a thread
-                    Err(err)
-                })?;
-
-            return Ok((order_a_output, order_b_output));
-        });
-
-        // ? Get the result or return the error
-        let (execution_output_a, execution_output_b) = swap_execution_handle
-            .or_else(|e| {
-                println!("error occured executing spot swap2 :  {:?}", e);
-
-                unblock_order(
-                    &blocked_order_ids_c,
-                    self.order_a.order_id,
-                    self.order_b.order_id,
-                );
-
-                Err(send_swap_error(
-                    "Unknow Error Occured".to_string(),
-                    None,
-                    Some(format!("error occured executing spot swap:  {:?}", e)),
-                ))
-            })?
-            .or_else(|err: Report<SwapThreadExecutionError>| {
-                println!("error occured executing spot swap1:  {:?}", err);
-
-                unblock_order(
-                    &blocked_order_ids_c,
-                    self.order_a.order_id,
-                    self.order_b.order_id,
-                );
-
-                Err(err)
-            })?;
+        drop(swap_output_json);
 
         // * Update the mutex order tabs and release the locks
         if let Some(mut order_tab_mutex) = order_tab_mutex_a {
@@ -377,62 +182,7 @@ impl Swap {
                 .clone();
         }
 
-        // * JSON Output ========================================================================================
-        let swap_output = TransactionOutptut::new(&self);
-
-        let mut spot_note_info_res_a = None;
-        let mut spot_note_info_res_b = None;
-        let mut updated_tab_hash_a = None;
-        let mut updated_tab_hash_b = None;
-        if execution_output_a.updated_order_tab.is_some() {
-            let updated_tab = execution_output_a.updated_order_tab.as_ref().unwrap();
-            updated_tab_hash_a = Some(updated_tab.hash.clone());
-        } else {
-            // ? non-tab order
-            let note_info_output = execution_output_a.note_info_output.as_ref().unwrap();
-
-            let mut new_pfr_idx_a: u64 = 0;
-            if let Some(new_pfr_note) = note_info_output.new_partial_fill_info.as_ref() {
-                new_pfr_idx_a = new_pfr_note.0.as_ref().unwrap().index;
-            }
-
-            spot_note_info_res_a = Some((
-                note_info_output.prev_partial_fill_refund_note.clone(),
-                note_info_output.swap_note.index,
-                new_pfr_idx_a,
-            ));
-        }
-        if execution_output_b.updated_order_tab.is_some() {
-            let updated_tab = execution_output_b.updated_order_tab.as_ref().unwrap();
-            updated_tab_hash_b = Some(updated_tab.hash.clone());
-        } else {
-            // ? non-tab order
-            let note_info_output = execution_output_b.note_info_output.as_ref().unwrap();
-
-            let mut new_pfr_idx_b: u64 = 0;
-            if let Some(new_pfr_note) = note_info_output.new_partial_fill_info.as_ref() {
-                new_pfr_idx_b = new_pfr_note.0.as_ref().unwrap().index;
-            }
-
-            spot_note_info_res_b = Some((
-                note_info_output.prev_partial_fill_refund_note.clone(),
-                note_info_output.swap_note.index,
-                new_pfr_idx_b,
-            ));
-        }
-
-        let json_output = swap_output.wrap_output(
-            &spot_note_info_res_a,
-            &spot_note_info_res_b,
-            &prev_order_tab_a2,
-            &prev_order_tab_b2,
-            &updated_tab_hash_a,
-            &updated_tab_hash_b,
-        );
-
-        let mut swap_output_json = swap_output_json_m.lock();
-        swap_output_json.push(json_output);
-        drop(swap_output_json);
+        println!("12");
 
         // * Return the swap result -----------------------------------
 
