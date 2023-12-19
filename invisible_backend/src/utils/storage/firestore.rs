@@ -29,8 +29,8 @@ use super::{
 // * ==================================================================================
 
 pub fn create_session() -> ServiceSession {
-    let mut cred =
-        Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
+    let mut cred = Credentials::from_file("invisible333.json").expect("Read credentials file");
+    // TODO: Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
     cred.download_google_jwks().expect("Download Google JWKS");
 
     let session = ServiceSession::new(cred).expect("Create a service account session");
@@ -176,7 +176,8 @@ pub fn start_add_note_thread(
         let session_ = s.lock();
         // let backup_storage = backup_storage.lock();
 
-        store_new_note(&session_, &backup, &note);
+        // TODO
+        // store_new_note(&session_, &backup, &note);
         drop(session_);
     });
     return handle;
@@ -193,7 +194,8 @@ pub fn start_delete_note_thread(
 
     let handle = spawn(move || {
         let session_ = s.lock();
-        delete_note_at_address(&session_, &backup, address.as_str(), idx.as_str());
+        // TODO
+        // delete_note_at_address(&session_, &backup, address.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;
@@ -212,7 +214,14 @@ pub fn start_add_position_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
 
-        store_new_position(&session_, &backup, &position);
+        let valid_indexes: Vec<u32> = vec![0, 1, 10, 2, 3, 7];
+
+        // TODO
+        if valid_indexes.contains(&position.index) {
+            store_new_position(&session_, &backup, &position);
+        }
+
+        // store_new_position(&session_, &backup, &position);
         drop(session_);
     });
     return handle;
@@ -229,7 +238,8 @@ pub fn start_delete_position_thread(
 
     let handle = spawn(move || {
         let session_ = s.lock();
-        delete_position_at_address(&session_, &backup, address.as_str(), idx.as_str());
+        // TODO
+        // delete_position_at_address(&session_, &backup, address.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;
@@ -285,7 +295,7 @@ pub fn start_add_fill_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
 
-        store_new_spot_fill(&session_, &backup, &fill_info);
+        // TODO store_new_spot_fill(&session_, &backup, &fill_info);
         drop(session_);
     });
     return handle;
@@ -302,7 +312,7 @@ pub fn start_add_perp_fill_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
 
-        store_new_perp_fill(&session_, &backup, &fill_info);
+        // TODO store_new_perp_fill(&session_, &backup, &fill_info);
         drop(session_);
     });
 

@@ -182,6 +182,7 @@ pub fn update_state_and_finalize(
         let order_b_output = &execution_result.1;
 
         // * AFTER BOTH orders have been verified successfully update the state —————————————————————————————————————
+
         reverify_existances(
             &tree_m,
             &order_a,

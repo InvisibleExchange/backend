@@ -213,7 +213,9 @@ pub fn reverify_existances(
     prev_order_tab_b: &Option<OrderTab>,
     note_info_output_b: &Option<NoteInfoExecutionOutput>,
 ) -> Result<(), SwapThreadExecutionError> {
+   
     let state_tree = state_tree.lock();
+  
 
     if note_info_output_a.is_some() {
         if note_info_output_a.is_some()
@@ -328,6 +330,7 @@ pub fn reverify_existances(
             ));
         }
     }
+
 
     return Ok(());
 }

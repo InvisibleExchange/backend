@@ -124,13 +124,10 @@ impl Swap {
             self.fee_taken_b,
         )?;
 
-        println!("7");
-
         // ? Lock the json output before updating the state to prevent another transaction from
         // ? squeezing in between and updating the json output before this transaction is done
         let mut swap_output_json = swap_output_json_m.lock();
 
-        println!("8");
 
         // * Update the state if transaction was successful ===============
         update_state_and_finalize(
@@ -147,6 +144,8 @@ impl Swap {
             &prev_order_tab_b,
         )?;
 
+     
+
         // * Construct and store the JSON Output ===========================
         let swap_output = TransactionOutptut::new(&self);
 
@@ -161,8 +160,6 @@ impl Swap {
             &prev_order_tab_a,
             &prev_order_tab_b,
         );
-
-        println!("9");
 
         drop(swap_output_json);
 
@@ -181,8 +178,6 @@ impl Swap {
                 .unwrap()
                 .clone();
         }
-
-        println!("12");
 
         // * Return the swap result -----------------------------------
 

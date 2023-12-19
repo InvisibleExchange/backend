@@ -23,8 +23,6 @@ use crate::utils::{errors::PerpSwapExecutionError, notes::Note};
 use error_stack::Result;
 //
 
-// TODO: DO SOMETHING WITH LEFTOVER MARGIN IN 000 SITUATIONS
-
 #[derive(Clone, Debug)]
 pub struct PerpSwap {
     pub transaction_type: String,

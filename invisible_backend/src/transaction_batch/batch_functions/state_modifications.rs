@@ -124,10 +124,6 @@ pub fn _split_notes_inner(
             String::from("note_split"),
             json!({"token": token, "notes_in": notes_in, "new_note": new_note, "refund_note": refund_note}),
         );
-
-    let mut swap_output_json = swap_output_json.lock();
-    swap_output_json.push(json_map);
-
     let mut updated_state_hashes_m = updated_state_hashes.lock();
 
     // ? Add return note in to state
@@ -144,9 +140,12 @@ pub fn _split_notes_inner(
         state_tree_m.update_leaf_node(&note.hash, note.index);
         updated_state_hashes_m.insert(note.index, (LeafNodeType::Note, note.hash.clone()));
     }
-
     drop(updated_state_hashes_m);
     drop(state_tree_m);
+
+    let mut swap_output_json = swap_output_json.lock();
+    swap_output_json.push(json_map);
+
     drop(swap_output_json);
 
     // ----------------------------------------------
