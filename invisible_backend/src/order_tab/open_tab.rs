@@ -8,11 +8,12 @@ use starknet::curve::AffinePoint;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     server::grpc::engine_proto::OpenOrderTabReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::hash_many, notes::Note, storage::local_storage::BackupStorage},
+    utils::{crypto_utils::hash_many, notes::Note},
 };
 
 use crate::utils::crypto_utils::{verify, EcPoint, Signature};

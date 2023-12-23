@@ -19,18 +19,19 @@ use crate::{
 };
 
 use super::{
+    backup_storage::BackupStorage,
     firestore_helpers::{
         delete_note_at_address, delete_order_tab, delete_position_at_address, store_new_note,
         store_new_position, store_order_tab,
     },
-    local_storage::BackupStorage,
 };
 
 // * ==================================================================================
 
 pub fn create_session() -> ServiceSession {
-    let mut cred = Credentials::from_file("invisible333.json").expect("Read credentials file");
-    // TODO: Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
+    // let mut cred = Credentials::from_file("invisible333.json").expect("Read credentials file");
+    let mut cred =
+        Credentials::from_file("firebase-service-account.json").expect("Read credentials file");
     cred.download_google_jwks().expect("Download Google JWKS");
 
     let session = ServiceSession::new(cred).expect("Create a service account session");
@@ -177,7 +178,7 @@ pub fn start_add_note_thread(
         // let backup_storage = backup_storage.lock();
 
         // TODO
-        // store_new_note(&session_, &backup, &note);
+        store_new_note(&session_, &backup, &note);
         drop(session_);
     });
     return handle;
@@ -195,14 +196,13 @@ pub fn start_delete_note_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
         // TODO
-        // delete_note_at_address(&session_, &backup, address.as_str(), idx.as_str());
+        delete_note_at_address(&session_, &backup, address.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;
 }
 
 // POSITIONS
-
 pub fn start_add_position_thread(
     position: PerpPosition,
     session: &Arc<Mutex<ServiceSession>>,
@@ -221,7 +221,7 @@ pub fn start_add_position_thread(
             store_new_position(&session_, &backup, &position);
         }
 
-        // store_new_position(&session_, &backup, &position);
+        store_new_position(&session_, &backup, &position);
         drop(session_);
     });
     return handle;
@@ -239,7 +239,7 @@ pub fn start_delete_position_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
         // TODO
-        // delete_position_at_address(&session_, &backup, address.as_str(), idx.as_str());
+        delete_position_at_address(&session_, &backup, address.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;

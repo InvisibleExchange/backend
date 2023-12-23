@@ -23,7 +23,7 @@ use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{send_swap_error, SwapThreadExecutionError};
 use crate::utils::notes::Note;
-use crate::utils::storage::local_storage::BackupStorage;
+use crate::utils::storage::backup_storage::BackupStorage;
 
 type ExecutionResult = (TxExecutionThreadOutput, TxExecutionThreadOutput);
 pub fn execute_swap_transaction(

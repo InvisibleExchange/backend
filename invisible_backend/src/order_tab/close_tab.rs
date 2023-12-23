@@ -7,12 +7,13 @@ use parking_lot::Mutex;
 use firestore_db_and_auth::ServiceSession;
 use serde_json::Value;
 
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     perpetual::{perp_order::CloseOrderFields, DUST_AMOUNT_PER_ASSET},
     server::grpc::engine_proto::CloseOrderTabReq,
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::hash_many, notes::Note, storage::local_storage::BackupStorage},
+    utils::{crypto_utils::hash_many, notes::Note},
 };
 
 use crate::utils::crypto_utils::{verify, Signature};

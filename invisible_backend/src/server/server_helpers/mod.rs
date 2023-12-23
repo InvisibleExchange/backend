@@ -28,20 +28,20 @@ use crate::{
 
 use tokio_tungstenite::tungstenite::{Message, Result as WsResult};
 
-const BTC: u32 = 12345;
-const ETH: u32 = 54321;
-const USDC: u32 = 55555;
-const PEPE: u32 = 66666;
+const BTC: u32 = 3592681469;
+const ETH: u32 = 453755560;
+const USDC: u32 = 2413654107;
+const SOL: u32 = 277158171;
 
 pub static SPOT_MARKET_IDS: phf::Map<&'static str, u16> = phf_map! {
- "12345" => 11, // BTC
- "54321" => 12, // ETH
+    "3592681469" => 11, // BTC
+ "453755560" => 12, // ETH
 };
 
 pub static PERP_MARKET_IDS: phf::Map<&'static str, u16> = phf_map! {
-    "12345" => 21, // BTC
-    "54321" => 22, // ETH
-    "66666" => 23, // PEPE
+    "3592681469" => 21, // BTC
+    "453755560" => 22, // ETH
+    "277158171" => 23, // SOL
 };
 
 pub mod amend_order_execution;
@@ -75,9 +75,9 @@ pub fn init_order_books() -> (
     let book = Arc::new(TokioMutex::new(OrderBook::new(ETH, USDC, *market_id)));
     perp_order_books.insert(*market_id, book);
 
-    // & PEPE-USDC orderbook
-    let market_id = PERP_MARKET_IDS.get(&PEPE.to_string()).unwrap();
-    let book = Arc::new(TokioMutex::new(OrderBook::new(PEPE, USDC, *market_id)));
+    // & SOL-USDC orderbook
+    let market_id = PERP_MARKET_IDS.get(&SOL.to_string()).unwrap();
+    let book = Arc::new(TokioMutex::new(OrderBook::new(SOL, USDC, *market_id)));
     perp_order_books.insert(*market_id, book);
 
     return (spot_order_books, perp_order_books);
@@ -618,7 +618,7 @@ pub async fn handle_connection(
     ws_connections__.remove(&user_id);
     drop(ws_connections__);
 
-    if config_code > 0 {
+    if config_code == CONFIG_CODE {
         let mut privileged_ws_connections__ = privileged_ws_connections.lock().await;
         let index = privileged_ws_connections__
             .iter()

@@ -21,7 +21,8 @@ use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{SwapThreadExecutionError, TransactionExecutionError};
 use crate::utils::notes::Note;
-use crate::utils::storage::local_storage::{BackupStorage, MainStorage};
+use crate::utils::storage::backup_storage::BackupStorage;
+use crate::utils::storage::local_storage::MainStorage;
 
 #[derive(Debug)]
 pub struct Swap {
@@ -128,7 +129,6 @@ impl Swap {
         // ? squeezing in between and updating the json output before this transaction is done
         let mut swap_output_json = swap_output_json_m.lock();
 
-
         // * Update the state if transaction was successful ===============
         update_state_and_finalize(
             &tree_m,
@@ -143,8 +143,6 @@ impl Swap {
             &prev_order_tab_a,
             &prev_order_tab_b,
         )?;
-
-     
 
         // * Construct and store the JSON Output ===========================
         let swap_output = TransactionOutptut::new(&self);

@@ -1,25 +1,24 @@
 use std::{collections::HashMap, fs, time::SystemTime};
 
-use serde_json::{json, to_vec, Map, Value};
+use serde_json::{json, Map, Value};
 
-use sled::{Config, Result};
+use sled::Config;
 
 use crate::{
-    order_tab::OrderTab,
-    perpetual::perp_position::PerpPosition,
-    transaction_batch::tx_batch_structs::OracleUpdate,
-    transactions::transaction_helpers::transaction_output::{FillInfo, PerpFillInfo},
+    order_tab::OrderTab, perpetual::perp_position::PerpPosition,
+    transaction_batch::tx_batch_structs::OracleUpdate, utils::notes::Note,
 };
 
-use super::{super::notes::Note, firestore::upload_file_to_storage};
+use super::firestore::upload_file_to_storage;
 
 type StorageResult = std::result::Result<(), Box<dyn std::error::Error>>;
 
 /// The main storage struct that stores all the data on disk.
 pub struct MainStorage {
-    pub tx_db: sled::Db,
-    pub price_db: sled::Db,
-    pub funding_db: sled::Db,
+    pub tx_db: sled::Db, // Stores the json ouput of the transactions executed this batch
+    pub state_updates_db: sled::Db, // Stores the state updates of the transactions executed this batch (notes/positions/orders)
+    pub price_db: sled::Db, // Stores the price data of the current batch (min/max price with signatures)
+    pub funding_db: sled::Db, // Stores the funding data since the begining(funding rates/prices)
     pub processed_deposits_db: sled::Db, // Deposit ids of all the deposits that were processed so far
     pub latest_batch: u32,               // every transaction batch stores data separately
     pub db_pending_updates: sled::Db, // small batches of txs that get pushed to the db periodically
@@ -43,6 +42,10 @@ impl MainStorage {
         let tx_db = config.open().unwrap();
 
         let config =
+            Config::new().path("./storage/state_updates/".to_string() + &batch_index.to_string());
+        let state_updates_db = config.open().unwrap();
+
+        let config =
             Config::new().path("./storage/price_data/".to_string() + &batch_index.to_string());
         let price_db = config.open().unwrap();
 
@@ -57,6 +60,7 @@ impl MainStorage {
 
         MainStorage {
             tx_db,
+            state_updates_db,
             price_db,
             funding_db,
             processed_deposits_db,
@@ -82,12 +86,11 @@ impl MainStorage {
             .unwrap();
     }
 
-    /// Gets a batch of the latest 15-20 transactions that were executed
+    /// Gets a batch of the latest K transactions that were executed
     /// and stores them on disk.
     ///
     /// # Arguments
     /// * swap_output_json - a vector of the latest 15-20 transactions as json maps
-    /// * index - the index of the micro batch in the current batch
     ///
     pub fn store_micro_batch(&mut self, swap_output_json: &Vec<serde_json::Map<String, Value>>) {
         let index = self.tx_db.get("count").unwrap();
@@ -112,9 +115,63 @@ impl MainStorage {
         self.store_pending_batch_updates(swap_output_json);
     }
 
-    //
-    //
-    //
+    /// Stores the state updates of the transactions executed this batch (notes/positions/orders)
+    /// These are posted to a DA layer like Celestia or EigenDA.
+    /// ## Arguments
+    /// * swap_output_json - a vector of the latest 15-20 transactions as json maps
+    ///
+    pub fn store_state_updates(
+        &mut self,
+        notes: &Vec<&Note>,
+        positions: &Vec<&PerpPosition>,
+        tabs: &Vec<&OrderTab>,
+        removed_leaves: &Vec<u64>,
+    ) {
+        let index = self.tx_db.get("count").unwrap();
+        let index = match index {
+            Some(index) => {
+                let index: u64 = serde_json::from_slice(&index.to_vec()).unwrap();
+                index
+            }
+            None => 0,
+        };
+
+        if notes.len() > 0 {
+            let notes = serde_json::to_vec(&notes).unwrap();
+
+            self.state_updates_db
+                .insert(&(index.to_string() + "-note"), notes)
+                .unwrap();
+        }
+
+        if positions.len() > 0 {
+            let positions = serde_json::to_vec(&positions).unwrap();
+
+            self.state_updates_db
+                .insert(&(index.to_string() + "-position"), positions)
+                .unwrap();
+        }
+
+        if tabs.len() > 0 {
+            let tabs = serde_json::to_vec(&tabs).unwrap();
+
+            self.state_updates_db
+                .insert(&(index.to_string() + "-tabs"), tabs)
+                .unwrap();
+        }
+
+        if removed_leaves.len() > 0 {
+            let removed_leaves = serde_json::to_vec(&removed_leaves).unwrap();
+
+            self.state_updates_db
+                .insert(&(index.to_string() + "-empty_leaf"), removed_leaves)
+                .unwrap();
+        }
+    }
+
+    /// This stores the latest N Transactions that have not been pushed to the db yet.
+    /// Every few minutes we push these transactions to the db.
+    ///
     pub fn store_pending_batch_updates(
         &mut self,
         swap_output_json: &Vec<serde_json::Map<String, Value>>,
@@ -188,7 +245,7 @@ impl MainStorage {
             json_result.extend(res_vec);
         }
 
-        let serialized_data = to_vec(&json_result).unwrap();
+        let serialized_data = serde_json::to_vec(&json_result).unwrap();
 
         self.db_pending_updates.clear().unwrap();
 
@@ -419,234 +476,5 @@ impl MainStorage {
         self.latest_batch = new_batch_index;
 
         return self.process_pending_batch_updates(true);
-    }
-}
-
-/// This stores info about failed database updates
-pub struct BackupStorage {
-    note_db: sled::Db,                // For failed note updates
-    removable_notes_db: sled::Db,     // For failed removable notes updates
-    position_db: sled::Db,            // For failed position updates
-    removable_positions_db: sled::Db, // For failed removable positions updates
-    order_tab_db: sled::Db,           // For failed order tab updates
-    removable_order_tab_db: sled::Db, // For failed removable order tab updates
-    fills_db: sled::Db,               // For failed spot fills updates
-    perp_fills_db: sled::Db,          // For failed perp fills updates
-                                      // rollback_db: sled::Db,            // For rollback transactions
-}
-
-impl BackupStorage {
-    pub fn new() -> Self {
-        let config = Config::new().path("./storage/backups/notes");
-        let note_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/removable_notes");
-        let removable_notes_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/positions");
-        let position_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/removable_positions");
-        let removable_positions_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/order_tab");
-        let order_tab_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/removable_order_tab");
-        let removable_order_tab_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/fills");
-        let fills_db = config.open().unwrap();
-
-        let config = Config::new().path("./storage/backups/perp_fills");
-        let perp_fills_db = config.open().unwrap();
-
-        // let config = Config::new().path("./storage/rollback_info");
-        // let rollback_db = config.open().unwrap();
-
-        BackupStorage {
-            note_db,
-            removable_notes_db,
-            position_db,
-            removable_positions_db,
-            fills_db,
-            perp_fills_db,
-            // rollback_db,
-            order_tab_db,
-            removable_order_tab_db,
-        }
-    }
-
-    /// Stores a failed note update in the database.
-    pub fn store_note(&self, note: &Note) -> Result<()> {
-        // for x in self.note_db.iter() {}
-
-        let idx = note.index;
-        let note = serde_json::to_vec(note).unwrap();
-
-        self.note_db.insert(idx.to_string(), note)?;
-
-        Ok(())
-    }
-
-    pub fn store_note_removal(&self, idx: u64, address: &str) -> Result<()> {
-        let info = serde_json::to_vec(&(idx, address)).unwrap();
-
-        self.removable_notes_db.insert(idx.to_string(), info)?;
-
-        Ok(())
-    }
-
-    /// Reads the notes that failed to be stored in the database.
-    pub fn read_notes(&self) -> (Vec<Note>, Vec<(u64, String)>) {
-        let mut notes = Vec::new();
-        for x in self.note_db.iter() {
-            let n = x.unwrap().1.to_vec();
-            let note: Note = serde_json::from_slice(&n).unwrap();
-            notes.push(note);
-        }
-
-        let mut removable_info = Vec::new();
-        for x in self.removable_notes_db.iter() {
-            let info: (u64, String) = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-
-            removable_info.push(info);
-        }
-
-        (notes, removable_info)
-    }
-
-    pub fn store_position(&self, position: &PerpPosition) -> Result<()> {
-        // for x in self.position_db.iter() {}
-
-        let idx = position.index;
-        let position = serde_json::to_vec(position).unwrap();
-
-        self.position_db.insert(idx.to_string(), position)?;
-
-        Ok(())
-    }
-
-    pub fn store_position_removal(&self, idx: u64, address: &str) -> Result<()> {
-        let info = serde_json::to_vec(&(idx, address)).unwrap();
-
-        self.removable_positions_db.insert(idx.to_string(), info)?;
-
-        Ok(())
-    }
-
-    pub fn read_positions(&self) -> (Vec<PerpPosition>, Vec<(u64, String)>) {
-        let mut positions = Vec::new();
-        for x in self.position_db.iter() {
-            let position: PerpPosition = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-            positions.push(position);
-        }
-
-        let mut removable_info = Vec::new();
-        for x in self.removable_positions_db.iter() {
-            let info: (u64, String) = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-
-            removable_info.push(info);
-        }
-
-        (positions, removable_info)
-    }
-
-    pub fn store_spot_fill(&self, fill: &FillInfo) -> Result<()> {
-        // for x in self.fills_db.iter() {}
-
-        let mut key = fill.user_id_a.clone();
-        key.push_str(&fill.user_id_b);
-        key.push_str(&fill.timestamp.to_string());
-        let fill = serde_json::to_vec(fill).unwrap();
-
-        self.fills_db.insert(key, fill)?;
-
-        Ok(())
-    }
-
-    pub fn read_spot_fills(&self) -> Vec<FillInfo> {
-        let mut fills = Vec::new();
-
-        for x in self.fills_db.iter() {
-            let fill: FillInfo = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-            fills.push(fill);
-        }
-
-        fills
-    }
-
-    pub fn store_perp_fill(&self, fill: &PerpFillInfo) -> Result<()> {
-        // for x in self.fills_db.iter() {}
-
-        let mut key = fill.user_id_a.clone();
-        key.push_str(&fill.user_id_b);
-        key.push_str(&fill.timestamp.to_string());
-        let fill = serde_json::to_vec(fill).unwrap();
-
-        self.perp_fills_db.insert(key, fill)?;
-
-        Ok(())
-    }
-
-    pub fn read_perp_fills(&self) -> Vec<PerpFillInfo> {
-        let mut fills = Vec::new();
-
-        for x in self.perp_fills_db.iter() {
-            let fill: PerpFillInfo = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-            fills.push(fill);
-        }
-
-        fills
-    }
-
-    // // TODO:
-    // pub fn store_spot_rollback(&self, thread_id: u64, rollback: &RollbackInfo) -> Result<()> {
-    //     // for x in self.fills_db.iter() {}
-    //     // self.rollback_db.insert(key, fill)?;
-    //     Ok(())
-    // }
-
-    pub fn store_order_tab(&self, order_tab: &OrderTab) -> Result<()> {
-        let idx = order_tab.tab_idx;
-        let tab = serde_json::to_vec(order_tab).unwrap();
-
-        self.order_tab_db.insert(idx.to_string(), tab)?;
-
-        Ok(())
-    }
-
-    pub fn store_order_tab_removal(&self, idx: u64, pub_key: &str) -> Result<()> {
-        let info = serde_json::to_vec(&(idx, pub_key)).unwrap();
-
-        self.removable_order_tab_db.insert(idx.to_string(), info)?;
-
-        Ok(())
-    }
-
-    pub fn read_order_tabs(&self) -> (Vec<OrderTab>, Vec<(u64, String)>) {
-        let mut order_tabs = Vec::new();
-        for x in self.order_tab_db.iter() {
-            let position: OrderTab = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-            order_tabs.push(position);
-        }
-
-        let mut removable_info = Vec::new();
-        for x in self.removable_order_tab_db.iter() {
-            let info: (u64, String) = serde_json::from_slice(&x.unwrap().1.to_vec()).unwrap();
-
-            removable_info.push(info);
-        }
-
-        (order_tabs, removable_info)
-    }
-
-    pub fn clear_db(&self) -> Result<()> {
-        self.note_db.clear()?;
-        self.position_db.clear()?;
-        self.fills_db.clear()?;
-        self.perp_fills_db.clear()?;
-
-        Ok(())
     }
 }

@@ -4,13 +4,13 @@ use parking_lot::Mutex;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::utils::{
     notes::Note,
     storage::firestore::{
         start_add_note_thread, start_add_order_tab_thread, start_delete_note_thread,
         start_delete_order_tab_thread,
     },
-    storage::local_storage::BackupStorage,
 };
 
 use super::OrderTab;

@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 
 use error_stack::{Report, Result};
 
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     transaction_batch::{tx_batch_structs::SwapFundingInfo, LeafNodeType},
     transactions::transaction_helpers::swap_helpers::unblock_order,
@@ -16,7 +17,6 @@ use crate::{
     utils::{
         errors::{send_perp_swap_error, PerpSwapExecutionError},
         notes::Note,
-        storage::local_storage::BackupStorage,
     },
 };
 

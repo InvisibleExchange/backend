@@ -25,7 +25,7 @@ use crate::{
     utils::storage::firestore::{start_add_note_thread, start_add_position_thread},
 };
 use crate::{
-    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
+    trees::superficial_tree::SuperficialTree, utils::storage::backup_storage::BackupStorage,
 };
 
 use crate::utils::notes::Note;
