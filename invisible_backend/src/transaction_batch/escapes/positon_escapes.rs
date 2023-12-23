@@ -5,6 +5,8 @@ use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+use crate::trees::superficial_tree::SuperficialTree;
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     perpetual::{
         get_collateral_amount, perp_helpers::perp_swap_helpers::_check_note_sums,
@@ -19,9 +21,6 @@ use crate::{
             start_delete_position_thread,
         },
     },
-};
-use crate::{
-    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
 };
 
 use crate::utils::notes::Note;

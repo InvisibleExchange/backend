@@ -13,7 +13,7 @@ use crate::{
     },
 };
 use crate::{
-    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
+    trees::superficial_tree::SuperficialTree, utils::storage::backup_storage::BackupStorage,
 };
 
 use crate::utils::notes::Note;

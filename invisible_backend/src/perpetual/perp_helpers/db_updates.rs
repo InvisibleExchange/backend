@@ -3,6 +3,7 @@ use std::sync::Arc;
 use firestore_db_and_auth::ServiceSession;
 use parking_lot::Mutex;
 
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     perpetual::{perp_order::PerpOrder, perp_position::PerpPosition, PositionEffectType},
     transactions::transaction_helpers::{
@@ -13,7 +14,6 @@ use crate::{
         storage::firestore::{
             start_add_perp_fill_thread, start_add_position_thread, start_delete_position_thread,
         },
-        storage::local_storage::BackupStorage,
     },
 };
 

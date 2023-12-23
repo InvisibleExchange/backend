@@ -6,12 +6,11 @@ use serde_json::Value;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
-    perpetual::perp_position::PerpPosition,
-    server::grpc::engine_proto::OnChainCloseMmReq,
-    transaction_batch::LeafNodeType,
-    trees::superficial_tree::SuperficialTree,
-    utils::storage::{firestore::start_add_position_thread, local_storage::BackupStorage},
+    perpetual::perp_position::PerpPosition, server::grpc::engine_proto::OnChainCloseMmReq,
+    transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree,
+    utils::storage::firestore::start_add_position_thread,
 };
 
 use crate::utils::crypto_utils::Signature;

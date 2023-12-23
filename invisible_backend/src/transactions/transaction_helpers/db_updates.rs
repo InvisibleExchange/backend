@@ -12,7 +12,7 @@ use crate::{
             start_add_fill_thread, start_add_note_thread, start_add_order_tab_thread,
             start_delete_deposit_thread, start_delete_note_thread,
         },
-        storage::local_storage::BackupStorage,
+        storage::backup_storage::BackupStorage,
     },
 };
 

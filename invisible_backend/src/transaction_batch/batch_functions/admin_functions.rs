@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 
+use crate::perpetual::SYNTHETIC_ASSETS;
 use crate::transaction_batch::tx_batch_helpers::{
     _calculate_funding_rates, _per_minute_funding_update_inner,
 };
@@ -89,6 +90,8 @@ pub fn _per_minute_funding_updates(
 
     *current_funding_count += 1;
 
+    // ? 1 hour realization/settlement period
+    // TODO if *current_funding_count == 60 {
     if *current_funding_count == 60 {
         let fundings = _calculate_funding_rates(running_funding_tick_sums);
 
@@ -125,6 +128,11 @@ pub fn _update_index_prices_inner(
 
     for mut update in oracle_updates {
         let token = update.token;
+
+        if !SYNTHETIC_ASSETS.contains(&token) {
+            continue;
+        }
+
         let mut median = update.median_price();
 
         if min_index_price_data.get(&update.token).unwrap().0 == 0 {

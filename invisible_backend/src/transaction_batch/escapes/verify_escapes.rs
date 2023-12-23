@@ -8,11 +8,10 @@ use crate::order_tab::OrderTab;
 use crate::perpetual::perp_order::OpenOrderFields;
 use crate::perpetual::perp_position::PerpPosition;
 use crate::transaction_batch::tx_batch_structs::SwapFundingInfo;
+use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{server::grpc::engine_proto::EscapeMessage, transaction_batch::LeafNodeType};
-use crate::{
-    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
-};
 
 use crate::utils::notes::Note;
 
@@ -149,7 +148,6 @@ pub fn _execute_forced_escape_inner(
             signature_b,
             swap_funding_info,
             index_price,
-            
         );
 
         let mut json_map = serde_json::map::Map::new();

@@ -10,9 +10,8 @@ use crate::{
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
     utils::{
-        errors::TransactionExecutionError,
-        notes::Note,
-        storage::local_storage::{BackupStorage, MainStorage},
+        errors::TransactionExecutionError, notes::Note, storage::backup_storage::BackupStorage,
+        storage::local_storage::MainStorage,
     },
 };
 
@@ -20,6 +19,7 @@ use self::swap::SwapResponse;
 
 pub mod deposit;
 pub mod limit_order;
+mod order_execution;
 pub mod swap;
 mod swap_execution;
 pub mod transaction_helpers;

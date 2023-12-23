@@ -10,7 +10,7 @@ use serde_json::json;
 use crate::utils::crypto_utils::hash;
 use crate::{order_tab::OrderTab, perpetual::perp_position::PerpPosition, utils::notes::Note};
 
-use super::local_storage::BackupStorage;
+use super::backup_storage::BackupStorage;
 
 // * NOTE -------------------------------------------------------------------------------
 

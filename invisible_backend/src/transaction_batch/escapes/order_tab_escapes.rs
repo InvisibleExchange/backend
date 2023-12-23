@@ -4,6 +4,8 @@ use num_traits::{FromPrimitive, Zero};
 use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
+use crate::trees::superficial_tree::SuperficialTree;
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     order_tab::OrderTab,
     transaction_batch::LeafNodeType,
@@ -11,9 +13,6 @@ use crate::{
         crypto_utils::{hash, verify, Signature},
         storage::firestore::start_delete_order_tab_thread,
     },
-};
-use crate::{
-    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
 };
 
 use serde::Deserialize;

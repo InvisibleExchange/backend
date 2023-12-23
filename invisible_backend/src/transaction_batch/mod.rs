@@ -10,6 +10,8 @@ use std::{
 
 use error_stack::Result;
 
+use crate::trees::superficial_tree::SuperficialTree;
+use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     perpetual::{
         liquidations::{
@@ -24,9 +26,6 @@ use crate::{
 };
 use crate::{
     server::grpc::engine_proto::EscapeMessage, utils::storage::local_storage::MainStorage,
-};
-use crate::{
-    trees::superficial_tree::SuperficialTree, utils::storage::local_storage::BackupStorage,
 };
 
 use crate::utils::{
