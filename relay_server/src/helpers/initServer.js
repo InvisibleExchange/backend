@@ -28,7 +28,8 @@ function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
   }, 10_000);
 
   // & Deposits ====================
-  // TODO: listenForDeposits(db);
+  // TODO:
+  listenForDeposits(db);
 
   // TODO: For testing only! ============================================
   runIndexPriceUpdator(PRICE_FEEDS);

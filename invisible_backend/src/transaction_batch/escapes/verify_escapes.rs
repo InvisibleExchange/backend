@@ -1,7 +1,9 @@
 use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
+use num_traits::FromPrimitive;
 use parking_lot::Mutex;
 use serde_json::Value;
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::order_tab::OrderTab;
@@ -9,8 +11,9 @@ use crate::perpetual::perp_order::OpenOrderFields;
 use crate::perpetual::perp_position::PerpPosition;
 use crate::transaction_batch::tx_batch_structs::SwapFundingInfo;
 use crate::trees::superficial_tree::SuperficialTree;
-use crate::utils::crypto_utils::Signature;
+use crate::utils::crypto_utils::{hash_many, Signature};
 use crate::utils::storage::backup_storage::BackupStorage;
+use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use crate::{server::grpc::engine_proto::EscapeMessage, transaction_batch::LeafNodeType};
 
 use crate::utils::notes::Note;
@@ -23,12 +26,13 @@ pub fn _execute_forced_escape_inner(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
+    main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
     escape_message: EscapeMessage,
     swap_funding_info: &Option<SwapFundingInfo>,
     index_price: u64,
-) {
+) -> Result<(), String> {
     let escape_id = escape_message.escape_id;
 
     // ? Escape Notes
@@ -41,6 +45,19 @@ pub fn _execute_forced_escape_inner(
 
         let sig = escape_message.signature.unwrap();
         let signature = Signature { r: sig.r, s: sig.s };
+
+        // ? Verify action has been registered
+        let data_commitment = get_note_escape_commitment(escape_id, &escape_notes, &signature);
+        let main_storage_m = main_storage.lock();
+        if !main_storage_m.does_commitment_exists(
+            OnchainActionType::NoteEscape,
+            escape_id,
+            data_commitment,
+        ) {
+            return Err("Note Escape not registered".to_string());
+        }
+        main_storage_m.remove_onchain_action_commitment(escape_id);
+        drop(main_storage_m);
 
         let note_escape = verify_note_escape(
             &state_tree,
@@ -74,6 +91,19 @@ pub fn _execute_forced_escape_inner(
 
         let sig = escape_message.signature.unwrap();
         let signature = Signature { r: sig.r, s: sig.s };
+
+        // ? Verify tab escape has been registered
+        let data_commitment = get_tab_escape_commitment(escape_id, &order_tab, &signature);
+        let main_storage_m = main_storage.lock();
+        if !main_storage_m.does_commitment_exists(
+            OnchainActionType::NoteEscape,
+            escape_id,
+            data_commitment,
+        ) {
+            return Err("Tab escape not registered".to_string());
+        }
+        main_storage_m.remove_onchain_action_commitment(escape_id);
+        drop(main_storage_m);
 
         let tab_escape = verify_order_tab_escape(
             state_tree,
@@ -133,6 +163,32 @@ pub fn _execute_forced_escape_inner(
 
         let recipient = close_position_message.recipient;
 
+        let additional_hash_b = match &open_order_fields_b {
+            Some(open_order_fields_b) => open_order_fields_b.hash(),
+            None => position_b.as_ref().unwrap().hash.clone(),
+        };
+
+        // ? Verify action has been registered
+        let data_commitment = get_position_escape_commitment(
+            escape_id,
+            close_price,
+            &position_a,
+            &additional_hash_b,
+            &BigUint::from_str(&recipient).unwrap_or_default(),
+            &signature_a,
+            &signature_b,
+        );
+        let main_storage_m = main_storage.lock();
+        if !main_storage_m.does_commitment_exists(
+            OnchainActionType::NoteEscape,
+            escape_id,
+            data_commitment,
+        ) {
+            return Err("Position Escape not registered".to_string());
+        }
+        main_storage_m.remove_onchain_action_commitment(escape_id);
+        drop(main_storage_m);
+
         let position_escape = verify_position_escape(
             state_tree,
             updated_state_hashes,
@@ -168,6 +224,8 @@ pub fn _execute_forced_escape_inner(
         swap_output_json_m.push(json_map);
         drop(swap_output_json_m);
     }
+
+    Ok(())
 }
 
 pub fn _get_position_close_escape_info(
@@ -203,4 +261,92 @@ pub fn _get_position_close_escape_info(
     };
 
     return (index_price, swap_funding_info, synthetic_token);
+}
+
+// * ----------------------------------------------------------------------------
+
+pub fn get_note_escape_commitment(
+    escape_id: u32,
+    escape_notes: &Vec<Note>,
+    signature: &Signature,
+) -> BigUint {
+    // & hash = H(escapeId, ...noteHashes, sig)
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let escape_id = BigUint::from_u32(escape_id).unwrap();
+    hash_inputs.push(&escape_id);
+
+    for note in escape_notes.iter() {
+        hash_inputs.push(&note.hash);
+    }
+
+    let sig_r = BigUint::from_str(&signature.r).unwrap();
+    let sig_s = BigUint::from_str(&signature.s).unwrap();
+    hash_inputs.push(&sig_r);
+    hash_inputs.push(&sig_s);
+
+    let hash = hash_many(&hash_inputs);
+
+    return hash;
+}
+
+pub fn get_tab_escape_commitment(
+    escape_id: u32,
+    order_tab: &OrderTab,
+    signature: &Signature,
+) -> BigUint {
+    // & hash = H(escapeId, tab_hash, sig)
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let escape_id = BigUint::from_u32(escape_id).unwrap();
+    hash_inputs.push(&escape_id);
+
+    hash_inputs.push(&order_tab.hash);
+
+    let sig_r = BigUint::from_str(&signature.r).unwrap();
+    let sig_s = BigUint::from_str(&signature.s).unwrap();
+    hash_inputs.push(&sig_r);
+    hash_inputs.push(&sig_s);
+
+    let hash = hash_many(&hash_inputs);
+
+    return hash;
+}
+
+pub fn get_position_escape_commitment(
+    escape_id: u32,
+    close_price: u64,
+    position_a: &PerpPosition,
+    additional_hash_b: &BigUint, // open_order_fields or position_b
+    recipient: &BigUint,
+    signature_a: &Signature,
+    signature_b: &Signature,
+) -> BigUint {
+    // & hash = H(escapeId, closePrice, positionA, additionalHashB, recipient, sigA, sigB)
+
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let escape_id = BigUint::from_u32(escape_id).unwrap();
+    hash_inputs.push(&escape_id);
+
+    let close_price = BigUint::from_u64(close_price).unwrap();
+    hash_inputs.push(&close_price);
+
+    hash_inputs.push(&position_a.position_header.position_address);
+    hash_inputs.push(&additional_hash_b);
+    hash_inputs.push(&recipient);
+
+    let sig_r = BigUint::from_str(&signature_a.r).unwrap();
+    let sig_s = BigUint::from_str(&signature_a.s).unwrap();
+    hash_inputs.push(&sig_r);
+    hash_inputs.push(&sig_s);
+
+    let sig_r = BigUint::from_str(&signature_b.r).unwrap();
+    let sig_s = BigUint::from_str(&signature_b.s).unwrap();
+    hash_inputs.push(&sig_r);
+    hash_inputs.push(&sig_s);
+
+    let hash = hash_many(&hash_inputs);
+
+    return hash;
 }

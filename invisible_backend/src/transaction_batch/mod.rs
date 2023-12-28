@@ -390,6 +390,7 @@ impl TransactionBatch {
             &self.state_tree,
             &self.updated_state_hashes,
             &self.firebase_session,
+            &self.main_storage,
             &self.backup_storage,
             &self.swap_output_json,
             scmm_action_message,
@@ -404,16 +405,20 @@ impl TransactionBatch {
             &escape_message,
         );
 
-        _execute_forced_escape_inner(
+        if let Err(e) = _execute_forced_escape_inner(
             &self.state_tree,
             &self.updated_state_hashes,
             &self.firebase_session,
+            &self.main_storage,
             &self.backup_storage,
             &self.swap_output_json,
             escape_message,
             &swap_funding_info,
             index_price,
-        );
+        ) {
+            println!("Error executing forced escape: {}", e);
+            return;
+        }
 
         if let Some(funding_info) = swap_funding_info {
             let mut min_funding_idxs_m = self.min_funding_idxs.lock();

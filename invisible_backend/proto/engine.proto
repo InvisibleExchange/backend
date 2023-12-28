@@ -1,10 +1,7 @@
 syntax = "proto3";
 package engine;
 
-
-
 service Engine {
-
     // on-chain interactions --------------- -----------------
     rpc execute_deposit (DepositMessage) returns (DepositResponse);
 
@@ -49,6 +46,8 @@ service Engine {
     rpc update_index_price (OracleUpdateReq) returns (SuccessResponse);
 
     rpc restore_orderbook (RestoreOrderBookMessage) returns (SuccessResponse);
+
+    rpc register_onchain_action (RegisterOnchainActionRequest) returns (SuccessResponse);
 
     // queries --------------- ----------------- ----------------
     rpc get_orders (OrdersReq) returns (OrdersRes);
@@ -308,6 +307,7 @@ message OnChainRegisterMMReq {
     Signature signature = 4;
     uint32 market_id = 5;
     uint32 synthetic_token = 6;
+    uint32 mm_action_id = 7;
 }
 
 
@@ -327,6 +327,7 @@ message OnChainAddLiqReq {
     Signature signature = 4;
     uint32 market_id = 5;
     uint32 synthetic_token = 6;
+    uint32 mm_action_id = 7;
 }
 
 message OnChainRemoveLiqReq { 
@@ -337,15 +338,17 @@ message OnChainRemoveLiqReq {
     Signature signature = 5;
     uint32 market_id = 6;
     uint32 synthetic_token = 7;
+    uint32 mm_action_id = 8;
 }
 
 message OnChainCloseMmReq { 
     GrpcPerpPosition position = 1;
-    uint64 initial_value_sum = 3;
-    uint64 vlp_amount_sum = 4;
-    Signature signature = 5;
-    uint32 market_id = 6;
-    uint32 synthetic_token = 7;
+    uint64 initial_value_sum = 2;
+    uint64 vlp_amount_sum = 3;
+    Signature signature = 4;
+    uint32 market_id = 5;
+    uint32 synthetic_token = 6;
+    uint32 mm_action_id = 7;
 }
 
 // ------ --------------------------------------------
@@ -405,7 +408,24 @@ message RestoreOrderBookMessage {
     repeated PerpOrderRestoreMessage perp_order_restore_messages = 2;
 }
 
+// ---------------------------------
 
+enum GrpcOnchainActionType {
+    DEPOSIT = 0;
+    MM_REGISTRATION = 1;
+    MM_ADD_LIQUIDITY = 2;
+    MM_REMOVE_LIQUIDITY = 3;
+    MM_CLOSE_POSITION = 4;
+    NOTE_ESCAPE = 5;
+    TAB_ESCAPE = 6;
+    POSITION_ESCAPE = 7;
+}
+
+message RegisterOnchainActionRequest {
+    GrpcOnchainActionType action_type = 1;
+    uint32 data_id = 2;
+    string data_commitment = 3;
+}
 
 // ------ UTILS --------------
 

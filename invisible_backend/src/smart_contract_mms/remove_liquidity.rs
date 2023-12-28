@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
@@ -7,6 +8,7 @@ use serde_json::Value;
 use firestore_db_and_auth::ServiceSession;
 
 use crate::utils::storage::backup_storage::BackupStorage;
+use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use crate::{
     perpetual::perp_position::PerpPosition, server::grpc::engine_proto::OnChainRemoveLiqReq,
     transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree,
@@ -15,6 +17,7 @@ use crate::{
 
 use crate::utils::crypto_utils::Signature;
 
+use super::helpers::mm_helpers::get_remove_liquidity_commitment;
 use super::helpers::{
     json_output::onchain_position_remove_liquidity_json_output,
     mm_helpers::{
@@ -26,6 +29,7 @@ use super::helpers::{
 /// Claim the deposit that was created onchain
 pub fn remove_liquidity_from_order_tab(
     session: &Arc<Mutex<ServiceSession>>,
+    main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     remove_liquidity_req: OnChainRemoveLiqReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
@@ -76,6 +80,25 @@ pub fn remove_liquidity_from_order_tab(
     new_position.margin -= return_collateral_amount;
     new_position.vlp_supply -= remove_liquidity_req.vlp_amount;
     new_position.update_position_info();
+
+    // ? Verify the registration has been registered
+    let data_commitment = get_remove_liquidity_commitment(
+        remove_liquidity_req.mm_action_id,
+        &BigUint::from_str(&remove_liquidity_req.depositor).unwrap_or_default(),
+        &prev_position.position_header.position_address,
+        remove_liquidity_req.initial_value,
+        remove_liquidity_req.vlp_amount,
+    );
+    let main_storage_m = main_storage.lock();
+    if !main_storage_m.does_commitment_exists(
+        OnchainActionType::MMRemoveLiquidity,
+        remove_liquidity_req.mm_action_id,
+        data_commitment,
+    ) {
+        return Err("MM Registration not registered".to_string());
+    }
+    main_storage_m.remove_onchain_action_commitment(prev_position.index);
+    drop(main_storage_m);
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     onchain_position_remove_liquidity_json_output(

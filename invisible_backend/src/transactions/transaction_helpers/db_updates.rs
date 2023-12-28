@@ -8,11 +8,11 @@ use crate::{
     transactions::limit_order::LimitOrder,
     utils::{
         notes::Note,
+        storage::backup_storage::BackupStorage,
         storage::firestore::{
             start_add_fill_thread, start_add_note_thread, start_add_order_tab_thread,
             start_delete_deposit_thread, start_delete_note_thread,
         },
-        storage::backup_storage::BackupStorage,
     },
 };
 
@@ -225,11 +225,11 @@ impl DbNoteUpdater<'_> {
         for note in self.add_notes.iter() {
             let handle = start_add_note_thread((*note).clone(), self.session, self.backup_storage);
             _handles.push(handle);
-            added_notes.insert((note.index, note.address.x.to_string()), false);
+            added_notes.insert(note.index, true);
         }
 
         for deletion in self.delete_notes.iter() {
-            if added_notes.contains_key(&deletion) {
+            if added_notes.contains_key(&deletion.0) {
                 continue;
             }
 

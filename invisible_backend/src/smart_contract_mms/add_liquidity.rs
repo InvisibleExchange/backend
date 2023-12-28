@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
@@ -8,6 +9,7 @@ use firestore_db_and_auth::ServiceSession;
 
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::utils::storage::firestore::start_add_position_thread;
+use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use crate::{
     perpetual::perp_position::PerpPosition, server::grpc::engine_proto::OnChainAddLiqReq,
     transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree,
@@ -17,13 +19,14 @@ use crate::utils::crypto_utils::Signature;
 
 use super::helpers::json_output::onchain_position_add_liquidity_json_output;
 use super::helpers::mm_helpers::{
-    calculate_pos_vlp_amount, onchain_register_mm_state_updates, verfiy_pos_add_liquidity_sig,
-    verify_position_validity,
+    calculate_pos_vlp_amount, get_add_liquidity_commitment, onchain_register_mm_state_updates,
+    verfiy_pos_add_liquidity_sig, verify_position_validity,
 };
 
 /// Claim the deposit that was created onchain
 pub fn add_liquidity_to_mm(
     session: &Arc<Mutex<ServiceSession>>,
+    main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     add_liquidity_req: OnChainAddLiqReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
@@ -54,6 +57,24 @@ pub fn add_liquidity_to_mm(
     }
 
     let vlp_amount = calculate_pos_vlp_amount(&position, add_liquidity_req.initial_value);
+
+    // ? Verify the registration has been registered
+    let data_commitment = get_add_liquidity_commitment(
+        add_liquidity_req.mm_action_id,
+        &BigUint::from_str(&add_liquidity_req.depositor).unwrap_or_default(),
+        &position.position_header.position_address,
+        add_liquidity_req.initial_value,
+    );
+    let main_storage_m = main_storage.lock();
+    if !main_storage_m.does_commitment_exists(
+        OnchainActionType::MMAddLiquidity,
+        add_liquidity_req.mm_action_id,
+        data_commitment,
+    ) {
+        return Err("MM Registration not registered".to_string());
+    }
+    main_storage_m.remove_onchain_action_commitment(position.index);
+    drop(main_storage_m);
 
     // ? Update the position ---------------------------------------------------------------------
 

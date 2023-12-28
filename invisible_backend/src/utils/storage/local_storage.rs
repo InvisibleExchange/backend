@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fs, time::SystemTime};
 
+use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use sled::Config;
@@ -11,6 +13,18 @@ use crate::{
 
 use super::firestore::upload_file_to_storage;
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum OnchainActionType {
+    Deposit,
+    MMRegistration,
+    MMAddLiquidity,
+    MMRemoveLiquidity,
+    MMClosePosition,
+    NoteEscape,
+    TabEscape,
+    PositionEscape,
+}
+
 type StorageResult = std::result::Result<(), Box<dyn std::error::Error>>;
 
 /// The main storage struct that stores all the data on disk.
@@ -20,7 +34,8 @@ pub struct MainStorage {
     pub price_db: sled::Db, // Stores the price data of the current batch (min/max price with signatures)
     pub funding_db: sled::Db, // Stores the funding data since the begining(funding rates/prices)
     pub processed_deposits_db: sled::Db, // Deposit ids of all the deposits that were processed so far
-    pub latest_batch: u32,               // every transaction batch stores data separately
+    pub registerd_onchain_actions_db: sled::Db, // Onchain actions that were registered by the server
+    pub latest_batch: u32,                      // every transaction batch stores data separately
     pub db_pending_updates: sled::Db, // small batches of txs that get pushed to the db periodically
 }
 
@@ -55,6 +70,9 @@ impl MainStorage {
         let config = Config::new().path("./storage/processed_deposits".to_string());
         let processed_deposits_db = config.open().unwrap();
 
+        let config = Config::new().path("./storage/registered_actions".to_string());
+        let registerd_onchain_actions_db = config.open().unwrap();
+
         let config = Config::new().path("./storage/db_pending_updates".to_string());
         let db_pending_updates = config.open().unwrap();
 
@@ -64,6 +82,7 @@ impl MainStorage {
             price_db,
             funding_db,
             processed_deposits_db,
+            registerd_onchain_actions_db,
             latest_batch: batch_index as u32,
             db_pending_updates,
         }
@@ -431,28 +450,47 @@ impl MainStorage {
 
     // * PROCESSED DEPOSITS ——————————————————————————————————————————————————————————————- //
 
-    /// Store a deposit id of a deposit that was processed to make sure it doesn't get executed twice
-    pub fn store_processed_deposit_id(&self, deposit_id: u64) {
-        self.processed_deposits_db
-            .insert(deposit_id.to_string(), serde_json::to_vec(&true).unwrap())
+    /// This is called by an external designated service that listens for onchain actions
+    /// and stores the type of the onchain action and the hash commitment to the data.
+    pub fn register_onchain_action(
+        &self,
+        action_type: OnchainActionType,
+        data_id: u32,
+        data_commitment: BigUint,
+    ) {
+        self.registerd_onchain_actions_db
+            .insert(
+                data_id.to_string(),
+                serde_json::to_vec(&(action_type, data_commitment)).unwrap(),
+            )
             .unwrap();
-
-        // println!(
-        //     "stored_val new after deposit: {:?}",
-        //     self.processed_deposits_db.iter().for_each(|val| {
-        //         println!("{:?}", val);
-        //     })
-        // );
     }
 
-    pub fn is_deposit_already_processed(&self, deposit_id: u64) -> bool {
-        let is_processsed: bool = self
-            .processed_deposits_db
-            .get(deposit_id.to_string())
-            .unwrap_or_default()
-            .is_some();
+    pub fn does_commitment_exists(
+        &self,
+        action_type: OnchainActionType,
+        data_id: u32,
+        data_commitment: BigUint,
+    ) -> bool {
+        let doc_ref = self.registerd_onchain_actions_db.get(data_id.to_string());
 
-        is_processsed
+        if let Err(_) = doc_ref {
+            return false;
+        } else if doc_ref.as_ref().unwrap().is_none() {
+            return false;
+        }
+        let doc_ref = doc_ref.unwrap().unwrap();
+
+        let (s_action_type, s_data_commitment): (OnchainActionType, BigUint) =
+            serde_json::from_slice(&doc_ref.to_vec()).unwrap();
+
+        return s_action_type == action_type && s_data_commitment == data_commitment;
+    }
+
+    pub fn remove_onchain_action_commitment(&self, data_id: u32) {
+        let _ = self
+            .registerd_onchain_actions_db
+            .remove(data_id.to_string());
     }
 
     // * BATCH TRANSITION ————————————————————————————————————————————————————————————————- //

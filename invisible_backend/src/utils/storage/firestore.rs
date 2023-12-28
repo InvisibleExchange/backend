@@ -175,7 +175,6 @@ pub fn start_add_note_thread(
 
     let handle = spawn(move || {
         let session_ = s.lock();
-        // let backup_storage = backup_storage.lock();
 
         // TODO
         store_new_note(&session_, &backup, &note);
