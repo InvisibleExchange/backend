@@ -460,7 +460,6 @@ impl Engine for EngineService {
         let request = request.into_inner();
 
         let action_type = OnchainActionType::from(request.action_type());
-
         let data_commitment = BigUint::from_str(&request.data_commitment);
         if let Err(_) = data_commitment {
             return Ok(Response::new(SuccessResponse {
@@ -468,9 +467,12 @@ impl Engine for EngineService {
                 error_message: "data_commitment is not a valid BigUint".to_string(),
             }));
         }
-
         let tx_batch = self.transaction_batch.lock().await;
         let main_storage = tx_batch.main_storage.lock();
+        println!(
+            "Registered onchain action: {} - {:?}",
+            request.data_id, data_commitment
+        );
         main_storage.register_onchain_action(
             action_type,
             request.data_id,

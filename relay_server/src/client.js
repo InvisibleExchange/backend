@@ -16,7 +16,8 @@ const { initServer, initFundingInfo } = require("./helpers/initServer");
 const {
   isDepositValid,
   depositProcessedCallback,
-} = require("./helpers/depositListener");
+} = require("./chainListeners/depositListener");
+const { removeMMAction } = require("./helpers/firebase/firebaseConnection");
 
 const corsOptions = {
   origin: "*",
@@ -95,7 +96,7 @@ app.post("/execute_deposit", async (req, res) => {
 
   if (!isValid) {
     res.send({
-      response: { successful: false, error_message: "Invalid deposit" },
+      response: { successful: false, error_message: "Unregistered deposit" },
     });
     return;
   }
@@ -288,6 +289,60 @@ app.post("/get_orders", (req, res) => {
     if (err) {
       console.log(err);
     } else {
+      res.send({ response: response });
+    }
+  });
+});
+
+// ===================================================================
+
+// *  REGISTER ONCHAIN MM -----------------------------------------------------------
+app.post("/register_onchain_mm", (req, res) => {
+  client.register_onchain_mm(req.body, function (err, response) {
+    if (err) {
+      console.log(err);
+    } else {
+      removeMMAction(req.body.mmActionId);
+
+      res.send({ response: response });
+    }
+  });
+});
+
+// *  ADD LIQUIDITY ----------------------------------------------------------------
+app.post("/add_liquidity_mm", (req, res) => {
+  client.add_liquidity_mm(req.body, function (err, response) {
+    if (err) {
+      console.log(err);
+    } else {
+      removeMMAction(req.body.mmActionId);
+
+      res.send({ response: response });
+    }
+  });
+});
+
+// * REMOVE LIQUIDITY ----------------------------------------------------------------
+app.post("/remove_liquidity_mm", (req, res) => {
+  client.remove_liquidity_mm(req.body, function (err, response) {
+    if (err) {
+      console.log(err);
+    } else {
+      removeMMAction(req.body.mmActionId);
+
+      res.send({ response: response });
+    }
+  });
+});
+
+// * CLOSE MM ------------------------------------------------------------------------
+app.post("/close_onchain_mm", (req, res) => {
+  client.close_onchain_mm(req.body, function (err, response) {
+    if (err) {
+      console.log(err);
+    } else {
+      removeMMAction(req.body.mmActionId);
+
       res.send({ response: response });
     }
   });

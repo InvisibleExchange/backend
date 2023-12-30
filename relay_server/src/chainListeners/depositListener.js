@@ -1,4 +1,3 @@
-const ethers = require("ethers");
 const {
   getProcessedDeposits,
   updateStoredDepositIds,
@@ -10,28 +9,16 @@ const {
   storeOnchainDeposit,
 } = require("../helpers/firebase/firebaseConnection");
 
-const exchange_config = require("../../../exchange-config.json");
-const { computeHashOnElements } = require("../helpers/crypto_hash");
 const { getDepositCommitment } = require("./dataCommitment");
-
-let GrpcOnchainActionType = {
-  DEPOSIT: 0,
-  MM_REGISTRATION: 1,
-  MM_ADD_LIQUIDITY: 2,
-  MM_REMOVE_LIQUIDITY: 3,
-  MM_CLOSE_POSITION: 4,
-  NOTE_ESCAPE: 5,
-  TAB_ESCAPE: 6,
-  POSITION_ESCAPE: 7,
-};
 
 async function listenForDeposits(db, client, invisibleL1Contract) {
   invisibleL1Contract.on(
     "DepositEvent",
     async (depositId, pubKey, tokenId, depositAmountScaled, timestamp) => {
-      console.log("depositId", depositId.toString());
-
-      let storedCommitment = await getStoredCommitment(db, depositId % 2 ** 32);
+      let storedCommitment = await getStoredCommitment(
+        db,
+        BigInt(depositId) % 2n ** 32n
+      );
       if (storedCommitment) return;
 
       let deposit = {
@@ -55,12 +42,15 @@ async function listenForDeposits(db, client, invisibleL1Contract) {
           if (err) {
             console.log(err);
           } else {
+            console.log("Deposit commitment registered", depositCommitment);
             storePendingCommitment(db, depositCommitment);
           }
         }
       );
     }
   );
+
+  // TODO: LISTEN FOR DEPOSIT CANCELLATIONS
 }
 
 async function isDepositValid(deposit, db) {
@@ -68,18 +58,19 @@ async function isDepositValid(deposit, db) {
 
   let storedCommitment = await getStoredCommitment(
     db,
-    deposit.deposit_id % 2 ** 32
+    BigInt(deposit.deposit_id) % 2n ** 32n
   );
+
   if (!storedCommitment) return false;
 
-  if (storedCommitment.action_type !== depositCommitment.action_type)
+  if (storedCommitment.action_type != depositCommitment.action_type)
     return false;
 
-  return storedCommitment.data_commitment !== depositCommitment.data_commitment;
+  return storedCommitment.data_commitment == depositCommitment.data_commitment;
 }
 
 async function depositProcessedCallback(db, depositId) {
-  return updateStoredCommitment(db, depositId % 2 ** 32);
+  return updateStoredCommitment(db, BigInt(depositId) % 2n ** 32n);
 }
 
 module.exports = {

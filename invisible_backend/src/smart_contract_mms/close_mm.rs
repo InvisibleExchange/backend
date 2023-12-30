@@ -86,12 +86,12 @@ pub fn close_onchain_mm(
     let main_storage_m = main_storage.lock();
     if !main_storage_m.does_commitment_exists(
         OnchainActionType::MMClosePosition,
-        close_req.mm_action_id,
-        data_commitment,
+        close_req.mm_action_id as u64 * 2_u64.pow(20),
+        &data_commitment,
     ) {
         return Err("MM Registration not registered".to_string());
     }
-    main_storage_m.remove_onchain_action_commitment(prev_position.index);
+    main_storage_m.remove_onchain_action_commitment(close_req.mm_action_id as u64 * 2_u64.pow(20));
     drop(main_storage_m);
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------

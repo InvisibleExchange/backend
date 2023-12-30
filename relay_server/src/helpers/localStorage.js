@@ -63,6 +63,8 @@ function storePerpOrder(db, order_id, orderObject) {
 
 const sqlite3 = require("sqlite3").verbose();
 function initDb() {
+  let promises = [];
+
   const createPerpTableCommand = `
   CREATE TABLE IF NOT EXISTS perpOrders 
     (order_id INTEGER PRIMARY KEY NOT NULL, 
@@ -104,44 +106,83 @@ function initDb() {
     }
   );
 
-  db.run(createSpotTableCommand);
-
-  db.run(createPerpTableCommand);
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createSpotTableCommand, (res, err) => {
+        if (err) {
+          console.log(err);
+          reject(err);
+        }
+        resolve();
+      });
+    })
+  );
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createPerpTableCommand, (res, err) => {
+        if (err) {
+          console.log(err);
+          reject(err);
+        }
+        resolve();
+      });
+    })
+  );
 
   const createSpotLiquidityTableCommand =
     "CREATE TABLE IF NOT EXISTS spotLiquidity (market_id INTEGER PRIMARY KEY UNIQUE NOT NULL, bidQueue TEXT NOT NULL, askQueue TEXT NOT NULL)";
   const createPerpLiquidityTableCommand =
     "CREATE TABLE IF NOT EXISTS perpLiquidity (market_id INTEGER PRIMARY KEY UNIQUE NOT NULL, bidQueue TEXT NOT NULL, askQueue TEXT NOT NULL)";
 
-  db.run(createSpotLiquidityTableCommand, (res, err) => {
-    if (err) {
-      console.log(err);
-    }
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createSpotLiquidityTableCommand, (res, err) => {
+        if (err) {
+          console.log(err);
+        }
 
-    db.run(createPerpLiquidityTableCommand, (res, err) => {
-      if (err) {
-        console.log(err);
-      }
-    });
-  });
+        db.run(createPerpLiquidityTableCommand, (res, err) => {
+          if (err) {
+            console.log(err);
+          }
+
+          resolve();
+        });
+      });
+    })
+  );
 
   const createLiquidationTable =
     "CREATE TABLE IF NOT EXISTS liquidations (position_index INTEGER PRIMARY KEY NOT NULL, position_address TEXT NOT NULL, synthetic_token INTEGER NOT NULL, order_side BIT NOT NULL, liquidation_price INTEGER NOT NULL)";
 
-  db.run(createLiquidationTable, (res, err) => {
-    if (err) {
-      console.log(err);
-    }
-  });
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createLiquidationTable, (res, err) => {
+        if (err) {
+          console.log(err);
+        }
 
-  db.run(
-    `CREATE TABLE IF NOT EXISTS onchainCommitments (id INTEGER PRIMARY KEY, action_type INTEGER, data_commitment TEXT, is_processed: INTEGER)`,
-    (res, err) => {
-      if (err) {
-        console.log(err);
-      }
-    }
+        resolve();
+      });
+    })
   );
+
+  const createOnchainCommitmentsTable =
+    "CREATE TABLE IF NOT EXISTS onchainCommitments (id INTEGER PRIMARY KEY NOT NULL, action_type INTEGER, data_commitment TEXT, is_processed INTEGER)";
+
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createOnchainCommitmentsTable, (res, err) => {
+        if (err) {
+          console.log(err);
+        }
+
+        resolve();
+      });
+    })
+  );
+
+  Promise.all(promises);
 
   return db;
 }
@@ -203,7 +244,7 @@ function initLiquidity(db) {
 
 function storePendingCommitment(db, commitment) {
   const stmt = db.prepare(
-    "INSERT INTO onchainCommitments (id, action_type, data_commitment, is_processed) VALUES (?, ?, ?, ?)"
+    "INSERT INTO onchainCommitments (id, action_type, data_commitment, is_processed) VALUES ($1, $2, $3, $4)"
   );
 
   stmt.run(
@@ -217,9 +258,9 @@ function storePendingCommitment(db, commitment) {
 
 async function getStoredCommitment(db, data_id) {
   return new Promise((resolve, reject) => {
-    const query = "SELECT * FROM onchainCommitments" + " WHERE id = ?";
+    const query = `SELECT * FROM onchainCommitments WHERE id = ${data_id}`;
 
-    db.get(query, [data_id], (err, row) => {
+    db.get(query, [], (err, row) => {
       if (err) {
         reject(err);
       } else {
@@ -231,9 +272,9 @@ async function getStoredCommitment(db, data_id) {
 
 async function updateStoredCommitment(db, data_id) {
   return new Promise((resolve, reject) => {
-    const query = "UPDATE onchainCommitments SET is_processed = 1 WHERE id = ?";
+    const query = `UPDATE onchainCommitments SET is_processed = 1 WHERE id = ${data_id}`;
 
-    db.get(query, [data_id], (err, row) => {
+    db.get(query, [], (err, row) => {
       if (err) {
         reject(err);
       } else {

@@ -6,6 +6,7 @@ const {
   updateDoc,
   setDoc,
   doc,
+  deleteDoc,
 } = require("firebase/firestore/lite");
 
 const {
@@ -15,8 +16,6 @@ const {
   query,
 } = require("firebase/firestore/lite");
 const { firebaseConfig } = require("./firebaseAdminConfig");
-
-const { ec, getKeyPair } = require("starknet").ec; //require("starknet/utils/ellipticCurve.js");
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -60,8 +59,6 @@ async function getLastDayTrades(isPerp) {
 }
 
 async function storeOnchainDeposit(depositObject) {
-  console.log("depositObject: ", depositObject);
-
   let depositDoc = doc(db, "deposits", depositObject.deposit_id.toString());
   let depositData = await getDoc(depositDoc);
 
@@ -72,7 +69,23 @@ async function storeOnchainDeposit(depositObject) {
   }
 }
 
+async function storeMMAction(mmAction) {
+  console.log("mmAction: ", mmAction);
+
+  let mmActionDoc = doc(db, "mm_actions", mmAction.mmActionId.toString());
+
+  await setDoc(mmActionDoc, mmAction);
+}
+
+async function removeMMAction(mmActionId) {
+  let mmActionDoc = doc(db, "mm_actions", mmActionId.toString());
+
+  await deleteDoc(mmActionDoc);
+}
+
 module.exports = {
   getLastDayTrades,
   storeOnchainDeposit,
+  storeMMAction,
+  removeMMAction,
 };

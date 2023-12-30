@@ -1,14 +1,19 @@
+const ethers = require("ethers");
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
 
 const path = require("path");
+const { listenForDeposits } = require("./depositListener");
+const { listenForEscapes } = require("./escapesListener");
+const { listenForMMActions } = require("./mmRegistryListener");
+const { initDb } = require("../helpers/localStorage");
 const protoPath = path.join(
   __dirname,
   "../../../invisible_backend/proto",
   "engine.proto"
 );
 
-const SERVER_URL = "localhost:50052";
+const SERVER_URL = "localhost";
 
 // * Get a connection to the backend through grpc
 const packageDefinition = protoLoader.loadSync(protoPath, {
@@ -31,6 +36,7 @@ const provider = new ethers.providers.JsonRpcProvider(
   "sepolia"
 );
 
+const exchange_config = require("../../../exchange-config.json");
 const invisibleL1Address = exchange_config["INVISIBL1_ETH_ADDRESS"];
 const invisibleL1Abi = require("../abis/Invisible.json").abi;
 
@@ -40,7 +46,37 @@ const invisibleL1Contract = new ethers.Contract(
   provider
 );
 
+const escapeVerifierAddress = exchange_config["ESCAPE_VERIFIER_ETH_ADDRESS"];
+const escapeVerifierAbi = require("../abis/EscapeVerifier.json").abi;
+
+const escapeVerifierContract = new ethers.Contract(
+  escapeVerifierAddress,
+  escapeVerifierAbi,
+  provider
+);
+
 // * * //
 
+async function initListeners(db) {
+  // ? Listen and handle onchain deposits
+  await listenForDeposits(db, client, invisibleL1Contract);
 
-async function initListeners() {}
+  // ? Listen and handle onchain escapes
+  await listenForEscapes(db, client, escapeVerifierContract);
+
+  // ? Listen and handle onchain MM actions
+  await listenForMMActions(db, client, invisibleL1Contract);
+}
+
+// TODO: FOR TESTING
+async function main() {
+  const db = await initDb();
+
+  await initListeners(db);
+}
+
+main();
+
+module.exports = {
+  initListeners,
+};

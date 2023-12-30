@@ -455,7 +455,7 @@ impl MainStorage {
     pub fn register_onchain_action(
         &self,
         action_type: OnchainActionType,
-        data_id: u32,
+        data_id: u64,
         data_commitment: BigUint,
     ) {
         self.registerd_onchain_actions_db
@@ -469,8 +469,8 @@ impl MainStorage {
     pub fn does_commitment_exists(
         &self,
         action_type: OnchainActionType,
-        data_id: u32,
-        data_commitment: BigUint,
+        data_id: u64,
+        data_commitment: &BigUint,
     ) -> bool {
         let doc_ref = self.registerd_onchain_actions_db.get(data_id.to_string());
 
@@ -484,10 +484,10 @@ impl MainStorage {
         let (s_action_type, s_data_commitment): (OnchainActionType, BigUint) =
             serde_json::from_slice(&doc_ref.to_vec()).unwrap();
 
-        return s_action_type == action_type && s_data_commitment == data_commitment;
+        return s_action_type == action_type && s_data_commitment == *data_commitment;
     }
 
-    pub fn remove_onchain_action_commitment(&self, data_id: u32) {
+    pub fn remove_onchain_action_commitment(&self, data_id: u64) {
         let _ = self
             .registerd_onchain_actions_db
             .remove(data_id.to_string());

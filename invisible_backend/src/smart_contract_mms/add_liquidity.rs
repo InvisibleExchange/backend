@@ -68,12 +68,13 @@ pub fn add_liquidity_to_mm(
     let main_storage_m = main_storage.lock();
     if !main_storage_m.does_commitment_exists(
         OnchainActionType::MMAddLiquidity,
-        add_liquidity_req.mm_action_id,
-        data_commitment,
+        add_liquidity_req.mm_action_id as u64 * 2_u64.pow(20),
+        &data_commitment,
     ) {
         return Err("MM Registration not registered".to_string());
     }
-    main_storage_m.remove_onchain_action_commitment(position.index);
+    main_storage_m
+        .remove_onchain_action_commitment(add_liquidity_req.mm_action_id as u64 * 2_u64.pow(20));
     drop(main_storage_m);
 
     // ? Update the position ---------------------------------------------------------------------

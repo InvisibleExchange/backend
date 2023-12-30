@@ -423,7 +423,7 @@ enum GrpcOnchainActionType {
 
 message RegisterOnchainActionRequest {
     GrpcOnchainActionType action_type = 1;
-    uint32 data_id = 2;
+    uint64 data_id = 2;
     string data_commitment = 3;
 }
 

@@ -1,3 +1,5 @@
+const { computeHashOnElements } = require("../helpers/crypto_hash");
+
 let GrpcOnchainActionType = {
   DEPOSIT: 0,
   MM_REGISTRATION: 1,
@@ -22,8 +24,8 @@ function getDepositCommitment(deposit) {
 
   let depositCommitment = {
     action_type: GrpcOnchainActionType["DEPOSIT"],
-    data_id: deposit.deposit_id,
-    data_commitment: commitment,
+    data_id: (BigInt(deposit.deposit_id) % 2n ** 32n).toString(),
+    data_commitment: commitment.toString(),
   };
 
   return depositCommitment;
@@ -44,8 +46,8 @@ function getRegisterMMCommitment(
 
   let mmActionCommitment = {
     action_type: GrpcOnchainActionType["MM_REGISTRATION"],
-    data_id: deposit.deposit_id,
-    data_commitment: commitment,
+    data_id: mm_action_id.toString(),
+    data_commitment: commitment.toString(),
   };
 
   return mmActionCommitment;
@@ -64,7 +66,7 @@ function getAddLiquidityCommitment(
 
   let mmActionCommitment = {
     action_type: GrpcOnchainActionType["MM_REGISTRATION"],
-    data_id: deposit.deposit_id,
+    data_id: mm_action_id.toString(),
     data_commitment: commitment,
   };
 
@@ -91,7 +93,7 @@ function getRemoveLiquidityCommitment(
 
   let mmActionCommitment = {
     action_type: GrpcOnchainActionType["MM_REGISTRATION"],
-    data_id: deposit.deposit_id,
+    data_id: mm_action_id.toString(),
     data_commitment: commitment,
   };
 
@@ -116,7 +118,7 @@ function getCloseMMCommitment(
 
   let mmActionCommitment = {
     action_type: GrpcOnchainActionType["MM_REGISTRATION"],
-    data_id: deposit.deposit_id,
+    data_id: mm_action_id.toString(),
     data_commitment: commitment,
   };
 
@@ -191,4 +193,8 @@ module.exports = {
   getNoteEscapeCommitment,
   getTabEscapeCommitment,
   getPositionEscapeCommitment,
+  getRegisterMMCommitment,
+  getAddLiquidityCommitment,
+  getRemoveLiquidityCommitment,
+  getCloseMMCommitment,
 };
