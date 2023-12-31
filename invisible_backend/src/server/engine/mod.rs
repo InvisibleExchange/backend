@@ -470,8 +470,8 @@ impl Engine for EngineService {
         let tx_batch = self.transaction_batch.lock().await;
         let main_storage = tx_batch.main_storage.lock();
         println!(
-            "Registered onchain action: {} - {:?}",
-            request.data_id, data_commitment
+            "Registered onchain action: {} - {:?} - {:?}",
+            request.data_id, action_type, data_commitment
         );
         main_storage.register_onchain_action(
             action_type,

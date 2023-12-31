@@ -22,7 +22,7 @@ pub fn onchain_register_json_output(
     );
     json_map.insert(
         String::from("action_type"),
-        serde_json::to_value(&"regsiter_mm").unwrap(),
+        serde_json::to_value(&"register_mm").unwrap(),
     );
     json_map.insert(
         String::from("prev_position"),

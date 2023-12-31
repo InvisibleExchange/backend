@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
@@ -84,21 +83,20 @@ pub fn remove_liquidity_from_order_tab(
     // ? Verify the registration has been registered
     let data_commitment = get_remove_liquidity_commitment(
         remove_liquidity_req.mm_action_id,
-        &BigUint::from_str(&remove_liquidity_req.depositor).unwrap_or_default(),
+        &remove_liquidity_req.depositor,
         &prev_position.position_header.position_address,
         remove_liquidity_req.initial_value,
         remove_liquidity_req.vlp_amount,
-    );
+    )?;
     let main_storage_m = main_storage.lock();
     if !main_storage_m.does_commitment_exists(
         OnchainActionType::MMRemoveLiquidity,
-        remove_liquidity_req.mm_action_id as u64 * 2_u64.pow(20),
+        remove_liquidity_req.mm_action_id as u64,
         &data_commitment,
     ) {
         return Err("MM Registration not registered".to_string());
     }
-    main_storage_m
-        .remove_onchain_action_commitment(remove_liquidity_req.mm_action_id as u64 * 2_u64.pow(20));
+    main_storage_m.remove_onchain_action_commitment(remove_liquidity_req.mm_action_id as u64);
     drop(main_storage_m);
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------

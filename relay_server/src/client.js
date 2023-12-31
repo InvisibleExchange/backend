@@ -18,6 +18,13 @@ const {
   depositProcessedCallback,
 } = require("./chainListeners/depositListener");
 const { removeMMAction } = require("./helpers/firebase/firebaseConnection");
+const {
+  isMMRegistrationValid,
+  isMMAddLiquidityValid,
+  isMMRemoveLiquidityValid,
+  isCloseMMValid,
+  mmActionProcessedCallback,
+} = require("./chainListeners/mmRegistryListener");
 
 const corsOptions = {
   origin: "*",
@@ -239,38 +246,6 @@ app.post("/modify_order_tab", (req, res) => {
   });
 });
 
-// *  REGISTER ORDER TAB -----------------------------------------------------------
-app.post("/onchain_register_mm", (req, res) => {
-  client.onchain_register_mm(req.body, function (err, response) {
-    if (err) {
-      console.log(err);
-    } else {
-      res.send({ response: response });
-    }
-  });
-});
-
-// *  ADD LIQUIDITY ORDER TAB -----------------------------------------------------------
-app.post("/add_liquidity_mm", (req, res) => {
-  client.add_liquidity_mm(req.body, function (err, response) {
-    if (err) {
-      console.log(err);
-    } else {
-      res.send({ response: response });
-    }
-  });
-});
-
-// *  REMOVE LIQUIDITY ORDER TAB -----------------------------------------------------------
-app.post("/remove_liquidity_mm", (req, res) => {
-  client.remove_liquidity_mm(req.body, function (err, response) {
-    if (err) {
-      console.log(err);
-    } else {
-      res.send({ response: response });
-    }
-  });
-});
 
 // * GET LIQUIDITY ---------------------------------------------------------------------
 app.post("/get_liquidity", (req, res) => {
@@ -298,11 +273,22 @@ app.post("/get_orders", (req, res) => {
 
 // *  REGISTER ONCHAIN MM -----------------------------------------------------------
 app.post("/register_onchain_mm", (req, res) => {
+  let isValid = isMMRegistrationValid(db, req.body);
+  if (!isValid) {
+    res.send({
+      response: { successful: false, error_message: "Request is unregistered" },
+    });
+    return;
+  }
+
   client.register_onchain_mm(req.body, function (err, response) {
     if (err) {
       console.log(err);
     } else {
-      removeMMAction(req.body.mmActionId);
+      if (response.successful) {
+        mmActionProcessedCallback(db, req.body.mm_action_id);
+        removeMMAction(req.body.mm_action_id);
+      }
 
       res.send({ response: response });
     }
@@ -312,10 +298,24 @@ app.post("/register_onchain_mm", (req, res) => {
 // *  ADD LIQUIDITY ----------------------------------------------------------------
 app.post("/add_liquidity_mm", (req, res) => {
   client.add_liquidity_mm(req.body, function (err, response) {
+    let isValid = isMMAddLiquidityValid(db, req.body);
+    if (!isValid) {
+      res.send({
+        response: {
+          successful: false,
+          error_message: "Request is unregistered",
+        },
+      });
+      return;
+    }
+
     if (err) {
       console.log(err);
     } else {
-      removeMMAction(req.body.mmActionId);
+      if (response.successful) {
+        mmActionProcessedCallback(db, req.body.mm_action_id);
+        removeMMAction(req.body.mm_action_id);
+      }
 
       res.send({ response: response });
     }
@@ -325,10 +325,25 @@ app.post("/add_liquidity_mm", (req, res) => {
 // * REMOVE LIQUIDITY ----------------------------------------------------------------
 app.post("/remove_liquidity_mm", (req, res) => {
   client.remove_liquidity_mm(req.body, function (err, response) {
+    let isValid = isMMRemoveLiquidityValid(db, req.body);
+    if (!isValid) {
+      res.send({
+        response: {
+          successful: false,
+          error_message: "Request is unregistered",
+        },
+      });
+      return;
+    }
+
     if (err) {
       console.log(err);
     } else {
-      removeMMAction(req.body.mmActionId);
+      console.log(response);
+      if (response.successful) {
+        mmActionProcessedCallback(db, req.body.mm_action_id);
+        removeMMAction(req.body.mm_action_id);
+      }
 
       res.send({ response: response });
     }
@@ -338,10 +353,24 @@ app.post("/remove_liquidity_mm", (req, res) => {
 // * CLOSE MM ------------------------------------------------------------------------
 app.post("/close_onchain_mm", (req, res) => {
   client.close_onchain_mm(req.body, function (err, response) {
+    let isValid = isCloseMMValid(db, req.body);
+    if (!isValid) {
+      res.send({
+        response: {
+          successful: false,
+          error_message: "Request is unregistered",
+        },
+      });
+      return;
+    }
+
     if (err) {
       console.log(err);
     } else {
-      removeMMAction(req.body.mmActionId);
+      if (response.successful) {
+        mmActionProcessedCallback(db, req.body.mm_action_id);
+        removeMMAction(req.body.mm_action_id);
+      }
 
       res.send({ response: response });
     }

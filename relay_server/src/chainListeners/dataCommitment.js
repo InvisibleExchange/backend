@@ -65,7 +65,7 @@ function getAddLiquidityCommitment(
   let commitment = computeHashOnElements(inputs);
 
   let mmActionCommitment = {
-    action_type: GrpcOnchainActionType["MM_REGISTRATION"],
+    action_type: GrpcOnchainActionType["MM_ADD_LIQUIDITY"],
     data_id: mm_action_id.toString(),
     data_commitment: commitment,
   };
@@ -92,7 +92,7 @@ function getRemoveLiquidityCommitment(
   let commitment = computeHashOnElements(inputs);
 
   let mmActionCommitment = {
-    action_type: GrpcOnchainActionType["MM_REGISTRATION"],
+    action_type: GrpcOnchainActionType["MM_REMOVE_LIQUIDITY"],
     data_id: mm_action_id.toString(),
     data_commitment: commitment,
   };
@@ -117,7 +117,7 @@ function getCloseMMCommitment(
   let commitment = computeHashOnElements(inputs);
 
   let mmActionCommitment = {
-    action_type: GrpcOnchainActionType["MM_REGISTRATION"],
+    action_type: GrpcOnchainActionType["MM_CLOSE_POSITION"],
     data_id: mm_action_id.toString(),
     data_commitment: commitment,
   };

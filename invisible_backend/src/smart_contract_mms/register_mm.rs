@@ -70,13 +70,17 @@ pub fn onchain_register_mm(
     let main_storage_m = main_storage.lock();
     if !main_storage_m.does_commitment_exists(
         OnchainActionType::MMRegistration,
-        register_mm_req.mm_action_id as u64 * 2_u64.pow(20),
+        register_mm_req.mm_action_id as u64,
         &data_commitment,
     ) {
+        println!(
+            "data_commitment: {} - {}",
+            register_mm_req.mm_action_id as u64, data_commitment
+        );
+
         return Err("MM Registration not registered".to_string());
     }
-    main_storage_m
-        .remove_onchain_action_commitment(register_mm_req.mm_action_id as u64 * 2_u64.pow(20));
+    main_storage_m.remove_onchain_action_commitment(register_mm_req.mm_action_id as u64);
     drop(main_storage_m);
 
     // ? Update the position -----------------

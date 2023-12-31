@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, Num};
 use parking_lot::Mutex;
 
 use crate::{
@@ -111,8 +111,17 @@ pub fn verfiy_remove_liquidity_sig(
 
     hash_inputs.push(&position.hash);
 
-    let depositor = BigUint::from_str(depositor).unwrap();
-    hash_inputs.push(&depositor);
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return false;
+    }
+    hash_inputs.push(&depositor_);
 
     let initial_value = BigUint::from_u64(initial_value).unwrap();
     hash_inputs.push(&initial_value);
@@ -158,8 +167,17 @@ pub fn verfiy_pos_add_liquidity_sig(
 
     hash_inputs.push(&position.hash);
 
-    let depositor = BigUint::from_str(&depositor).unwrap();
-    hash_inputs.push(&depositor);
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return false;
+    }
+    hash_inputs.push(&depositor_);
 
     let collateral_amount = BigUint::from_u64(collateral_amount).unwrap();
     hash_inputs.push(&collateral_amount);
@@ -227,17 +245,28 @@ pub fn get_mm_register_commitment(
 
 pub fn get_add_liquidity_commitment(
     mm_action_id: u32,
-    depositor: &BigUint,
+    depositor: &String,
     position_address: &BigUint,
     usdc_amount: u64,
-) -> BigUint {
+) -> Result<BigUint, String> {
     // & hash = H({ mm_action_id, depositor, position_address, usdc_amount})
     let mut hash_inputs: Vec<&BigUint> = vec![];
 
     let mm_action_id = BigUint::from_u32(mm_action_id).unwrap();
     hash_inputs.push(&mm_action_id);
 
-    hash_inputs.push(&depositor);
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return Err("Invalid depositor".to_string());
+    }
+    hash_inputs.push(&depositor_);
+
     hash_inputs.push(&position_address);
 
     let usdc_amount = BigUint::from_u64(usdc_amount).unwrap();
@@ -245,23 +274,33 @@ pub fn get_add_liquidity_commitment(
 
     let commitment = hash_many(&hash_inputs);
 
-    return commitment;
+    return Ok(commitment);
 }
 
 pub fn get_remove_liquidity_commitment(
     mm_action_id: u32,
-    depositor: &BigUint,
+    depositor: &String,
     position_address: &BigUint,
     initial_value: u64,
     vlp_amount: u64,
-) -> BigUint {
+) -> Result<BigUint, String> {
     // & hash = H({ mm_action_id, depositor, position_address, initial_value, vlp_amount})
     let mut hash_inputs: Vec<&BigUint> = vec![];
 
     let mm_action_id = BigUint::from_u32(mm_action_id).unwrap();
     hash_inputs.push(&mm_action_id);
 
-    hash_inputs.push(&depositor);
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return Err("Invalid depositor".to_string());
+    }
+    hash_inputs.push(&depositor_);
     hash_inputs.push(&position_address);
 
     let initial_value = BigUint::from_u64(initial_value).unwrap();
@@ -272,7 +311,7 @@ pub fn get_remove_liquidity_commitment(
 
     let commitment = hash_many(&hash_inputs);
 
-    return commitment;
+    return Ok(commitment);
 }
 
 pub fn get_close_mm_commitment(

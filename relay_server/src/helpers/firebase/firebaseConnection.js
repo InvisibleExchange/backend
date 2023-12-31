@@ -70,9 +70,11 @@ async function storeOnchainDeposit(depositObject) {
 }
 
 async function storeMMAction(mmAction) {
-  console.log("mmAction: ", mmAction);
+  for (let key of Object.keys(mmAction)) {
+    mmAction[key] = mmAction[key].toString();
+  }
 
-  let mmActionDoc = doc(db, "mm_actions", mmAction.mmActionId.toString());
+  let mmActionDoc = doc(db, "mm_actions", mmAction.action_id.toString());
 
   await setDoc(mmActionDoc, mmAction);
 }

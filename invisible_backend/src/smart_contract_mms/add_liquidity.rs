@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
@@ -46,6 +45,10 @@ pub fn add_liquidity_to_mm(
     let signature = Signature::try_from(add_liquidity_req.signature.unwrap_or_default())
         .map_err(|err| err.to_string())?;
 
+    println!(
+        "add_liquidity_req.initial_value: {}",
+        add_liquidity_req.initial_value
+    );
     let valid = verfiy_pos_add_liquidity_sig(
         &position,
         &add_liquidity_req.depositor,
@@ -61,20 +64,25 @@ pub fn add_liquidity_to_mm(
     // ? Verify the registration has been registered
     let data_commitment = get_add_liquidity_commitment(
         add_liquidity_req.mm_action_id,
-        &BigUint::from_str(&add_liquidity_req.depositor).unwrap_or_default(),
+        &add_liquidity_req.depositor,
         &position.position_header.position_address,
         add_liquidity_req.initial_value,
-    );
+    )?;
     let main_storage_m = main_storage.lock();
     if !main_storage_m.does_commitment_exists(
         OnchainActionType::MMAddLiquidity,
-        add_liquidity_req.mm_action_id as u64 * 2_u64.pow(20),
+        add_liquidity_req.mm_action_id as u64,
         &data_commitment,
     ) {
-        return Err("MM Registration not registered".to_string());
+        println!(
+            "add_liquidity_req.mm_action_id: {}",
+            add_liquidity_req.mm_action_id
+        );
+        println!("data_commitment: {}", data_commitment);
+
+        return Err("Add Liquidity request not registered".to_string());
     }
-    main_storage_m
-        .remove_onchain_action_commitment(add_liquidity_req.mm_action_id as u64 * 2_u64.pow(20));
+    main_storage_m.remove_onchain_action_commitment(add_liquidity_req.mm_action_id as u64);
     drop(main_storage_m);
 
     // ? Update the position ---------------------------------------------------------------------

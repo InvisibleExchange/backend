@@ -12,6 +12,47 @@ const {
 } = require("./dataCommitment");
 
 async function listenForMMActions(db, client, invisibleL1Contract) {
+  // const f = async () => {
+  //   let mm_owner = "0x2b2eA7eC7e366666772DaAf496817c14b8c0Ae74";
+  //   let synthetic_asset = 453755560;
+  //   let position_address =
+  //     "704691608687245587077909074011728735611348324416891667261556284258056215266";
+  //   let max_vlp_supply = "1000000000000";
+  //   let vlp_token = 1;
+  //   let mmActionId = "1048576";
+
+  //   let storedCommitment = await getStoredCommitment(db, mmActionId);
+  //   if (storedCommitment) return;
+
+  //   let commitment = getRegisterMMCommitment(
+  //     mmActionId,
+  //     synthetic_asset,
+  //     position_address,
+  //     vlp_token
+  //   );
+
+  //   // ? Register the MM Registration commitment
+  //   await client.register_onchain_action(commitment, function (err, _response) {
+  //     if (err) {
+  //       console.log(err);
+  //     } else {
+  //       console.log("MM Registration commitment registered", commitment);
+
+  //       storeMMAction({
+  //         mm_owner,
+  //         synthetic_asset,
+  //         position_address,
+  //         max_vlp_supply,
+  //         vlp_token,
+  //         action_id: mmActionId,
+  //         action_type: "register_mm",
+  //       });
+
+  //       storePendingCommitment(db, commitment);
+  //     }
+  //   });
+  // };
+
   // * new PerpMM Registration * //
   invisibleL1Contract.on(
     "newPerpMMRegistration",
@@ -23,7 +64,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
       vlp_token,
       mmActionId
     ) => {
-      mmActionId = 2n ** 20n + BigInt(mmActionId);
+      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -32,7 +73,6 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
         mmActionId,
         synthetic_asset,
         position_address,
-        max_vlp_supply,
         vlp_token
       );
 
@@ -66,7 +106,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
   invisibleL1Contract.on(
     "AddLiquidity",
     async (depositor, position_address, usdc_amount, mmActionId) => {
-      mmActionId = 2n ** 20n + BigInt(mmActionId);
+      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -112,7 +152,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
       vlp_amount,
       mmActionId
     ) => {
-      mmActionId = 2n ** 20n + BigInt(mmActionId);
+      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -160,7 +200,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
       vlp_amount_sum,
       mmActionId
     ) => {
-      mmActionId = 2n ** 20n + BigInt(mmActionId);
+      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -203,8 +243,8 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
 async function isMMRegistrationValid(db, registerMmReq) {
   let commitment = getRegisterMMCommitment(
     registerMmReq.mm_action_id,
-    registerMmReq.synthetic_asset,
-    registerMmReq.position_address,
+    registerMmReq.synthetic_token,
+    registerMmReq.position.position_header.position_address,
     registerMmReq.vlp_token
   );
 

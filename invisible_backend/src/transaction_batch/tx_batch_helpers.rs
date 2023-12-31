@@ -89,16 +89,7 @@ pub fn get_final_updated_counts(
             "withdrawal" => {
                 n_withdrawals += 1;
             }
-            "onchain_register_mm" => {
-                n_onchain_mm_actions += 1;
-            }
-            "add_liquidity" => {
-                n_onchain_mm_actions += 1;
-            }
-            "remove_liquidity" => {
-                n_onchain_mm_actions += 1;
-            }
-            "close_mm_position" => {
+            "onchain_mm_action" => {
                 n_onchain_mm_actions += 1;
             }
             "forced_escape" => match transaction.get("escape_type").unwrap().as_str().unwrap() {

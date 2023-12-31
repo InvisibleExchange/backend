@@ -106,17 +106,12 @@ impl Deposit {
                 self.deposit_id % 2_u64.pow(32),
                 &data_commitment,
             ) {
-                println!(
-                    "deposit not registered: {}",
-                    self.deposit_id % 2_u64.pow(32)
-                );
-                println!("deposit commitment: {:?}", data_commitment);
-
                 return Err(send_deposit_error(
                     "deposit not registered".to_string(),
                     Some(format!("deposit not registered: {}", self.deposit_id)),
                 ));
             }
+            main_storage_m.remove_onchain_action_commitment(self.deposit_id % 2_u64.pow(32));
             drop(main_storage_m);
 
             // * After the deposit is verified to be valid update the state ================ //
