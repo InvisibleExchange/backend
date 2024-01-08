@@ -67,7 +67,7 @@ pub async fn submit_limit_order_inner(
 
     let tx_batch_m = tx_batch.lock().await;
     let state_tree = Arc::clone(&tx_batch_m.state_tree);
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let firebase_session = Arc::clone(&tx_batch_m.firebase_session);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
@@ -207,7 +207,7 @@ pub async fn submit_limit_order_inner(
         }
     }
 
-    store_output_json(&swap_output_json, &main_storage);
+    store_output_json(&transaction_output_json, &main_storage);
 
     // Send a successul reply to the caller
     let reply = OrderResponse {
@@ -342,7 +342,7 @@ pub async fn match_and_execute_perp_order(
     market: u16,
 ) -> Result<Response<OrderResponse>, Status> {
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let firebase_session = Arc::clone(&tx_batch_m.firebase_session);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     let backup_storage = Arc::clone(&tx_batch_m.backup_storage);
@@ -409,7 +409,7 @@ pub async fn match_and_execute_perp_order(
         return send_order_error_reply(e);
     }
 
-    store_output_json(&swap_output_json, &main_storage);
+    store_output_json(&transaction_output_json, &main_storage);
 
     // Send a successful reply to the caller
     let reply = OrderResponse {
@@ -443,7 +443,7 @@ pub async fn submit_liquidation_order_inner(
     let req: LiquidationOrderMessage = request.into_inner();
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -501,7 +501,7 @@ pub async fn submit_liquidation_order_inner(
     match liquidation_response {
         Ok(res1) => match res1 {
             Ok(response) => {
-                store_output_json(&swap_output_json, &main_storage);
+                store_output_json(&transaction_output_json, &main_storage);
 
                 // TODO Send message to the user whose position was liquidated ?
 

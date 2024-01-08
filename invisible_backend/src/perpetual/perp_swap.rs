@@ -1,7 +1,6 @@
 use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -14,7 +13,7 @@ use super::perp_helpers::perp_swap_helpers::consistency_checks;
 use super::perp_helpers::perp_swap_outptut::{PerpSwapOutput, PerpSwapResponse};
 use super::{perp_order::PerpOrder, perp_position::PerpPosition, OrderSide};
 use crate::transaction_batch::tx_batch_structs::SwapFundingInfo;
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, TxOutputJson};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::storage::backup_storage::BackupStorage;
@@ -67,7 +66,7 @@ impl PerpSwap {
         &self,
         state_tree: Arc<Mutex<SuperficialTree>>,
         updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json: Arc<Mutex<TxOutputJson>>,
         blocked_perp_order_ids: Arc<Mutex<HashMap<u64, bool>>>,
         //
         perpetual_partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>, // (pfr_note, amount_filled, spent_margin)
@@ -113,7 +112,7 @@ impl PerpSwap {
 
         // ? Lock the json output before updating the state to prevent another transaction from
         // ? squeezing in between and updating the json output before this transaction is done
-        let mut swap_output_json_ = swap_output_json.lock();
+        let mut transaction_output_json_m = transaction_output_json.lock();
 
         // * Update the state if transaction was successful ===============
         update_state_and_finalize(
@@ -124,6 +123,7 @@ impl PerpSwap {
             &partialy_filled_positions,
             &session,
             &backup_storage,
+            &mut transaction_output_json_m,
             &mut execution_result,
             &self.order_a,
             &self.order_b,
@@ -142,12 +142,12 @@ impl PerpSwap {
             swap_output,
             &execution_output_a,
             &execution_output_b,
-            &mut swap_output_json_,
+            &mut transaction_output_json_m,
             current_funding_idx,
             &self.order_a.order_side,
         );
 
-        drop(swap_output_json_);
+        drop(transaction_output_json_m);
 
         // * Update min funding index if necessary ===========================
         let mut min_funding_idxs_m = min_funding_idxs.lock();

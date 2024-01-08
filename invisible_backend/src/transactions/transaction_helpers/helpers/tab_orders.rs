@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 use num_bigint::BigUint;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, MutexGuard};
 
 use crate::{
     order_tab::OrderTab,
     perpetual::DUST_AMOUNT_PER_ASSET,
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, StateUpdate, TxOutputJson},
     transactions::limit_order::LimitOrder,
     trees::superficial_tree::SuperficialTree,
     utils::errors::{send_swap_error, SwapThreadExecutionError},
@@ -130,6 +130,7 @@ pub fn execute_tab_order_modifications(
 pub fn update_state_after_tab_order(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     updated_order_tab: &OrderTab,
 ) {
     let mut state_tree_ = state_tree.lock();
@@ -140,6 +141,11 @@ pub fn update_state_after_tab_order(
         updated_order_tab.tab_idx as u64,
         (LeafNodeType::OrderTab, updated_order_tab.hash.clone()),
     );
+    transaction_output_json
+        .state_updates
+        .push(StateUpdate::OrderTab {
+            order_tab: updated_order_tab.clone(),
+        });
 
     drop(state_tree_);
     drop(updated_state_hashes);

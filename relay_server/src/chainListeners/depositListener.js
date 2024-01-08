@@ -15,6 +15,8 @@ async function listenForDeposits(db, client, invisibleL1Contract) {
   invisibleL1Contract.on(
     "DepositEvent",
     async (depositId, pubKey, tokenId, depositAmountScaled, timestamp) => {
+      console.log("Deposit event received", depositId.toString());
+
       let storedCommitment = await getStoredCommitment(
         db,
         BigInt(depositId) % 2n ** 32n

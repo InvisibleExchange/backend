@@ -5,8 +5,8 @@ use num_traits::FromPrimitive;
 use parking_lot::Mutex;
 
 use firestore_db_and_auth::ServiceSession;
-use serde_json::Value;
 
+use crate::transaction_batch::TxOutputJson;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     perpetual::{perp_order::CloseOrderFields, DUST_AMOUNT_PER_ASSET},
@@ -28,7 +28,7 @@ pub fn close_order_tab(
     backup_storage: &Arc<Mutex<BackupStorage>>,
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     //
     close_order_tab_req: CloseOrderTabReq,
 ) -> std::result::Result<(Note, Note), String> {
@@ -129,7 +129,7 @@ pub fn close_order_tab(
 
     // ? GENERATE THE JSON_OUTPUT ----------------------------------------------------------
     close_tab_json_output(
-        &swap_output_json_m,
+        &transaction_output_json_m,
         base_amount_change,
         quote_amount_change,
         &base_return_note,
@@ -145,6 +145,7 @@ pub fn close_order_tab(
     close_tab_state_updates(
         state_tree,
         updated_state_hashes,
+        &transaction_output_json_m,
         &order_tab,
         &updated_order_tab,
         base_return_note.clone(),

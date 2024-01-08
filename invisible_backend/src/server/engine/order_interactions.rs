@@ -150,7 +150,7 @@ pub async fn amend_order_inner(
     drop(order_book);
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -188,7 +188,7 @@ pub async fn amend_order_inner(
         }
     }
 
-    store_output_json(&swap_output_json, &main_storage);
+    store_output_json(&transaction_output_json, &main_storage);
 
     let reply: AmendOrderResponse = AmendOrderResponse {
         successful: true,

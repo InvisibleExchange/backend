@@ -4,11 +4,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 use num_bigint::BigUint;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, MutexGuard};
 
 use crate::{
     perpetual::DUST_AMOUNT_PER_ASSET,
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, TxOutputJson},
     transactions::{
         limit_order::LimitOrder,
         transaction_helpers::state_updates::{
@@ -210,6 +210,7 @@ pub fn execute_non_tab_order_modifications(
 pub fn update_state_after_non_tab_order(
     tree: &Arc<Mutex<SuperficialTree>>,
     updated_note_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     is_first_fill: bool,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
@@ -226,6 +227,7 @@ pub fn update_state_after_non_tab_order(
         update_state_after_swap_first_fill(
             tree,
             updated_note_hashes,
+            transaction_output_json,
             notes_in,
             refund_note,
             &swap_note,
@@ -235,6 +237,7 @@ pub fn update_state_after_non_tab_order(
         update_state_after_swap_later_fills(
             tree,
             updated_note_hashes,
+            transaction_output_json,
             swap_note,
             &new_partial_refund_note.as_ref(),
         );

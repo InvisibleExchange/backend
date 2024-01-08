@@ -2,7 +2,7 @@ use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use parking_lot::Mutex;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -20,7 +20,7 @@ use crate::{
         add_liquidity::add_liquidity_to_mm, close_mm::close_onchain_mm,
         register_mm::onchain_register_mm, remove_liquidity::remove_liquidity_from_order_tab,
     },
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, StateUpdate, TxOutputJson},
     transactions::transaction_helpers::db_updates::{update_db_after_note_split, DbNoteUpdater},
     utils::storage::{
         firestore::{start_add_note_thread, start_add_position_thread},
@@ -47,7 +47,7 @@ pub fn _split_notes_inner(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     notes_in: Vec<Note>,
     mut new_note: Note,
     mut refund_note: Option<Note>,
@@ -57,6 +57,9 @@ pub fn _split_notes_inner(
     let mut sum_in: u64 = 0;
 
     let mut state_tree_m = state_tree.lock();
+    let mut updated_state_hashes_m = updated_state_hashes.lock();
+    let mut transaction_output_json_m = transaction_output_json.lock();
+
     for note in notes_in.iter() {
         if note.token != token {
             return Err("Invalid token".to_string());
@@ -127,11 +130,15 @@ pub fn _split_notes_inner(
             String::from("note_split"),
             json!({"token": token, "notes_in": notes_in, "new_note": new_note, "refund_note": refund_note}),
         );
-    let mut updated_state_hashes_m = updated_state_hashes.lock();
 
     // ? Add return note in to state
     state_tree_m.update_leaf_node(&new_note.hash, new_note.index);
     updated_state_hashes_m.insert(new_note.index, (LeafNodeType::Note, new_note.hash.clone()));
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Note {
+            note: new_note.clone(),
+        });
 
     // ? Remove notes in from state
     for note in notes_in.iter().skip(1) {
@@ -142,14 +149,16 @@ pub fn _split_notes_inner(
     if let Some(note) = refund_note.as_ref() {
         state_tree_m.update_leaf_node(&note.hash, note.index);
         updated_state_hashes_m.insert(note.index, (LeafNodeType::Note, note.hash.clone()));
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note { note: note.clone() });
     }
-    drop(updated_state_hashes_m);
+
+    transaction_output_json_m.tx_micro_batch.push(json_map);
+
     drop(state_tree_m);
-
-    let mut swap_output_json = swap_output_json.lock();
-    swap_output_json.push(json_map);
-
-    drop(swap_output_json);
+    drop(updated_state_hashes_m);
+    drop(transaction_output_json_m);
 
     // ----------------------------------------------
 
@@ -169,7 +178,7 @@ pub fn _change_position_margin_inner(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     latest_index_price: &HashMap<u32, u64>,
     margin_change: ChangeMarginMessage,
 ) -> std::result::Result<(u64, PerpPosition), String> {
@@ -252,17 +261,17 @@ pub fn _change_position_margin_inner(
             serde_json::to_value(z_index).unwrap(),
         );
 
-        let mut swap_output_json = swap_output_json.lock();
-        swap_output_json.push(json_map);
-        drop(swap_output_json);
+        let mut transaction_output_json_m = transaction_output_json.lock();
+        transaction_output_json_m.tx_micro_batch.push(json_map);
+        drop(transaction_output_json_m);
 
         add_margin_state_updates(
             &state_tree,
             &updated_state_hashes,
+            transaction_output_json,
             margin_change.notes_in.as_ref().unwrap(),
             margin_change.refund_note.clone(),
-            position.index as u64,
-            &position.hash.clone(),
+            &position,
         )?;
 
         let _handle =
@@ -332,16 +341,16 @@ pub fn _change_position_margin_inner(
             serde_json::to_value(z_index).unwrap(),
         );
 
-        let mut swap_output_json = swap_output_json.lock();
-        swap_output_json.push(json_map);
-        drop(swap_output_json);
+        let mut transaction_output_json_m = transaction_output_json.lock();
+        transaction_output_json_m.tx_micro_batch.push(json_map);
+        drop(transaction_output_json_m);
 
         reduce_margin_state_updates(
             &state_tree,
             &updated_state_hashes,
+            transaction_output_json,
             return_collateral_note.clone(),
-            position.index as u64,
-            &position.hash.clone(),
+            &position,
         );
 
         let _handle =
@@ -361,14 +370,14 @@ pub fn _execute_order_tab_modification_inner(
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     tab_action_message: OrderTabActionMessage,
 ) -> JoinHandle<OrderTabActionResponse> {
     let state_tree = state_tree.clone();
     let updated_state_hashes = updated_state_hashes.clone();
     let session = firebase_session.clone();
     let backup_storage = backup_storage.clone();
-    let swap_output_json = swap_output_json.clone();
+    let transaction_output_json = transaction_output_json.clone();
 
     let handle = thread::spawn(move || {
         if tab_action_message.open_order_tab_req.is_some() {
@@ -380,7 +389,7 @@ pub fn _execute_order_tab_modification_inner(
                 open_order_tab_req,
                 &state_tree,
                 &updated_state_hashes,
-                &swap_output_json,
+                &transaction_output_json,
             );
 
             let order_tab_action_response = OrderTabActionResponse {
@@ -397,7 +406,7 @@ pub fn _execute_order_tab_modification_inner(
                 &backup_storage,
                 &state_tree,
                 &updated_state_hashes,
-                &swap_output_json,
+                &transaction_output_json,
                 close_order_tab_req,
             );
 
@@ -419,7 +428,7 @@ pub fn _execute_sc_mm_modification_inner(
     firebase_session: &Arc<Mutex<ServiceSession>>,
     main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     scmm_action_message: SCMMActionMessage,
 ) -> JoinHandle<std::result::Result<PerpPosition, String>> {
     let state_tree = state_tree.clone();
@@ -427,7 +436,7 @@ pub fn _execute_sc_mm_modification_inner(
     let session = firebase_session.clone();
     let main_storage = main_storage.clone();
     let backup_storage = backup_storage.clone();
-    let swap_output_json = swap_output_json.clone();
+    let transaction_output_json = transaction_output_json.clone();
 
     let handle = thread::spawn(move || {
         if scmm_action_message.onchain_register_mm_req.is_some() {
@@ -440,7 +449,7 @@ pub fn _execute_sc_mm_modification_inner(
                 register_mm_req,
                 &state_tree,
                 &updated_state_hashes,
-                &swap_output_json,
+                &transaction_output_json,
             );
         } else if scmm_action_message.onchain_add_liq_req.is_some() {
             let add_liquidity_req = scmm_action_message.onchain_add_liq_req.unwrap();
@@ -452,7 +461,7 @@ pub fn _execute_sc_mm_modification_inner(
                 add_liquidity_req,
                 &state_tree,
                 &updated_state_hashes,
-                &swap_output_json,
+                &transaction_output_json,
             );
         } else if scmm_action_message.onchain_remove_liq_req.is_some() {
             let remove_liquidity_req = scmm_action_message.onchain_remove_liq_req.unwrap();
@@ -464,7 +473,7 @@ pub fn _execute_sc_mm_modification_inner(
                 remove_liquidity_req,
                 &state_tree,
                 &updated_state_hashes,
-                &swap_output_json,
+                &transaction_output_json,
             );
         } else {
             let close_req = scmm_action_message.onchain_close_mm_req.unwrap();
@@ -476,7 +485,7 @@ pub fn _execute_sc_mm_modification_inner(
                 close_req,
                 &state_tree,
                 &updated_state_hashes,
-                &swap_output_json,
+                &transaction_output_json,
             );
         }
     });

@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use crate::{
     perpetual::{perp_position::PerpPosition, SYNTHETIC_ASSETS},
     server::grpc::engine_proto::GrpcPerpPosition,
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, StateUpdate, TxOutputJson},
     trees::superficial_tree::SuperficialTree,
     utils::crypto_utils::{hash_many, verify, Signature},
 };
@@ -78,10 +78,12 @@ pub fn verfiy_register_mm_sig(
 pub fn onchain_register_mm_state_updates(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     position: &PerpPosition,
 ) {
     let mut state_tree_m = state_tree.lock();
     let mut updated_state_hashes_m = updated_state_hashes.lock();
+    let mut transaction_output_json_m = transaction_output_json.lock();
 
     // ? add it to the positons state
     state_tree_m.update_leaf_node(&position.hash, position.index as u64);
@@ -89,9 +91,15 @@ pub fn onchain_register_mm_state_updates(
         position.index as u64,
         (LeafNodeType::Position, position.hash.clone()),
     );
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Position {
+            position: position.clone(),
+        });
 
     drop(state_tree_m);
     drop(updated_state_hashes_m);
+    drop(transaction_output_json_m);
 }
 
 // * ----------------------------------------------------------------------------

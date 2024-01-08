@@ -252,10 +252,11 @@ async function isMMRegistrationValid(db, registerMmReq) {
 }
 
 async function isMMAddLiquidityValid(db, addLiqReq) {
+  console.log("addLiq", addLiqReq);
   let commitment = getAddLiquidityCommitment(
     addLiqReq.mm_action_id,
     addLiqReq.depositor,
-    addLiqReq.position_address,
+    addLiqReq.position.position_header.position_address,
     addLiqReq.usdc_amount
   );
 
@@ -263,10 +264,11 @@ async function isMMAddLiquidityValid(db, addLiqReq) {
 }
 
 async function isMMRemoveLiquidityValid(db, removeLiqReq) {
+  console.log("removeLiq", removeLiqReq);
   let commitment = getRemoveLiquidityCommitment(
     removeLiqReq.mm_action_id,
     removeLiqReq.depositor,
-    removeLiqReq.position_address,
+    removeLiqReq.position.position_header.position_address,
     removeLiqReq.initial_value,
     removeLiqReq.vlp_amount
   );
@@ -277,9 +279,9 @@ async function isMMRemoveLiquidityValid(db, removeLiqReq) {
 async function isCloseMMValid(db, closeMMReq) {
   let commitment = getCloseMMCommitment(
     closeMMReq.mm_action_id,
-    closeMMReq.position_address,
-    removeLiqReq.initial_value_sum,
-    removeLiqReq.vlp_amount_sum
+    closeMMReq.position.position_header.position_address,
+    closeMMReq.initial_value_sum,
+    closeMMReq.vlp_amount_sum
   );
 
   return isMMActionCommitmentValid(db, closeMMReq.mm_action_id, commitment);

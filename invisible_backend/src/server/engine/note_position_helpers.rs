@@ -36,7 +36,7 @@ pub async fn split_notes_inner(
     tokio::task::yield_now().await;
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -79,7 +79,7 @@ pub async fn split_notes_inner(
     let zero_idxs = tx_batch_m.split_notes(notes_in, new_note, refund_note);
     drop(tx_batch_m);
 
-    return handle_split_notes_repsonse(zero_idxs, &swap_output_json, &main_storage).await;
+    return handle_split_notes_repsonse(zero_idxs, &transaction_output_json, &main_storage).await;
 }
 
 //
@@ -103,7 +103,7 @@ pub async fn change_position_margin_inner(
     tokio::task::yield_now().await;
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -133,7 +133,7 @@ pub async fn change_position_margin_inner(
     return handle_margin_change_repsonse(
         result.unwrap(),
         user_id,
-        &swap_output_json,
+        &transaction_output_json,
         &main_storage,
         &perp_order_books,
         &ws_connections,

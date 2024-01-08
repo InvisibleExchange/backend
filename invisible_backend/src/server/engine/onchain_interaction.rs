@@ -39,7 +39,7 @@ pub async fn execute_deposit_inner(
     tokio::task::yield_now().await;
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -67,7 +67,7 @@ pub async fn execute_deposit_inner(
         );
     }
 
-    return handle_deposit_repsonse(deposit_response.unwrap(), &swap_output_json, &main_storage)
+    return handle_deposit_repsonse(deposit_response.unwrap(), &transaction_output_json, &main_storage)
         .await;
 }
 
@@ -89,7 +89,7 @@ pub async fn execute_withdrawal_inner(
     tokio::task::yield_now().await;
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -119,7 +119,7 @@ pub async fn execute_withdrawal_inner(
 
     return handle_withdrawal_repsonse(
         withdrawal_response.unwrap(),
-        &swap_output_json,
+        &transaction_output_json,
         &main_storage,
     )
     .await;
@@ -147,7 +147,7 @@ pub async fn execute_escape_inner(
     let mut tx_batch_m = tx_batch.lock().await;
 
     tx_batch_m.execute_forced_escape(escape_message);
-    store_output_json(&tx_batch_m.swap_output_json, &tx_batch_m.main_storage);
+    store_output_json(&tx_batch_m.transaction_output_json, &tx_batch_m.main_storage);
 
     drop(tx_batch_m);
 

@@ -2,7 +2,7 @@ use error_stack::Report;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use parking_lot::Mutex;
-use serde_json::{json, Map, Value};
+use serde_json::json;
 use starknet::curve::AffinePoint;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tokio_tungstenite::tungstenite::Message;
@@ -19,6 +19,7 @@ use crate::{
         },
         ChangeMarginMessage,
     },
+    transaction_batch::TxOutputJson,
     transactions::swap::SwapResponse,
     trees::superficial_tree::SuperficialTree,
     utils::{
@@ -196,19 +197,22 @@ fn hash_margin_change_message(margin_change: &ChangeMarginMessage) -> BigUint {
 }
 
 pub fn store_output_json(
-    swap_output_json_: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_: &Arc<Mutex<TxOutputJson>>,
     main_storage_: &Arc<Mutex<MainStorage>>,
 ) {
-    let mut swap_output_json = swap_output_json_.lock();
+    let mut transaction_output_json = transaction_output_json_.lock();
 
-    if !swap_output_json.is_empty() {
+    if !transaction_output_json.tx_micro_batch.is_empty() {
         let mut main_storage = main_storage_.lock();
-        main_storage.store_micro_batch(&swap_output_json);
-        swap_output_json.clear();
-        drop(swap_output_json);
+
+        main_storage.store_micro_batch(&transaction_output_json.tx_micro_batch);
+        main_storage.store_state_updates(&transaction_output_json.state_updates);
+
+        transaction_output_json.tx_micro_batch.clear();
+        drop(transaction_output_json);
         drop(main_storage);
     } else {
-        drop(swap_output_json);
+        drop(transaction_output_json);
     }
 
     return;
@@ -219,12 +223,12 @@ pub fn store_output_json(
 
 pub async fn handle_split_notes_repsonse(
     zero_idxs: Result<Vec<u64>, String>,
-    swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     main_storage: &Arc<Mutex<MainStorage>>,
 ) -> Result<Response<SplitNotesRes>, Status> {
     match zero_idxs {
         Ok(zero_idxs) => {
-            store_output_json(swap_output_json, main_storage);
+            store_output_json(transaction_output_json, main_storage);
 
             let reply = SplitNotesRes {
                 successful: true,
@@ -244,7 +248,7 @@ pub async fn handle_split_notes_repsonse(
 pub async fn handle_margin_change_repsonse(
     margin_change_response: (u64, crate::perpetual::perp_position::PerpPosition),
     user_id: u64,
-    swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     main_storage: &Arc<Mutex<MainStorage>>,
     perp_order_books: &HashMap<u16, Arc<TokioMutex<OrderBook>>>,
     ws_connections: &Arc<TokioMutex<WsConnectionsMap>>,
@@ -260,7 +264,7 @@ pub async fn handle_margin_change_repsonse(
     perp_book.update_order_positions(user_id, &Some(position.clone()));
     drop(perp_book);
 
-    store_output_json(&swap_output_json, &main_storage);
+    store_output_json(&transaction_output_json, &main_storage);
 
     // TODO: Is this necessary (sending all positions to the relay server)?
     let pos = Some((
@@ -296,12 +300,12 @@ pub async fn handle_withdrawal_repsonse(
         (Option<SwapResponse>, Option<Vec<u64>>),
         Report<TransactionExecutionError>,
     >,
-    swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     main_storage: &Arc<Mutex<MainStorage>>,
 ) -> Result<Response<SuccessResponse>, Status> {
     match withdrawal_response {
         Ok(_res) => {
-            store_output_json(&swap_output_json, &main_storage);
+            store_output_json(&transaction_output_json, &main_storage);
 
             let reply = SuccessResponse {
                 successful: true,
@@ -339,12 +343,12 @@ pub async fn handle_deposit_repsonse(
         ),
         error_stack::Report<crate::utils::errors::TransactionExecutionError>,
     >,
-    swap_output_json: &Arc<Mutex<Vec<Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     main_storage: &Arc<Mutex<MainStorage>>,
 ) -> Result<Response<DepositResponse>, Status> {
     match deposit_response {
         Ok(response) => {
-            store_output_json(&swap_output_json, &main_storage);
+            store_output_json(&transaction_output_json, &main_storage);
 
             let reply = DepositResponse {
                 successful: true,

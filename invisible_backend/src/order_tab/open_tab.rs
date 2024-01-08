@@ -3,11 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use parking_lot::Mutex;
-use serde_json::Value;
 use starknet::curve::AffinePoint;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::transaction_batch::TxOutputJson;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     server::grpc::engine_proto::OpenOrderTabReq,
@@ -31,7 +31,7 @@ pub fn open_order_tab(
     open_order_tab_req: OpenOrderTabReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
 ) -> std::result::Result<OrderTab, String> {
     let sig_pub_key: BigUint;
 
@@ -203,7 +203,7 @@ pub fn open_order_tab(
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     open_tab_json_output(
-        &swap_output_json_m,
+        &transaction_output_json_m,
         &base_notes_in,
         &base_refund_note,
         &quote_notes_in,
@@ -229,6 +229,7 @@ pub fn open_order_tab(
     open_tab_state_updates(
         state_tree,
         updated_state_hashes,
+        transaction_output_json_m,
         order_tab.clone(),
         base_notes_in,
         quote_notes_in,

@@ -70,7 +70,7 @@ async function initListeners(db) {
 
 // TODO: FOR TESTING
 async function main() {
-  const db = await initDb();
+  const db = initDb();
 
   await initListeners(db);
 }

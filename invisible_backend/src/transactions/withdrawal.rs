@@ -5,7 +5,7 @@ use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
 use std::sync::Arc;
 
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, TxOutputJson};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
 use crate::utils::errors::{
@@ -18,7 +18,6 @@ use crossbeam::thread;
 use error_stack::{Report, Result};
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
-use serde_json::Value;
 
 use super::transaction_helpers::db_updates::update_db_after_withdrawal;
 use super::transaction_helpers::state_updates::update_state_after_withdrawal;
@@ -44,7 +43,7 @@ impl Withdrawal {
         &self,
         tree_m: Arc<Mutex<SuperficialTree>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json_m: Arc<Mutex<TxOutputJson>>,
         session: &Arc<Mutex<ServiceSession>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(), WithdrawalThreadExecutionError> {
@@ -85,6 +84,7 @@ impl Withdrawal {
             update_state_after_withdrawal(
                 &mut tree,
                 &mut updated_state_hashes,
+                &transaction_output_json_m,
                 &self.notes_in,
                 &self.refund_note,
             )?;
@@ -101,9 +101,9 @@ impl Withdrawal {
                 serde_json::to_value(&self).unwrap(),
             );
 
-            let mut swap_output_json = swap_output_json_m.lock();
-            swap_output_json.push(json_map);
-            drop(swap_output_json);
+            let mut transaction_output_json = transaction_output_json_m.lock();
+            transaction_output_json.tx_micro_batch.push(json_map);
+            drop(transaction_output_json);
 
             Ok(())
         });
@@ -194,7 +194,7 @@ impl Transaction for Withdrawal {
         tree: Arc<Mutex<SuperficialTree>>,
         _partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json: Arc<Mutex<TxOutputJson>>,
         _blocked_order_ids: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
         _main_storage: &Arc<Mutex<MainStorage>>,
@@ -203,7 +203,7 @@ impl Transaction for Withdrawal {
         self.execute_withdrawal(
             tree,
             updated_state_hashes,
-            swap_output_json,
+            transaction_output_json,
             session,
             backup_storage,
         )

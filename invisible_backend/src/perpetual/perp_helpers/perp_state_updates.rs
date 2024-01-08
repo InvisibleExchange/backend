@@ -5,9 +5,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
 use num_traits::Zero;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, MutexGuard};
 
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, StateUpdate, TxOutputJson};
 use crate::utils::crypto_utils::EcPoint;
 use crate::{trees::superficial_tree::SuperficialTree, utils::notes::Note};
 
@@ -18,6 +18,7 @@ pub fn update_state_after_swap_first_fill(
     //
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json_m: &mut MutexGuard<TxOutputJson>,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
     partial_fill_refund_note: Option<&Note>,
@@ -35,6 +36,13 @@ pub fn update_state_after_swap_first_fill(
 
     tree.update_leaf_node(&refund_hash, refund_idx);
     updated_state_hashes.insert(refund_idx, (LeafNodeType::Note, refund_hash));
+    if let Some(refund_note) = refund_note {
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note {
+                note: refund_note.clone(),
+            });
+    }
 
     if partial_fill_refund_note.is_some() {
         //
@@ -44,6 +52,9 @@ pub fn update_state_after_swap_first_fill(
 
         tree.update_leaf_node(&note.hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note.hash.clone()));
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note { note: note.clone() });
         //
     }
 
@@ -61,6 +72,7 @@ pub fn update_state_after_swap_first_fill(
 pub fn update_state_after_swap_later_fills(
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json_m: &mut MutexGuard<TxOutputJson>,
     prev_partial_fill_refund_note: Note,
     new_partial_fill_refund_note: Option<&Note>,
 ) {
@@ -73,6 +85,11 @@ pub fn update_state_after_swap_later_fills(
 
         tree.update_leaf_node(&pfr_note.hash, pfr_idx);
         updated_state_hashes.insert(pfr_idx, (LeafNodeType::Note, pfr_note.hash.clone()));
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note {
+                note: pfr_note.clone(),
+            });
     } else {
         let pfr_idx = prev_partial_fill_refund_note.index;
 
@@ -88,6 +105,7 @@ pub fn update_state_after_swap_later_fills(
 pub fn update_perpetual_state(
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json_m: &mut MutexGuard<TxOutputJson>,
     position_effect_type: &PositionEffectType,
     position_idx: u32,
     position: Option<&PerpPosition>,
@@ -98,6 +116,7 @@ pub fn update_perpetual_state(
 
     let mut state_tree = state_tree_m.lock();
     let mut updated_state_hashes = updated_state_hashes_m.lock();
+
     if *position_effect_type == PositionEffectType::Open {
         let position = position.unwrap();
 
@@ -106,6 +125,11 @@ pub fn update_perpetual_state(
             position.index as u64,
             (LeafNodeType::Position, position.hash.clone()),
         );
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Position {
+                position: position.clone(),
+            });
     } else {
         let position_hash: BigUint;
         if position.is_some() {
@@ -116,6 +140,13 @@ pub fn update_perpetual_state(
 
         state_tree.update_leaf_node(&position_hash, position_idx as u64);
         updated_state_hashes.insert(position_idx as u64, (LeafNodeType::Position, position_hash));
+        if let Some(position) = position {
+            transaction_output_json_m
+                .state_updates
+                .push(StateUpdate::Position {
+                    position: position.clone(),
+                });
+        }
     }
     drop(state_tree);
     drop(updated_state_hashes);
@@ -125,6 +156,7 @@ pub fn update_perpetual_state(
 pub fn return_collateral_on_position_close(
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json_m: &mut MutexGuard<TxOutputJson>,
     idx: u64,
     collateral_return_amount: u64,
     collateral_token: u32,
@@ -147,6 +179,12 @@ pub fn return_collateral_on_position_close(
         idx,
         (LeafNodeType::Note, return_collateral_note.hash.clone()),
     );
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Note {
+            note: return_collateral_note.clone(),
+        });
+
     drop(tree);
     drop(updated_state_hashes);
 

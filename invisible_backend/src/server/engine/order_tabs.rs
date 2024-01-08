@@ -37,7 +37,7 @@ pub async fn open_order_tab_inner(
     let req: OpenOrderTabReq = req.into_inner();
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -83,7 +83,7 @@ pub async fn open_order_tab_inner(
     match order_action_response {
         Ok(res) => match res.open_tab_response.unwrap() {
             Ok(order_tab) => {
-                store_output_json(&swap_output_json, &main_storage);
+                store_output_json(&transaction_output_json, &main_storage);
 
                 let order_tab = GrpcOrderTab::from(order_tab);
                 let reply = OpenOrderTabRes {
@@ -135,7 +135,7 @@ pub async fn close_order_tab_inner(
     tokio::task::yield_now().await;
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -153,7 +153,7 @@ pub async fn close_order_tab_inner(
     match order_action_response {
         Ok(res) => match res.close_tab_response.unwrap() {
             Ok((base_r_note, quote_r_note)) => {
-                store_output_json(&swap_output_json, &main_storage);
+                store_output_json(&transaction_output_json, &main_storage);
 
                 let base_return_note = Some(GrpcNote::from(base_r_note));
                 let quote_return_note = Some(GrpcNote::from(quote_r_note));

@@ -5,8 +5,8 @@ use std::{collections::HashMap, path::Path, sync::Arc, time::SystemTime};
 
 use error_stack::Result;
 
-use serde::{Deserialize, Serialize};
-
+use crate::transaction_batch::tx_batch_helpers::store_da_output;
+use crate::transaction_batch::TxOutputJson;
 use crate::trees::{superficial_tree::SuperficialTree, Tree};
 use crate::utils::storage::local_storage::MainStorage;
 use crate::{
@@ -30,11 +30,12 @@ const PARTITION_SIZE_EXPONENT: u32 = 12;
 
 //
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BatchTransitionInfo {
     pub current_batch_index: u32,
     pub funding_info: FundingInfo,
     pub price_info_json: Value,
+    pub data_commitment: BigUint,
     pub updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)>,
     pub exchange_state_storage: Map<String, Value>,
 }
@@ -45,7 +46,7 @@ pub struct BatchTransitionInfo {
 pub fn _finalize_batch_inner(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     main_storage: &Arc<Mutex<MainStorage>>,
     insurance_fund: &Arc<Mutex<i64>>,
     funding_rates: &mut HashMap<u32, Vec<i64>>,
@@ -58,15 +59,22 @@ pub fn _finalize_batch_inner(
     let mut state_tree = state_tree.lock();
     state_tree.update_zero_idxs();
 
+    println!("1");
+
     let main_storage = main_storage.clone();
     let mut main_storage = main_storage.lock();
-    let latest_output_json = swap_output_json.clone();
+    let latest_output_json = transaction_output_json.clone();
     let latest_output_json = latest_output_json.lock();
 
     let current_batch_index = main_storage.latest_batch;
 
+    println!("2");
+
     // ? Store the latest output json
-    main_storage.store_micro_batch(&latest_output_json);
+    main_storage.store_micro_batch(&latest_output_json.tx_micro_batch);
+    main_storage.store_state_updates(&latest_output_json.state_updates);
+
+    println!("3");
 
     let min_funding_idxs = &min_funding_idxs;
     let funding_rates = &funding_rates;
@@ -85,6 +93,14 @@ pub fn _finalize_batch_inner(
     // ? Get the price info
     let price_info_json = get_price_info(min_index_price_data_, max_index_price_data_);
 
+    println!("4");
+
+    // ? Build and store the DA output (notes/positions/tabs/zero_indexes) to be posted to Celestia/EigenDA
+    let data_commitment =
+        store_da_output(&main_storage, &updated_state_hashes_c, current_batch_index);
+
+    println!("5");
+
     updated_state_hashes_c.clear();
 
     // ? Drop the locks before updating the trees
@@ -99,6 +115,8 @@ pub fn _finalize_batch_inner(
     let insurance_fund_m = insurance_fund.lock();
     let insurance_fund_value = insurance_fund_m.clone();
     drop(insurance_fund_m);
+
+    println!("6");
 
     exchange_state_storage.insert(
         String::from("funding_rates"),
@@ -133,6 +151,7 @@ pub fn _finalize_batch_inner(
         current_batch_index,
         funding_info,
         price_info_json,
+        data_commitment,
         updated_state_hashes,
         exchange_state_storage,
     }
@@ -146,18 +165,24 @@ pub fn _transition_state(
 ) -> Result<(), BatchFinalizationError> {
     // ? Get the json output of all the transactions
     let main_storage = main_storage_m.lock();
-    let swap_output_json = main_storage.read_storage(0);
+    let transaction_output_json = main_storage.read_storage(0);
     drop(main_storage);
+
+    println!("7");
 
     // ? Get the final updated counts for the cairo program input
     let program_input_counts = get_final_updated_counts(
         &batch_transition_info.updated_state_hashes,
-        &swap_output_json,
+        &transaction_output_json,
     );
+
+    println!("8");
 
     // ? Update the merkle trees and get the new roots and preimages
     let (prev_spot_root, new_spot_root, preimage_json) =
         update_trees(batch_transition_info.updated_state_hashes)?;
+
+    println!("9");
 
     // ? Construct the global state and config
     let global_expiration_timestamp = SystemTime::now()
@@ -173,16 +198,21 @@ pub fn _transition_state(
         program_input_counts,
     );
 
+    println!("10");
+
     let global_config: GlobalConfig = GlobalConfig::new();
 
     let output_json: Map<String, Value> = get_json_output(
         &global_dex_state,
         &global_config,
+        &batch_transition_info.data_commitment,
         &batch_transition_info.funding_info,
         batch_transition_info.price_info_json,
-        &swap_output_json,
+        &transaction_output_json,
         preimage_json,
     );
+
+    println!("11");
 
     // & Write transaction batch json to database
 

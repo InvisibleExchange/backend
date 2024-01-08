@@ -1,11 +1,14 @@
 use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, Zero};
+use num_traits::{FromPrimitive, Num, One, Zero};
 use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+use crate::perpetual::OrderSide;
+use crate::transaction_batch::{StateUpdate, TxOutputJson};
 use crate::trees::superficial_tree::SuperficialTree;
+use crate::utils::crypto_utils::keccak256;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     perpetual::{
@@ -15,7 +18,7 @@ use crate::{
     },
     transaction_batch::{tx_batch_structs::SwapFundingInfo, LeafNodeType},
     utils::{
-        crypto_utils::{hash_many, verify, EcPoint, Signature},
+        crypto_utils::{verify, EcPoint, Signature},
         storage::firestore::{
             start_add_note_thread, start_add_position_thread, start_delete_note_thread,
             start_delete_position_thread,
@@ -27,7 +30,7 @@ use crate::utils::notes::Note;
 
 use serde::Serialize;
 
-use super::note_escapes::find_invalid_note;
+use super::note_escapes::{find_invalid_note, hash_note_keccak};
 
 #[derive(Serialize)]
 pub struct PositionEscape {
@@ -54,6 +57,7 @@ pub struct PositionEscape {
 pub fn verify_position_escape(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     escape_id: u32,
@@ -90,7 +94,6 @@ pub fn verify_position_escape(
 
     // ? Verify the signatures
     let order_hash = hash_position_escape_message(
-        escape_id,
         &position_a,
         close_price,
         &open_order_fields_b,
@@ -197,6 +200,7 @@ pub fn verify_position_escape(
     update_state_after_escape(
         state_tree,
         updated_state_hashes,
+        transaction_output_json,
         firebase_session,
         backup_storage,
         position_a,
@@ -355,6 +359,7 @@ fn handle_counter_party_modify_order(
 fn update_state_after_escape(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     position_a: PerpPosition,
@@ -364,6 +369,7 @@ fn update_state_after_escape(
 ) {
     let mut state_tree_m = state_tree.lock();
     let mut updated_state_hashes_m = updated_state_hashes.lock();
+    let mut transaction_output_json_m = transaction_output_json.lock();
 
     // * Remove notes_in and add refund note if order_b is an open order
     if let Some(notes_in) = notes_in {
@@ -386,6 +392,11 @@ fn update_state_after_escape(
                 refund_note.index,
                 (LeafNodeType::Note, refund_note.hash.clone()),
             );
+            transaction_output_json_m
+                .state_updates
+                .push(StateUpdate::Note {
+                    note: refund_note.clone(),
+                });
 
             let _h = start_add_note_thread(refund_note, firebase_session, backup_storage);
         }
@@ -409,11 +420,17 @@ fn update_state_after_escape(
         new_position_b.index as u64,
         (LeafNodeType::Position, new_position_b.hash.clone()),
     );
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Position {
+            position: new_position_b.clone(),
+        });
 
     let _h = start_add_position_thread(new_position_b, firebase_session, backup_storage);
 
     drop(state_tree_m);
     drop(updated_state_hashes_m);
+    drop(transaction_output_json_m);
 }
 
 // * -----------------------
@@ -430,40 +447,6 @@ fn verify_position_exists(
 }
 
 // * -----------------------
-
-fn hash_position_escape_message(
-    escape_id: u32,
-    position_a: &PerpPosition,
-    close_price: u64,
-    open_order_fields_b: &Option<OpenOrderFields>,
-    position_b: &Option<PerpPosition>,
-    recipient: String,
-) -> BigUint {
-    let mut hash_inputs: Vec<&BigUint> = Vec::new();
-
-    // & H = pedersen(escape_id, position_a.hash, close_price, (open_order_fields_b.hash or position_b.hash), recipient)
-
-    let escape_id = BigUint::from_u32(escape_id).unwrap();
-    hash_inputs.push(&escape_id);
-    hash_inputs.push(&position_a.hash);
-    let close_price = BigUint::from_u64(close_price).unwrap();
-    hash_inputs.push(&close_price);
-
-    let hash_inp;
-    if let Some(fields) = open_order_fields_b {
-        hash_inp = fields.hash();
-    } else {
-        hash_inp = position_b.as_ref().unwrap().hash.clone()
-    }
-    hash_inputs.push(&hash_inp);
-
-    let recipient = BigUint::from_str(&recipient).unwrap();
-    hash_inputs.push(&recipient);
-
-    let order_hash = hash_many(&hash_inputs);
-
-    return order_hash;
-}
 
 // * -----------------------
 
@@ -517,3 +500,145 @@ fn verify_signatures(
 }
 
 //
+
+fn hash_position_escape_message(
+    position_a: &PerpPosition,
+    close_price: u64,
+    open_order_fields_b: &Option<OpenOrderFields>,
+    position_b: &Option<PerpPosition>,
+    recipient: String,
+) -> BigUint {
+    let mut hash_inputs: Vec<BigUint> = Vec::new();
+
+    // & H = pedersen(position_a.hash, close_price, (open_order_fields_b.hash or position_b.hash), recipient)
+
+    let position_a_hash = hash_position_keccak(position_a);
+    hash_inputs.push(position_a_hash);
+    let close_price = BigUint::from_u64(close_price).unwrap();
+    hash_inputs.push(close_price);
+
+    let hash_inp;
+    if let Some(fields) = open_order_fields_b {
+        hash_inp = hash_open_order_fields_keccak(fields)
+    } else {
+        hash_inp = hash_position_keccak(position_b.as_ref().unwrap())
+    }
+    hash_inputs.push(hash_inp);
+
+    let recipient = recipient.replace("0x", "");
+    let recipient_;
+    if let Ok(dep) = BigUint::from_str(&recipient) {
+        recipient_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&recipient, 16) {
+        recipient_ = dep;
+    } else {
+        panic!("recipient is not a valid number");
+    }
+    hash_inputs.push(recipient_);
+
+    let order_hash = keccak256(&hash_inputs);
+
+    let p = BigUint::from_str(
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
+    )
+    .unwrap();
+    let hash_on_curve = order_hash % &p;
+
+    return hash_on_curve;
+}
+
+pub fn hash_position_keccak(position: &PerpPosition) -> BigUint {
+    // & hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token, max_vlp_supply, order_side, position_size, entry_price, liquidation_price, last_funding_idx, vlp_supply})
+
+    let mut input_arr = Vec::new();
+
+    let allow_partial_liquidations = if position.position_header.allow_partial_liquidations {
+        BigUint::one()
+    } else {
+        BigUint::zero()
+    };
+    input_arr.push(allow_partial_liquidations);
+
+    let synthetic_token = BigUint::from_u32(position.position_header.synthetic_token).unwrap();
+    input_arr.push(synthetic_token);
+
+    input_arr.push(position.position_header.position_address.clone());
+
+    let vlp_token = BigUint::from_u32(position.position_header.vlp_token).unwrap();
+    input_arr.push(vlp_token);
+
+    let max_vlp_supply = BigUint::from_u64(position.position_header.max_vlp_supply).unwrap();
+    input_arr.push(max_vlp_supply);
+
+    let order_side = if position.order_side == OrderSide::Long {
+        BigUint::one()
+    } else {
+        BigUint::zero()
+    };
+    input_arr.push(order_side);
+
+    let position_size = BigUint::from_u64(position.position_size).unwrap();
+    input_arr.push(position_size);
+
+    let entry_price = BigUint::from_u64(position.entry_price).unwrap();
+    input_arr.push(entry_price);
+
+    let liquidation_price = BigUint::from_u64(position.liquidation_price).unwrap();
+    input_arr.push(liquidation_price);
+
+    let last_funding_idx = BigUint::from_u32(position.last_funding_idx).unwrap();
+    input_arr.push(last_funding_idx);
+
+    let vlp_supply = BigUint::from_u64(position.vlp_supply).unwrap();
+    input_arr.push(vlp_supply);
+
+    let position_hash = keccak256(&input_arr);
+
+    let p = BigUint::from_str(
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
+    )
+    .unwrap();
+    let hash_on_curve = position_hash % &p;
+
+    return hash_on_curve;
+}
+
+pub fn hash_open_order_fields_keccak(open_order_fields_b: &OpenOrderFields) -> BigUint {
+    // & H = (note_hashes, refund_note_hash, initial_margin, collateral_token, position_address, allow_partial_liquidations)
+
+    let mut input_arr = Vec::new();
+
+    for note in open_order_fields_b.notes_in.iter() {
+        let note_hash = hash_note_keccak(note);
+
+        input_arr.push(note_hash);
+    }
+
+    let refund_note_hash = hash_note_keccak(&open_order_fields_b.refund_note.clone().unwrap());
+    input_arr.push(refund_note_hash);
+
+    let initial_margin = BigUint::from_u64(open_order_fields_b.initial_margin).unwrap();
+    input_arr.push(initial_margin);
+
+    let collateral_token = BigUint::from_u32(open_order_fields_b.collateral_token).unwrap();
+    input_arr.push(collateral_token);
+
+    input_arr.push(open_order_fields_b.position_address.clone());
+
+    let allow_partial_liquidations = if open_order_fields_b.allow_partial_liquidations {
+        BigUint::one()
+    } else {
+        BigUint::zero()
+    };
+    input_arr.push(allow_partial_liquidations);
+
+    let fields_hash = keccak256(&input_arr);
+
+    let p = BigUint::from_str(
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
+    )
+    .unwrap();
+    let hash_on_curve = fields_hash % &p;
+
+    return hash_on_curve;
+}

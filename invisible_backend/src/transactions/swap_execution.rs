@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use num_bigint::BigUint;
-use serde_json::Value;
 
 use crossbeam::thread;
 use error_stack::{Report, Result};
@@ -18,7 +17,7 @@ use super::transaction_helpers::swap_helpers::{
 };
 use super::transaction_helpers::transaction_output::TransactionOutptut;
 use crate::order_tab::OrderTab;
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, TxOutputJson};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{send_swap_error, SwapThreadExecutionError};
@@ -166,6 +165,7 @@ pub fn execute_swap_transaction(
 
 pub fn update_state_and_finalize(
     tree_m: &Arc<Mutex<SuperficialTree>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     partial_fill_tracker_m: &Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     blocked_order_ids_m: &Arc<Mutex<HashMap<u64, bool>>>,
@@ -177,7 +177,7 @@ pub fn update_state_and_finalize(
     prev_order_tab_a: &Option<OrderTab>,
     prev_order_tab_b: &Option<OrderTab>,
 ) -> Result<(), SwapThreadExecutionError> {
-    let update_and_finalize_handle = thread::scope(move |s| {
+    let update_and_finalize_handle = thread::scope(move |_s| {
         let order_a_output = &execution_result.0;
         let order_b_output = &execution_result.1;
 
@@ -193,94 +193,60 @@ pub fn update_state_and_finalize(
             &order_b_output.note_info_output,
         )?;
 
-        // ? Order a ----------------------------------------
-        let tree = tree_m.clone();
-        let updated_state_hashes = updated_state_hashes_m.clone();
-        let partial_fill_tracker = partial_fill_tracker_m.clone();
-        let blocked_order_ids = blocked_order_ids_m.clone();
+        // ? Order a ---------------------------------------- ----------------------------------------
 
-        let order_a_output_clone = order_a_output.clone();
+        update_state_after_order(
+            &tree_m,
+            &updated_state_hashes_m,
+            transaction_output_json,
+            &order_a.spot_note_info,
+            &order_a_output.note_info_output,
+            &order_a_output.updated_order_tab,
+        );
 
-        let update_state_handle_a = s.spawn(move |_| {
-            update_state_after_order(
-                &tree,
-                &updated_state_hashes,
-                &order_a.spot_note_info,
-                &order_a_output_clone.note_info_output,
-                &order_a_output_clone.updated_order_tab,
-            );
+        update_db_after_spot_swap(
+            &session,
+            &backup_storage,
+            &order_a,
+            &order_a_output.note_info_output,
+            &order_a_output.updated_order_tab,
+        );
 
-            update_db_after_spot_swap(
-                &session,
-                &backup_storage,
-                &order_a,
-                &order_a_output_clone.note_info_output,
-                &order_a_output_clone.updated_order_tab,
-            );
+        // ? update the  partial_fill_tracker map and allow other threads to continue filling the same order
+        finalize_updates(
+            &partial_fill_tracker_m,
+            &blocked_order_ids_m,
+            order_a.order_id,
+            prev_order_tab_a.is_some(),
+            &order_a_output,
+        );
 
-            // ? update the  partial_fill_tracker map and allow other threads to continue filling the same order
-            finalize_updates(
-                &partial_fill_tracker,
-                &blocked_order_ids,
-                order_a.order_id,
-                prev_order_tab_a.is_some(),
-                &order_a_output_clone,
-            );
-        });
+        // ? Order b ---------------------------------------- ----------------------------------------
+        update_state_after_order(
+            &tree_m,
+            &updated_state_hashes_m,
+            transaction_output_json,
+            &order_b.spot_note_info,
+            &order_b_output.note_info_output,
+            &order_b_output.updated_order_tab,
+        );
 
-        // ? Order b ----------------------------------------
-        let tree = tree_m.clone();
-        let updated_state_hashes = updated_state_hashes_m.clone();
-        let partial_fill_tracker = partial_fill_tracker_m.clone();
-        let blocked_order_ids = blocked_order_ids_m.clone();
-        let order_b_output_clone = order_b_output.clone();
+        update_db_after_spot_swap(
+            &session,
+            &backup_storage,
+            &order_b,
+            &order_b_output.note_info_output,
+            &order_b_output.updated_order_tab,
+        );
 
-        let update_state_handle_b = s.spawn(move |_| {
-            update_state_after_order(
-                &tree,
-                &updated_state_hashes,
-                &order_b.spot_note_info,
-                &order_b_output_clone.note_info_output,
-                &order_b_output_clone.updated_order_tab,
-            );
-
-            update_db_after_spot_swap(
-                &session,
-                &backup_storage,
-                &order_b,
-                &order_b_output_clone.note_info_output,
-                &order_b_output_clone.updated_order_tab,
-            );
-
-            // ? update the  partial_fill_tracker map and allow other threads to continue filling the same order
-            finalize_updates(
-                &partial_fill_tracker,
-                &blocked_order_ids,
-                order_b.order_id,
-                prev_order_tab_b.is_some(),
-                &order_b_output_clone,
-            );
-        });
-
-        // ? Run the update state thread_a or return an error
-        update_state_handle_a.join().or_else(|_| {
-            // ? Un unknown error occured executing order a thread
-            Err(send_swap_error(
-                "Unknow Error Occured".to_string(),
-                None,
-                None,
-            ))
-        })?;
-
-        // ? Run the update state thread_b or return an error
-        update_state_handle_b.join().or_else(|_e| {
-            // ? Un unknown error occured executing order a thread
-            Err(send_swap_error(
-                "Unknow Error Occured".to_string(),
-                None,
-                None,
-            ))
-        })?;
+        // ? update the  partial_fill_tracker map and allow other threads to continue filling the same order
+        finalize_updates(
+            &partial_fill_tracker_m,
+            &blocked_order_ids_m,
+            order_b.order_id,
+            prev_order_tab_b.is_some(),
+            &order_b_output,
+        );
 
         return Ok(());
     });
@@ -309,7 +275,7 @@ pub fn update_state_and_finalize(
 }
 
 pub fn update_json_output(
-    swap_output_json: &mut MutexGuard<Vec<serde_json::Map<String, Value>>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     swap_output: &TransactionOutptut,
     execution_output_a: &TxExecutionThreadOutput,
     execution_output_b: &TxExecutionThreadOutput,
@@ -369,5 +335,5 @@ pub fn update_json_output(
         &updated_tab_hash_b,
     );
 
-    swap_output_json.push(json_output);
+    transaction_output_json.tx_micro_batch.push(json_output);
 }

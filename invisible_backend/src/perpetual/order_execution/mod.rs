@@ -9,6 +9,7 @@ use serde_json::{Map, Value};
 
 use error_stack::{Report, Result};
 
+use crate::transaction_batch::TxOutputJson;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::{
     transaction_batch::{tx_batch_structs::SwapFundingInfo, LeafNodeType},
@@ -448,6 +449,7 @@ pub fn update_state_and_finalize(
     partialy_filled_positions: &Arc<Mutex<HashMap<String, (PerpPosition, u64)>>>, // (position, synthetic filled)
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     //
     execution_result: &mut ExecutionResult,
     order_a: &PerpOrder,
@@ -456,7 +458,7 @@ pub fn update_state_and_finalize(
     let execution_output_a = &mut execution_result.0;
     let execution_output_b = &mut execution_result.1;
 
-    let result = thread::scope(move |s| {
+    let result = thread::scope(move |_s| {
         reverify_existances(
             &state_tree,
             &order_a,
@@ -466,202 +468,167 @@ pub fn update_state_and_finalize(
         )?;
 
         // ! State updates after order a
-        let session__ = session.clone();
-        let backup_storage__ = backup_storage.clone();
-        let state_tree__ = state_tree.clone();
-        let updated_state_hashes__ = updated_state_hashes.clone();
-        let perpetual_partial_fill_tracker__ = perpetual_partial_fill_tracker.clone();
-        let partialy_filled_positions__ = partialy_filled_positions.clone();
-        let blocked_perp_order_ids__ = blocked_perp_order_ids.clone();
+        if order_a.position_effect_type == PositionEffectType::Open {
+            let new_pfr_note = &execution_output_a.new_pfr_info.0;
 
-        let update_handle_a = s.spawn(move |_| {
-            let execution_output_a_clone = execution_output_a.clone();
-
-            if order_a.position_effect_type == PositionEffectType::Open {
-                let new_pfr_note = &execution_output_a_clone.new_pfr_info.0;
-
-                if execution_output_a_clone.prev_pfr_note.is_none() {
-                    update_state_after_swap_first_fill(
-                        &state_tree__,
-                        &updated_state_hashes__,
-                        &order_a.open_order_fields.as_ref().unwrap().notes_in,
-                        &order_a.open_order_fields.as_ref().unwrap().refund_note,
-                        new_pfr_note.as_ref(),
-                    );
-                } else {
-                    update_state_after_swap_later_fills(
-                        &state_tree__,
-                        &updated_state_hashes__,
-                        execution_output_a_clone.prev_pfr_note.unwrap(),
-                        new_pfr_note.as_ref(),
-                    );
-                }
-            } else if order_a.position_effect_type == PositionEffectType::Close {
-                let mut tree = state_tree__.lock();
-                let idx = tree.first_zero_idx();
-                drop(tree);
-
-                let return_collateral_note: Note = return_collateral_on_position_close(
-                    &state_tree__,
-                    &updated_state_hashes__,
-                    idx,
-                    execution_output_a.collateral_returned,
-                    COLLATERAL_TOKEN,
-                    &order_a
-                        .close_order_fields
-                        .as_ref()
-                        .unwrap()
-                        .dest_received_address,
-                    &order_a
-                        .close_order_fields
-                        .as_ref()
-                        .unwrap()
-                        .dest_received_blinding,
+            if execution_output_a.prev_pfr_note.is_none() {
+                update_state_after_swap_first_fill(
+                    &state_tree,
+                    &updated_state_hashes,
+                    transaction_output_json,
+                    &order_a.open_order_fields.as_ref().unwrap().notes_in,
+                    &order_a.open_order_fields.as_ref().unwrap().refund_note,
+                    new_pfr_note.as_ref(),
                 );
-
-                execution_output_a.return_collateral_note = Some(return_collateral_note);
+            } else {
+                update_state_after_swap_later_fills(
+                    &state_tree,
+                    &updated_state_hashes,
+                    transaction_output_json,
+                    execution_output_a.prev_pfr_note.as_ref().unwrap().clone(),
+                    new_pfr_note.as_ref(),
+                );
             }
+        } else if order_a.position_effect_type == PositionEffectType::Close {
+            let mut tree = state_tree.lock();
+            let idx = tree.first_zero_idx();
+            drop(tree);
 
-            // ! Update perpetual state for order A
-            update_perpetual_state(
-                &state_tree__,
-                &updated_state_hashes__,
-                &order_a.position_effect_type,
-                execution_output_a.position_index,
-                execution_output_a.position.as_ref(),
+            let return_collateral_note: Note = return_collateral_on_position_close(
+                &state_tree,
+                &updated_state_hashes,
+                transaction_output_json,
+                idx,
+                execution_output_a.collateral_returned,
+                COLLATERAL_TOKEN,
+                &order_a
+                    .close_order_fields
+                    .as_ref()
+                    .unwrap()
+                    .dest_received_address,
+                &order_a
+                    .close_order_fields
+                    .as_ref()
+                    .unwrap()
+                    .dest_received_blinding,
             );
 
-            finalize_updates(
-                &order_a,
-                &perpetual_partial_fill_tracker__,
-                &partialy_filled_positions__,
-                &blocked_perp_order_ids__,
-                &execution_output_a.new_pfr_info,
-                &execution_output_a.position,
-                execution_output_a.synthetic_amount_filled,
-                execution_output_a.is_fully_filled,
-            );
+            execution_output_a.return_collateral_note = Some(return_collateral_note);
+        }
 
-            // ? Update the database
-            update_db_after_perp_swap(
-                &session__,
-                &backup_storage__,
-                &order_a,
-                &execution_output_a.prev_pfr_note,
-                &execution_output_a.new_pfr_info.0,
-                &execution_output_a.return_collateral_note,
-                &execution_output_a.position,
-            );
-        });
+        // ! Update perpetual state for order A
+        update_perpetual_state(
+            &state_tree,
+            &updated_state_hashes,
+            transaction_output_json,
+            &order_a.position_effect_type,
+            execution_output_a.position_index,
+            execution_output_a.position.as_ref(),
+        );
+
+        finalize_updates(
+            &order_a,
+            &perpetual_partial_fill_tracker,
+            &partialy_filled_positions,
+            &blocked_perp_order_ids,
+            &execution_output_a.new_pfr_info,
+            &execution_output_a.position,
+            execution_output_a.synthetic_amount_filled,
+            execution_output_a.is_fully_filled,
+        );
+
+        // ? Update the database
+        update_db_after_perp_swap(
+            &session,
+            &backup_storage,
+            &order_a,
+            &execution_output_a.prev_pfr_note,
+            &execution_output_a.new_pfr_info.0,
+            &execution_output_a.return_collateral_note,
+            &execution_output_a.position,
+        );
 
         // ! State updates after order b
-        let session__ = session.clone();
-        let backup_storage__ = backup_storage.clone();
-        let state_tree__ = state_tree.clone();
-        let updated_state_hashes__ = updated_state_hashes.clone();
-        let perpetual_partial_fill_tracker__ = perpetual_partial_fill_tracker.clone();
-        let partialy_filled_positions__ = partialy_filled_positions.clone();
-        let blocked_perp_order_ids__ = blocked_perp_order_ids.clone();
 
-        let update_handle_b = s.spawn(move |_| {
-            let execution_output_b_clone = execution_output_b.clone();
+        if order_b.position_effect_type == PositionEffectType::Open {
+            let new_pfr_note = &execution_output_b.new_pfr_info.0;
 
-            if order_b.position_effect_type == PositionEffectType::Open {
-                let new_pfr_note = &execution_output_b_clone.new_pfr_info.0;
-
-                if execution_output_b_clone.prev_pfr_note.is_none() {
-                    update_state_after_swap_first_fill(
-                        &state_tree__,
-                        &updated_state_hashes__,
-                        &order_b.open_order_fields.as_ref().unwrap().notes_in,
-                        &order_b.open_order_fields.as_ref().unwrap().refund_note,
-                        new_pfr_note.as_ref(),
-                    );
-                } else {
-                    update_state_after_swap_later_fills(
-                        &state_tree__,
-                        &updated_state_hashes__,
-                        execution_output_b_clone.prev_pfr_note.unwrap(),
-                        new_pfr_note.as_ref(),
-                    );
-                }
-            } else if order_b.position_effect_type == PositionEffectType::Close {
-                let mut tree = state_tree__.lock();
-                let idx = tree.first_zero_idx();
-                drop(tree);
-
-                let return_collateral_note_: Note = return_collateral_on_position_close(
-                    &state_tree__,
-                    &updated_state_hashes__,
-                    idx,
-                    execution_output_b.collateral_returned,
-                    COLLATERAL_TOKEN,
-                    &order_b
-                        .close_order_fields
-                        .as_ref()
-                        .unwrap()
-                        .dest_received_address,
-                    &order_b
-                        .close_order_fields
-                        .as_ref()
-                        .unwrap()
-                        .dest_received_blinding,
+            if execution_output_b.prev_pfr_note.is_none() {
+                update_state_after_swap_first_fill(
+                    &state_tree,
+                    &updated_state_hashes,
+                    transaction_output_json,
+                    &order_b.open_order_fields.as_ref().unwrap().notes_in,
+                    &order_b.open_order_fields.as_ref().unwrap().refund_note,
+                    new_pfr_note.as_ref(),
                 );
-
-                execution_output_b.return_collateral_note = Some(return_collateral_note_);
+            } else {
+                update_state_after_swap_later_fills(
+                    &state_tree,
+                    &updated_state_hashes,
+                    transaction_output_json,
+                    execution_output_b.prev_pfr_note.as_ref().unwrap().clone(),
+                    new_pfr_note.as_ref(),
+                );
             }
+        } else if order_b.position_effect_type == PositionEffectType::Close {
+            let mut tree = state_tree.lock();
+            let idx = tree.first_zero_idx();
+            drop(tree);
 
-            // ! Update perpetual state for order B
-            update_perpetual_state(
-                &state_tree__,
-                &updated_state_hashes__,
-                &order_b.position_effect_type,
-                execution_output_b.position_index,
-                execution_output_b.position.as_ref(),
+            let return_collateral_note_: Note = return_collateral_on_position_close(
+                &state_tree,
+                &updated_state_hashes,
+                transaction_output_json,
+                idx,
+                execution_output_b.collateral_returned,
+                COLLATERAL_TOKEN,
+                &order_b
+                    .close_order_fields
+                    .as_ref()
+                    .unwrap()
+                    .dest_received_address,
+                &order_b
+                    .close_order_fields
+                    .as_ref()
+                    .unwrap()
+                    .dest_received_blinding,
             );
 
-            finalize_updates(
-                &order_b,
-                &perpetual_partial_fill_tracker__,
-                &partialy_filled_positions__,
-                &blocked_perp_order_ids__,
-                &execution_output_b.new_pfr_info,
-                &execution_output_b.position,
-                execution_output_b.synthetic_amount_filled,
-                execution_output_b.is_fully_filled,
-            );
+            execution_output_b.return_collateral_note = Some(return_collateral_note_);
+        }
 
-            // ? Update the database
-            update_db_after_perp_swap(
-                &session__,
-                &backup_storage__,
-                &order_b,
-                &execution_output_b.prev_pfr_note,
-                &execution_output_b.new_pfr_info.0,
-                &execution_output_b.return_collateral_note,
-                &execution_output_b.position,
-            );
-        });
+        // ! Update perpetual state for order B
+        update_perpetual_state(
+            &state_tree,
+            &updated_state_hashes,
+            transaction_output_json,
+            &order_b.position_effect_type,
+            execution_output_b.position_index,
+            execution_output_b.position.as_ref(),
+        );
 
-        // ? Run the update state thread_a or return an error
-        update_handle_a.join().or_else(|_| {
-            // ? Un unknown error occured executing order a thread
-            Err(send_perp_swap_error(
-                "Unknown Error Occurred".to_string(),
-                None,
-                None,
-            ))
-        })?;
+        finalize_updates(
+            &order_b,
+            &perpetual_partial_fill_tracker,
+            &partialy_filled_positions,
+            &blocked_perp_order_ids,
+            &execution_output_b.new_pfr_info,
+            &execution_output_b.position,
+            execution_output_b.synthetic_amount_filled,
+            execution_output_b.is_fully_filled,
+        );
 
-        // ? Run the update state thread_b or return an error
-        update_handle_b.join().or_else(|_| {
-            // ? Un unknown error occured executing order b thread
-            Err(send_perp_swap_error(
-                "Unknown Error Occurred".to_string(),
-                None,
-                None,
-            ))
-        })?;
+        // ? Update the database
+        update_db_after_perp_swap(
+            &session,
+            &backup_storage,
+            &order_b,
+            &execution_output_b.prev_pfr_note,
+            &execution_output_b.new_pfr_info.0,
+            &execution_output_b.return_collateral_note,
+            &execution_output_b.position,
+        );
 
         Ok(())
     });
@@ -693,7 +660,7 @@ pub fn update_json_output(
     swap_output: PerpSwapOutput,
     execution_output_a: &TxExecutionThreadOutput,
     execution_output_b: &TxExecutionThreadOutput,
-    swap_output_json: &mut MutexGuard<Vec<serde_json::Map<String, Value>>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     current_funding_idx: u32,
     order_a_side: &OrderSide,
 ) {
@@ -788,7 +755,7 @@ pub fn update_json_output(
         );
     }
 
-    swap_output_json.push(json_output);
+    transaction_output_json.tx_micro_batch.push(json_output);
 }
 
 // * Helpers ===========================================================================================

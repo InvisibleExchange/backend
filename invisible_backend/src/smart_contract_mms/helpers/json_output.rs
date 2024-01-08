@@ -2,13 +2,15 @@ use std::sync::Arc;
 
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 
-use crate::{perpetual::perp_position::PerpPosition, utils::crypto_utils::Signature};
+use crate::{
+    perpetual::perp_position::PerpPosition, transaction_batch::TxOutputJson,
+    utils::crypto_utils::Signature,
+};
 
 // * ONCHAIN OPEN ORDER TAB JSON OUTPUT
 pub fn onchain_register_json_output(
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     prev_position: &PerpPosition,
     new_position: &PerpPosition,
     vlp_token: u32,
@@ -45,16 +47,16 @@ pub fn onchain_register_json_output(
         serde_json::to_value(&signature).unwrap(),
     );
 
-    let mut swap_output_json = swap_output_json_m.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
+    let mut transaction_output_json = transaction_output_json_m.lock();
+    transaction_output_json.tx_micro_batch.push(json_map);
+    drop(transaction_output_json);
 }
 
 // * ================================================================================================
 // * ADD LIQUIDITY * //
 
 pub fn onchain_position_add_liquidity_json_output(
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     prev_position: &PerpPosition,
     new_position_hash: &BigUint,
     depositor: &String,
@@ -96,16 +98,16 @@ pub fn onchain_position_add_liquidity_json_output(
         serde_json::to_value(&signature).unwrap(),
     );
 
-    let mut swap_output_json = swap_output_json_m.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
+    let mut transaction_output_json = transaction_output_json_m.lock();
+    transaction_output_json.tx_micro_batch.push(json_map);
+    drop(transaction_output_json);
 }
 
 // * ================================================================================================
 // * REMOVE LIQUIDITY * //
 
 pub fn onchain_position_remove_liquidity_json_output(
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     prev_position: &PerpPosition,
     new_position: &PerpPosition,
     depositor: &String,
@@ -157,16 +159,16 @@ pub fn onchain_position_remove_liquidity_json_output(
         serde_json::to_value(&mm_fee).unwrap(),
     );
 
-    let mut swap_output_json = swap_output_json_m.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
+    let mut transaction_output_json = transaction_output_json_m.lock();
+    transaction_output_json.tx_micro_batch.push(json_map);
+    drop(transaction_output_json);
 }
 
 // * ================================================================================================
 // * CLOSE MM * //
 
 pub fn onchain_position_close_json_output(
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     prev_position: &PerpPosition,
     new_position: &PerpPosition,
     initial_value_sum: u64,
@@ -213,7 +215,7 @@ pub fn onchain_position_close_json_output(
         serde_json::to_value(&mm_fee).unwrap(),
     );
 
-    let mut swap_output_json = swap_output_json_m.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
+    let mut transaction_output_json = transaction_output_json_m.lock();
+    transaction_output_json.tx_micro_batch.push(json_map);
+    drop(transaction_output_json);
 }

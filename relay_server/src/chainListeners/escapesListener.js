@@ -1,8 +1,8 @@
 const {
   getStoredCommitment,
   storePendingCommitment,
-  updateStoredCommitment,
 } = require("../helpers/localStorage");
+const { GrpcOnchainActionType } = require("./dataCommitment");
 
 async function listenForEscapes(db, client, escapeVerifierContract) {
   // * Note Escapes * //
@@ -11,7 +11,14 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     async (escapeId, timestamp, escape_notes, signature) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      console.log("escapeId", escapeId);
+      console.log("escape_notes", escape_notes);
+      console.log("signature", signature);
+
+      let storedCommitment = await getStoredCommitment(
+        db,
+        2n ** 40n + BigInt(escapeId)
+      );
       if (storedCommitment) return;
 
       escape_notes = escape_notes.map((note) => {
@@ -33,6 +40,8 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
         },
       };
 
+      console.log("escapeMessage", escapeMessage);
+
       await client.execute_escape(escapeMessage, function (err, _response) {
         if (err) {
           console.log(err);
@@ -43,6 +52,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
             data_commitment: escapeId,
           };
 
+          console.log("commitment stored", commitment);
           storePendingCommitment(db, commitment);
         }
       });
@@ -55,7 +65,14 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     async (escapeId, timestamp, orderTab, signature) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      console.log("escapeId", escapeId);
+      console.log("orderTab", orderTab);
+      console.log("signature", signature);
+
+      let storedCommitment = await getStoredCommitment(
+        db,
+        2n ** 40n + BigInt(escapeId)
+      );
       if (storedCommitment) return;
 
       orderTab = {
@@ -93,6 +110,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
             data_commitment: escapeId,
           };
 
+          console.log("commitment stored", commitment);
           storePendingCommitment(db, commitment);
         }
       });
@@ -113,7 +131,18 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     ) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      console.log("escapeId", escapeId);
+      console.log("closePrice", closePrice);
+      console.log("position_a", position_a);
+      console.log("open_order_fields_b", open_order_fields_b);
+      console.log("recipient", recipient);
+      console.log("signature_a", signature_a);
+      console.log("signature_b", signature_b);
+
+      let storedCommitment = await getStoredCommitment(
+        db,
+        2n ** 40n + BigInt(escapeId)
+      );
       if (storedCommitment) return;
 
       position_a = {
@@ -167,7 +196,6 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
           open_order_fields_b.allow_partial_liquidations,
       };
 
-      // TODO: This has to be in the correct format
       let escapeMessage = {
         escape_id: escapeId.toString(),
         close_position_message: {
@@ -199,6 +227,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
             data_commitment: escapeId,
           };
 
+          console.log("commitment stored", commitment);
           storePendingCommitment(db, commitment);
         }
       });
@@ -219,7 +248,18 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     ) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      console.log("escapeId", escapeId);
+      console.log("closePrice", closePrice);
+      console.log("position_a", position_a);
+      console.log("position_b", position_b);
+      console.log("recipient", recipient);
+      console.log("signature_a", signature_a);
+      console.log("signature_b", signature_b);
+
+      let storedCommitment = await getStoredCommitment(
+        db,
+        2n ** 40n + BigInt(escapeId)
+      );
       if (storedCommitment) return;
 
       position_a = {
@@ -291,6 +331,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
             data_commitment: escapeId,
           };
 
+          console.log("commitment stored", commitment);
           storePendingCommitment(db, commitment);
         }
       });

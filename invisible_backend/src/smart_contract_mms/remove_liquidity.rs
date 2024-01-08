@@ -2,10 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::transaction_batch::TxOutputJson;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use crate::{
@@ -33,7 +33,7 @@ pub fn remove_liquidity_from_order_tab(
     remove_liquidity_req: OnChainRemoveLiqReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
 ) -> std::result::Result<PerpPosition, String> {
     //
 
@@ -101,7 +101,7 @@ pub fn remove_liquidity_from_order_tab(
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     onchain_position_remove_liquidity_json_output(
-        swap_output_json_m,
+        transaction_output_json_m,
         &prev_position,
         &new_position,
         &remove_liquidity_req.depositor,
@@ -113,7 +113,12 @@ pub fn remove_liquidity_from_order_tab(
     );
 
     // ? UPDATE THE STATE TREE --------------------------------------------------------------------
-    onchain_register_mm_state_updates(state_tree, updated_state_hashes, &new_position);
+    onchain_register_mm_state_updates(
+        state_tree,
+        updated_state_hashes,
+        transaction_output_json_m,
+        &new_position,
+    );
 
     // ? UPDATE THE DATABASE ----------------------------------------------------------------------
     let _h = start_add_position_thread(new_position.clone(), session, backup_storage);

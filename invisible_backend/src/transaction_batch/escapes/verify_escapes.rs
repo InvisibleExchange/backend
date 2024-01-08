@@ -2,7 +2,6 @@ use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use parking_lot::Mutex;
-use serde_json::Value;
 use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
 
@@ -10,6 +9,7 @@ use crate::order_tab::OrderTab;
 use crate::perpetual::perp_order::OpenOrderFields;
 use crate::perpetual::perp_position::PerpPosition;
 use crate::transaction_batch::tx_batch_structs::SwapFundingInfo;
+use crate::transaction_batch::TxOutputJson;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::{hash_many, Signature};
 use crate::utils::storage::backup_storage::BackupStorage;
@@ -28,7 +28,7 @@ pub fn _execute_forced_escape_inner(
     firebase_session: &Arc<Mutex<ServiceSession>>,
     main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     escape_message: EscapeMessage,
     swap_funding_info: &Option<SwapFundingInfo>,
     index_price: u64,
@@ -87,9 +87,9 @@ pub fn _execute_forced_escape_inner(
             serde_json::to_value(&note_escape).unwrap(),
         );
 
-        let mut swap_output_json_m = swap_output_json.lock();
-        swap_output_json_m.push(json_map);
-        drop(swap_output_json_m);
+        let mut transaction_output_json_m = transaction_output_json.lock();
+        transaction_output_json_m.tx_micro_batch.push(json_map);
+        drop(transaction_output_json_m);
     } else if let Some(close_order_tab_req) = escape_message.close_order_tab_req {
         let order_tab = OrderTab::try_from(close_order_tab_req).unwrap();
 
@@ -137,9 +137,9 @@ pub fn _execute_forced_escape_inner(
             serde_json::to_value(&tab_escape).unwrap(),
         );
 
-        let mut swap_output_json_m = swap_output_json.lock();
-        swap_output_json_m.push(json_map);
-        drop(swap_output_json_m);
+        let mut transaction_output_json_m = transaction_output_json.lock();
+        transaction_output_json_m.tx_micro_batch.push(json_map);
+        drop(transaction_output_json_m);
     } else if let Some(close_position_message) = escape_message.close_position_message {
         let position_a =
             PerpPosition::try_from(close_position_message.position_a.unwrap()).unwrap();
@@ -204,6 +204,7 @@ pub fn _execute_forced_escape_inner(
         let position_escape = verify_position_escape(
             state_tree,
             updated_state_hashes,
+            transaction_output_json,
             firebase_session,
             backup_storage,
             escape_id,
@@ -232,9 +233,9 @@ pub fn _execute_forced_escape_inner(
             serde_json::to_value(&position_escape).unwrap(),
         );
 
-        let mut swap_output_json_m = swap_output_json.lock();
-        swap_output_json_m.push(json_map);
-        drop(swap_output_json_m);
+        let mut transaction_output_json_m = transaction_output_json.lock();
+        transaction_output_json_m.tx_micro_batch.push(json_map);
+        drop(transaction_output_json_m);
     }
 
     Ok(())

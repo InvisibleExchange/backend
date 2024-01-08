@@ -9,11 +9,11 @@ use invisible_backend::{perpetual::VALID_COLLATERAL_TOKENS, utils::storage::Main
 pub fn _calculate_fees() {
     let storage = MainStorage::new();
 
-    let swap_output_json = storage.read_storage(0);
+    let transaction_output_json = storage.read_storage(0);
 
     let mut fee_map: HashMap<u64, u64> = HashMap::new();
 
-    for transaction in swap_output_json {
+    for transaction in transaction_output_json {
         let transaction_type = transaction
             .get("transaction_type")
             .unwrap()

@@ -1,7 +1,6 @@
 use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -18,7 +17,7 @@ use super::state_updates::{
 };
 use crate::perpetual::perp_position::PerpPosition;
 use crate::transaction_batch::tx_batch_structs::SwapFundingInfo;
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, TxOutputJson};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{send_perp_swap_error, PerpSwapExecutionError};
@@ -58,7 +57,7 @@ impl LiquidationSwap {
         &self,
         state_tree: Arc<Mutex<SuperficialTree>>,
         updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json: Arc<Mutex<TxOutputJson>>,
         //
         insurance_fund: Arc<Mutex<i64>>,
         //
@@ -79,6 +78,7 @@ impl LiquidationSwap {
 
         let current_funding_idx = swap_funding_info.current_funding_idx;
 
+        let transaction_output_json_c = transaction_output_json.clone();
         let (liquidated_position, new_position) = thread::scope(move |_| {
             let mut liquidated_position = self.liquidation_order.position.clone();
 
@@ -105,20 +105,6 @@ impl LiquidationSwap {
 
             let new_idx = state_tree.lock().first_zero_idx() as u32;
 
-            //         liquidation_order: &LiquidationOrder,
-            // liquidated_size: u64,
-            // liquidator_fee: u64,
-            // market_price: u64,
-            // current_funding_index: u32,
-            // new_idx: u32,
-
-            // liquidated_size: 48920440
-            // liquidator_fee: 7.674.637 404 000
-            // leftover_collateral: -7674592164155
-            // is_partial_liquidation: false
-            // liquidation swap executed successfully
-            // Position liquidated successfully!!!!!!!!!
-
             let new_position = open_new_position_after_liquidation(
                 &self.liquidation_order,
                 liquidated_size,
@@ -144,6 +130,7 @@ impl LiquidationSwap {
             update_state_after_liquidation(
                 &state_tree,
                 &updated_state_hashes,
+                &transaction_output_json_c,
                 &self.liquidation_order.open_order_fields.notes_in,
                 &self.liquidation_order.open_order_fields.refund_note,
             )?;
@@ -151,6 +138,7 @@ impl LiquidationSwap {
             update_perpetual_state_after_liquidation(
                 &state_tree,
                 &updated_state_hashes,
+                &transaction_output_json_c,
                 self.liquidation_order.position.index,
                 &liquidated_position,
                 &new_position,
@@ -202,9 +190,9 @@ impl LiquidationSwap {
             index_price,
         );
 
-        let mut swap_output_json_m = swap_output_json.lock();
-        swap_output_json_m.push(json_output);
-        drop(swap_output_json_m);
+        let mut transaction_output_json_m = transaction_output_json.lock();
+        transaction_output_json_m.tx_micro_batch.push(json_output);
+        drop(transaction_output_json_m);
 
         // ? Update the database
         update_db_after_liquidation_swap(

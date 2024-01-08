@@ -9,7 +9,7 @@ use crate::server::grpc::engine_proto::{
     OnChainRemoveLiqReq, OnChainScmmRes,
 };
 use crate::server::grpc::SCMMActionMessage;
-use crate::transaction_batch::TransactionBatch;
+use crate::transaction_batch::{TransactionBatch, TxOutputJson};
 use crate::utils::errors::send_regster_mm_error_reply;
 use crate::utils::storage::local_storage::MainStorage;
 
@@ -44,7 +44,7 @@ pub async fn register_onchain_mm_inner(
     }
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -61,7 +61,7 @@ pub async fn register_onchain_mm_inner(
 
     let order_action_response = order_action_handle.join();
 
-    return return_result(order_action_response, swap_output_json, main_storage);
+    return return_result(order_action_response, transaction_output_json, main_storage);
 }
 
 pub async fn add_liquidity_mm_inner(
@@ -91,7 +91,7 @@ pub async fn add_liquidity_mm_inner(
     }
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -108,7 +108,7 @@ pub async fn add_liquidity_mm_inner(
 
     let order_action_response = order_action_handle.join();
 
-    return return_result(order_action_response, swap_output_json, main_storage);
+    return return_result(order_action_response, transaction_output_json, main_storage);
 }
 
 pub async fn remove_liquidity_mm_inner(
@@ -138,7 +138,7 @@ pub async fn remove_liquidity_mm_inner(
     }
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -155,7 +155,7 @@ pub async fn remove_liquidity_mm_inner(
 
     let order_action_response = order_action_handle.join();
 
-    return return_result(order_action_response, swap_output_json, main_storage);
+    return return_result(order_action_response, transaction_output_json, main_storage);
 }
 
 pub async fn close_onchain_mm_inner(
@@ -185,7 +185,7 @@ pub async fn close_onchain_mm_inner(
     }
 
     let tx_batch_m = tx_batch.lock().await;
-    let swap_output_json = Arc::clone(&tx_batch_m.swap_output_json);
+    let transaction_output_json = Arc::clone(&tx_batch_m.transaction_output_json);
     let main_storage = Arc::clone(&tx_batch_m.main_storage);
     drop(tx_batch_m);
 
@@ -202,7 +202,7 @@ pub async fn close_onchain_mm_inner(
 
     let order_action_response = order_action_handle.join();
 
-    return return_result(order_action_response, swap_output_json, main_storage);
+    return return_result(order_action_response, transaction_output_json, main_storage);
 }
 
 // * ================================================================================================
@@ -248,13 +248,13 @@ fn return_result(
         Result<PerpPosition, String>,
         Box<dyn std::any::Any + std::marker::Send>,
     >,
-    swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, serde_json::Value>>>>,
+    transaction_output_json: Arc<Mutex<TxOutputJson>>,
     main_storage: Arc<Mutex<MainStorage>>,
 ) -> Result<Response<OnChainScmmRes>, Status> {
     match order_action_response {
         Ok(res) => match res {
             Ok(position) => {
-                store_output_json(&swap_output_json, &main_storage);
+                store_output_json(&transaction_output_json, &main_storage);
 
                 let position = GrpcPerpPosition::from(position);
                 let reply = OnChainScmmRes {

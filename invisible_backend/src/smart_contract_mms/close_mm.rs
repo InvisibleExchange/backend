@@ -2,10 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::transaction_batch::TxOutputJson;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use crate::{
@@ -33,7 +33,7 @@ pub fn close_onchain_mm(
     close_req: OnChainCloseMmReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
 ) -> std::result::Result<PerpPosition, String> {
     //
 
@@ -86,17 +86,17 @@ pub fn close_onchain_mm(
     let main_storage_m = main_storage.lock();
     if !main_storage_m.does_commitment_exists(
         OnchainActionType::MMClosePosition,
-        close_req.mm_action_id as u64 ,
+        close_req.mm_action_id as u64,
         &data_commitment,
     ) {
         return Err("MM Registration not registered".to_string());
     }
-    main_storage_m.remove_onchain_action_commitment(close_req.mm_action_id as u64 );
+    main_storage_m.remove_onchain_action_commitment(close_req.mm_action_id as u64);
     drop(main_storage_m);
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     onchain_position_close_json_output(
-        swap_output_json_m,
+        transaction_output_json_m,
         &prev_position,
         &new_position,
         close_req.initial_value_sum,
@@ -107,7 +107,12 @@ pub fn close_onchain_mm(
     );
 
     // ? UPDATE THE STATE TREE --------------------------------------------------------------------
-    onchain_register_mm_state_updates(state_tree, updated_state_hashes, &new_position);
+    onchain_register_mm_state_updates(
+        state_tree,
+        updated_state_hashes,
+        transaction_output_json_m,
+        &new_position,
+    );
 
     // ? UPDATE THE DATABASE ----------------------------------------------------------------------
     let _h = start_add_position_thread(new_position.clone(), session, backup_storage);

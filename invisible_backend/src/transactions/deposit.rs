@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::transaction_batch::{LeafNodeType, CHAIN_IDS};
+use crate::transaction_batch::{LeafNodeType, TxOutputJson, CHAIN_IDS};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::errors::{
     send_deposit_error, DepositThreadExecutionError, TransactionExecutionError,
@@ -14,7 +14,6 @@ use crate::utils::crypto_utils::{hash_many, verify, Signature};
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use num_bigint::BigUint;
-use serde_json::Value;
 
 use crossbeam::thread;
 use error_stack::{Report, Result};
@@ -44,7 +43,7 @@ impl Deposit {
         &mut self,
         tree_m: Arc<Mutex<SuperficialTree>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json_m: Arc<Mutex<TxOutputJson>>,
         session: &Arc<Mutex<ServiceSession>>,
         main_storage: &Arc<Mutex<MainStorage>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -98,27 +97,32 @@ impl Deposit {
                 ));
             }
 
-            // ? Verify the deposit has been registered
-            let data_commitment = self.get_action_commitment();
-            let main_storage_m = main_storage.lock();
-            if !main_storage_m.does_commitment_exists(
-                OnchainActionType::Deposit,
-                self.deposit_id % 2_u64.pow(32),
-                &data_commitment,
-            ) {
-                return Err(send_deposit_error(
-                    "deposit not registered".to_string(),
-                    Some(format!("deposit not registered: {}", self.deposit_id)),
-                ));
-            }
-            main_storage_m.remove_onchain_action_commitment(self.deposit_id % 2_u64.pow(32));
-            drop(main_storage_m);
+            // // ? Verify the deposit has been registered
+            // let data_commitment = self.get_action_commitment();
+            // let main_storage_m = main_storage.lock();
+            // if !main_storage_m.does_commitment_exists(
+            //     OnchainActionType::Deposit,
+            //     self.deposit_id % 2_u64.pow(32),
+            //     &data_commitment,
+            // ) {
+            //     return Err(send_deposit_error(
+            //         "deposit not registered".to_string(),
+            //         Some(format!("deposit not registered: {}", self.deposit_id)),
+            //     ));
+            // }
+            // main_storage_m.remove_onchain_action_commitment(self.deposit_id % 2_u64.pow(32));
+            // drop(main_storage_m);
 
             // * After the deposit is verified to be valid update the state ================ //
 
             // ? Update the state
             let mut tree = tree_m.lock();
-            update_state_after_deposit(&mut tree, &updated_state_hashes_m, &self.notes);
+            update_state_after_deposit(
+                &mut tree,
+                &updated_state_hashes_m,
+                &transaction_output_json_m,
+                &self.notes,
+            );
             drop(tree);
 
             let mut json_map = serde_json::map::Map::new();
@@ -131,9 +135,9 @@ impl Deposit {
                 serde_json::to_value(&self).unwrap(),
             );
 
-            let mut swap_output_json = swap_output_json_m.lock();
-            swap_output_json.push(json_map);
-            drop(swap_output_json);
+            let mut transaction_output_json = transaction_output_json_m.lock();
+            transaction_output_json.tx_micro_batch.push(json_map);
+            drop(transaction_output_json);
 
             return Ok(zero_idxs);
         });
@@ -215,7 +219,7 @@ impl Transaction for Deposit {
         tree_m: Arc<Mutex<SuperficialTree>>,
         _partial_fill_tracker_m: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json_m: Arc<Mutex<TxOutputJson>>,
         _blocked_order_ids_m: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
         main_storage: &Arc<Mutex<MainStorage>>,
@@ -225,7 +229,7 @@ impl Transaction for Deposit {
             .execute_deposit(
                 tree_m,
                 updated_state_hashes_m,
-                swap_output_json_m,
+                transaction_output_json_m,
                 session,
                 main_storage,
                 backup_storage,

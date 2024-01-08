@@ -177,7 +177,7 @@ pub fn start_add_note_thread(
         let session_ = s.lock();
 
         // TODO
-        store_new_note(&session_, &backup, &note);
+        //TODO store_new_note(&session_, &backup, &note);
         drop(session_);
     });
     return handle;
@@ -194,8 +194,9 @@ pub fn start_delete_note_thread(
 
     let handle = spawn(move || {
         let session_ = s.lock();
+
         // TODO
-        delete_note_at_address(&session_, &backup, address.as_str(), idx.as_str());
+        //TODO delete_note_at_address(&session_, &backup, address.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;
@@ -213,7 +214,7 @@ pub fn start_add_position_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
 
-        let valid_indexes: Vec<u32> = vec![0, 1, 10, 2, 3, 7];
+        let valid_indexes: Vec<u32> = vec![0, 8, 11, 13, 14, 15];
 
         // TODO
         if valid_indexes.contains(&position.index) {
@@ -238,7 +239,7 @@ pub fn start_delete_position_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
         // TODO
-        delete_position_at_address(&session_, &backup, address.as_str(), idx.as_str());
+        // TODO delete_position_at_address(&session_, &backup, address.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;
@@ -258,7 +259,12 @@ pub fn start_add_order_tab_thread(
         let session_ = s.lock();
         // let backup_storage = backup_storage.lock();
 
-        store_order_tab(&session_, &backup, &order_tab);
+        let valid_indexes = vec![3, 4];
+
+        // TODO
+        if valid_indexes.contains(&order_tab.tab_idx) {
+            store_order_tab(&session_, &backup, &order_tab);
+        }
         drop(session_);
     });
     return handle;
@@ -275,7 +281,8 @@ pub fn start_delete_order_tab_thread(
 
     let handle = spawn(move || {
         let session_ = s.lock();
-        delete_order_tab(&session_, &backup, pub_key.as_str(), idx.as_str());
+
+        // TODO delete_order_tab(&session_, &backup, pub_key.as_str(), idx.as_str());
         drop(session_);
     });
     return handle;

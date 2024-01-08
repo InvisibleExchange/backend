@@ -4,10 +4,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 
 use crate::{
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, TxOutputJson},
     trees::superficial_tree::SuperficialTree,
     utils::{
         errors::TransactionExecutionError, notes::Note, storage::backup_storage::BackupStorage,
@@ -33,7 +32,7 @@ pub trait Transaction {
         state_tree: Arc<Mutex<SuperficialTree>>,
         partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json: Arc<Mutex<TxOutputJson>>,
         blocked_order_ids: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
         main_storage: &Arc<Mutex<MainStorage>>,

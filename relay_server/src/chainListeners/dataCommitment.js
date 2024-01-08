@@ -1,6 +1,6 @@
 const { computeHashOnElements } = require("../helpers/crypto_hash");
 
-let GrpcOnchainActionType = {
+const GrpcOnchainActionType = {
   DEPOSIT: 0,
   MM_REGISTRATION: 1,
   MM_ADD_LIQUIDITY: 2,
@@ -197,4 +197,5 @@ module.exports = {
   getAddLiquidityCommitment,
   getRemoveLiquidityCommitment,
   getCloseMMCommitment,
+  GrpcOnchainActionType,
 };

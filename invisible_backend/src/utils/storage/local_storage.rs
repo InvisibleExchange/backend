@@ -1,14 +1,17 @@
 use std::{collections::HashMap, fs, time::SystemTime};
 
 use num_bigint::BigUint;
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use sled::Config;
 
 use crate::{
-    order_tab::OrderTab, perpetual::perp_position::PerpPosition,
-    transaction_batch::tx_batch_structs::OracleUpdate, utils::notes::Note,
+    order_tab::OrderTab,
+    perpetual::perp_position::PerpPosition,
+    transaction_batch::{tx_batch_structs::OracleUpdate, LeafNodeType, StateUpdate},
+    utils::{crypto_utils::EcPoint, notes::Note},
 };
 
 use super::firestore::upload_file_to_storage;
@@ -109,42 +112,11 @@ impl MainStorage {
     /// and stores them on disk.
     ///
     /// # Arguments
-    /// * swap_output_json - a vector of the latest 15-20 transactions as json maps
+    /// * transaction_output_json - a vector of the latest 15-20 transactions as json maps
     ///
-    pub fn store_micro_batch(&mut self, swap_output_json: &Vec<serde_json::Map<String, Value>>) {
-        let index = self.tx_db.get("count").unwrap();
-        let index = match index {
-            Some(index) => {
-                let index: u64 = serde_json::from_slice(&index.to_vec()).unwrap();
-                index
-            }
-            None => 0,
-        };
-
-        let res = serde_json::to_vec(swap_output_json).unwrap();
-
-        self.tx_db.insert(&index.to_string(), res).unwrap();
-        self.tx_db
-            .insert(
-                "count".to_string(),
-                serde_json::to_vec(&(index + 1)).unwrap(),
-            )
-            .unwrap();
-
-        self.store_pending_batch_updates(swap_output_json);
-    }
-
-    /// Stores the state updates of the transactions executed this batch (notes/positions/orders)
-    /// These are posted to a DA layer like Celestia or EigenDA.
-    /// ## Arguments
-    /// * swap_output_json - a vector of the latest 15-20 transactions as json maps
-    ///
-    pub fn store_state_updates(
+    pub fn store_micro_batch(
         &mut self,
-        notes: &Vec<&Note>,
-        positions: &Vec<&PerpPosition>,
-        tabs: &Vec<&OrderTab>,
-        removed_leaves: &Vec<u64>,
+        transaction_output_json: &Vec<serde_json::Map<String, Value>>,
     ) {
         let index = self.tx_db.get("count").unwrap();
         let index = match index {
@@ -155,45 +127,100 @@ impl MainStorage {
             None => 0,
         };
 
-        if notes.len() > 0 {
-            let notes = serde_json::to_vec(&notes).unwrap();
+        let res = serde_json::to_vec(transaction_output_json).unwrap();
 
-            self.state_updates_db
-                .insert(&(index.to_string() + "-note"), notes)
-                .unwrap();
-        }
+        self.tx_db.insert(&index.to_string(), res).unwrap();
+        self.tx_db
+            .insert(
+                "count".to_string(),
+                serde_json::to_vec(&(index + 1)).unwrap(),
+            )
+            .unwrap();
 
-        if positions.len() > 0 {
-            let positions = serde_json::to_vec(&positions).unwrap();
+        self.store_pending_batch_updates(transaction_output_json);
+    }
 
-            self.state_updates_db
-                .insert(&(index.to_string() + "-position"), positions)
-                .unwrap();
-        }
+    // * ========================= STATE UPDATES ========================= * //
 
-        if tabs.len() > 0 {
-            let tabs = serde_json::to_vec(&tabs).unwrap();
+    /// Stores the state updates of the transactions executed this batch (notes/positions/orders)
+    /// These are posted to a DA layer like Celestia or EigenDA.
+    pub fn store_state_updates(&self, updates: &Vec<StateUpdate>) {
+        for update in updates {
+            if let StateUpdate::Note { note } = update {
+                let hash = note.hash.to_string();
+                println!("note hash: {}", hash);
+                let note: Vec<u8> = serde_json::to_vec(&note).unwrap();
 
-            self.state_updates_db
-                .insert(&(index.to_string() + "-tabs"), tabs)
-                .unwrap();
-        }
+                self.state_updates_db.insert(&hash, note).unwrap();
+            } else if let StateUpdate::Position { position } = update {
+                let hash = position.hash.to_string();
+                let position = serde_json::to_vec(&position).unwrap();
 
-        if removed_leaves.len() > 0 {
-            let removed_leaves = serde_json::to_vec(&removed_leaves).unwrap();
+                self.state_updates_db.insert(&hash, position).unwrap();
+            } else if let StateUpdate::OrderTab { order_tab } = update {
+                let hash = order_tab.hash.to_string();
+                let tab = serde_json::to_vec(&order_tab).unwrap();
 
-            self.state_updates_db
-                .insert(&(index.to_string() + "-empty_leaf"), removed_leaves)
-                .unwrap();
+                self.state_updates_db.insert(&hash, tab).unwrap();
+            }
         }
     }
+
+    pub fn read_state_update(
+        &self,
+        leaf_hash: &BigUint,
+        leaf_node_type: LeafNodeType,
+    ) -> (Option<Note>, Option<OrderTab>, Option<PerpPosition>) {
+        match leaf_node_type {
+            LeafNodeType::Note => {
+                let note = self.state_updates_db.get(leaf_hash.to_string()).unwrap();
+                if note.is_none() {
+                    println!("invalid note hash: {}", leaf_hash.to_string());
+
+                    return (None, None, None);
+                }
+                let note = note.unwrap().to_vec();
+                let note: Note = serde_json::from_slice(&note).unwrap();
+
+                return (Some(note), None, None);
+            }
+            LeafNodeType::Position => {
+                let position = self.state_updates_db.get(leaf_hash.to_string()).unwrap();
+                if position.is_none() {
+                    println!("invalid position hash: {}", leaf_hash.to_string());
+
+                    return (None, None, None);
+                }
+
+                let position = position.unwrap().to_vec();
+                let position: PerpPosition = serde_json::from_slice(&position).unwrap();
+
+                return (None, None, Some(position));
+            }
+            LeafNodeType::OrderTab => {
+                let tab = self.state_updates_db.get(leaf_hash.to_string()).unwrap();
+                if tab.is_none() {
+                    println!("invalid tab hash: {}", leaf_hash.to_string());
+
+                    return (None, None, None);
+                }
+
+                let tab = tab.unwrap().to_vec();
+                let tab: OrderTab = serde_json::from_slice(&tab).unwrap();
+
+                return (None, Some(tab), None);
+            }
+        }
+    }
+
+    // * ========================= PENDING UPDATES ========================= * //
 
     /// This stores the latest N Transactions that have not been pushed to the db yet.
     /// Every few minutes we push these transactions to the db.
     ///
     pub fn store_pending_batch_updates(
         &mut self,
-        swap_output_json: &Vec<serde_json::Map<String, Value>>,
+        transaction_output_json: &Vec<serde_json::Map<String, Value>>,
     ) {
         let index = self.db_pending_updates.get("count").unwrap();
         let index = match index {
@@ -204,7 +231,7 @@ impl MainStorage {
             None => 0,
         };
 
-        let res = serde_json::to_vec(swap_output_json).unwrap();
+        let res = serde_json::to_vec(transaction_output_json).unwrap();
 
         self.db_pending_updates
             .insert(&index.to_string(), res)
@@ -461,7 +488,7 @@ impl MainStorage {
         self.registerd_onchain_actions_db
             .insert(
                 data_id.to_string(),
-                serde_json::to_vec(&(action_type, data_commitment)).unwrap(),
+                serde_json::to_vec(&(action_type, data_commitment.to_string())).unwrap(),
             )
             .unwrap();
     }
@@ -481,10 +508,10 @@ impl MainStorage {
         }
         let doc_ref = doc_ref.unwrap().unwrap();
 
-        let (s_action_type, s_data_commitment): (OnchainActionType, BigUint) =
+        let (s_action_type, s_data_commitment): (OnchainActionType, String) =
             serde_json::from_slice(&doc_ref.to_vec()).unwrap();
 
-        return s_action_type == action_type && s_data_commitment == *data_commitment;
+        return s_action_type == action_type && s_data_commitment == data_commitment.to_string();
     }
 
     pub fn remove_onchain_action_commitment(&self, data_id: u64) {
@@ -512,6 +539,8 @@ impl MainStorage {
 
         self.tx_db = tx_db;
         self.latest_batch = new_batch_index;
+
+        let _ = self.state_updates_db.clear();
 
         return self.process_pending_batch_updates(true);
     }

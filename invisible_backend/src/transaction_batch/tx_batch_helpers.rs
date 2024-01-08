@@ -1,8 +1,8 @@
 use num_bigint::BigUint;
-use num_traits::Zero;
-use parking_lot::Mutex;
+use num_traits::{FromPrimitive, One, Zero};
+use parking_lot::{Mutex, MutexGuard};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use serde_json::{Map, Value};
+use serde_json::{to_vec, Map, Value};
 use std::{
     cmp::max,
     collections::HashMap,
@@ -14,14 +14,18 @@ use std::{
 };
 
 use crate::{
-    perpetual::{perp_position::PerpPosition, SYNTHETIC_ASSETS},
+    perpetual::{perp_position::PerpPosition, OrderSide, SYNTHETIC_ASSETS},
     trees::superficial_tree::SuperficialTree,
-    utils::notes::Note,
+    utils::{
+        crypto_utils::{hash, hash_many},
+        notes::Note,
+        storage::{firestore::upload_file_to_storage, local_storage::MainStorage},
+    },
 };
 
 use super::{
     tx_batch_structs::{FundingInfo, GlobalConfig, GlobalDexState, ProgramInputCounts},
-    LeafNodeType,
+    LeafNodeType, StateUpdate, TxOutputJson,
 };
 
 // * HELPERS * //
@@ -43,7 +47,7 @@ where
 ///
 pub fn get_final_updated_counts(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    swap_output_json: &Vec<Map<String, Value>>,
+    transaction_output_json: &Vec<Map<String, Value>>,
 ) -> ProgramInputCounts {
     let mut n_output_notes: u32 = 0; //= self.updated_state_hashes.len() as u32;
     let mut n_output_positions: u16 = 0; // = self.perpetual_updated_position_hashes.len() as u32;
@@ -75,7 +79,7 @@ pub fn get_final_updated_counts(
     let mut n_position_escapes: u16 = 0;
     let mut n_tab_escapes: u16 = 0;
 
-    for transaction in swap_output_json {
+    for transaction in transaction_output_json {
         let transaction_type = transaction
             .get("transaction_type")
             .unwrap()
@@ -133,20 +137,23 @@ pub fn get_final_updated_counts(
 pub fn get_json_output(
     global_dex_state: &GlobalDexState,
     global_config: &GlobalConfig,
+    data_commitment: &BigUint,
     funding_info: &FundingInfo,
     price_info_json: Value,
-    swap_output_json: &Vec<Map<String, Value>>,
+    transaction_output_json: &Vec<Map<String, Value>>,
     preimage: Map<String, Value>,
 ) -> serde_json::Map<String, Value> {
     let dex_state_json = serde_json::to_value(&global_dex_state).unwrap();
     let global_config_json = serde_json::to_value(&global_config).unwrap();
+    let data_commitment_value = serde_json::to_value(data_commitment.to_string()).unwrap();
     let funding_info_json = serde_json::to_value(&funding_info).unwrap();
-    let swaps_json = serde_json::to_value(swap_output_json).unwrap();
+    let swaps_json = serde_json::to_value(transaction_output_json).unwrap();
     let preimage_json = serde_json::to_value(preimage).unwrap();
 
     let mut output_json = serde_json::Map::new();
     output_json.insert(String::from("global_dex_state"), dex_state_json);
     output_json.insert(String::from("global_config"), global_config_json);
+    output_json.insert(String::from("data_commitment"), data_commitment_value);
     output_json.insert(String::from("funding_info"), funding_info_json);
     output_json.insert(String::from("price_info"), price_info_json);
     output_json.insert(String::from("transactions"), swaps_json);
@@ -244,6 +251,247 @@ pub fn split_hashmap(
     submaps
 }
 
+// * Construc DA output ------------
+/// Gets the state updates by reading them from storage. Uses them to
+/// construct the data output (notes/positions/tabs/zero_indexes) to be
+/// posted to Celestia's or EigenDA's data avalability layer.
+pub fn store_da_output(
+    main_storage: &MutexGuard<MainStorage>,
+    updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
+    current_batch_index: u32,
+) -> BigUint {
+    let mut note_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
+    let mut position_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
+    let mut tab_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
+    let mut zero_indexes: Vec<u64> = Vec::new();
+
+    for (index, (leaf_type, leaf_hash)) in updated_state_hashes.iter() {
+        if *leaf_hash == BigUint::zero() {
+            zero_indexes.push(*index);
+            continue;
+        }
+
+        match leaf_type {
+            LeafNodeType::Note => {
+                let (index, output) = _get_note_output(&main_storage, *index, leaf_hash);
+                note_outputs.push((index, output));
+            }
+            LeafNodeType::Position => {
+                let (index, output) = _get_position_output(&main_storage, *index, leaf_hash);
+                position_outputs.push((index, output));
+            }
+            LeafNodeType::OrderTab => {
+                let (index, output) = _get_tab_output(&main_storage, *index, leaf_hash);
+                tab_outputs.push((index, output));
+            }
+        }
+    }
+
+    note_outputs.sort_unstable();
+    position_outputs.sort_unstable();
+    tab_outputs.sort_unstable();
+    zero_indexes.sort_unstable();
+
+    // Join all the outputs into a single vector
+    let mut data_output: Vec<BigUint> = Vec::new();
+
+    for (_, _output) in note_outputs.drain(..) {
+        for el in _output {
+            data_output.push(el);
+        }
+    }
+    for (_, _output) in position_outputs.drain(..) {
+        for el in _output {
+            data_output.push(el);
+        }
+    }
+    for (_, _output) in tab_outputs.drain(..) {
+        for el in _output {
+            data_output.push(el);
+        }
+    }
+    for _chunk in zero_indexes.chunks(3) {
+        let mut idx_batched = BigUint::zero();
+
+        for idx in _chunk {
+            idx_batched = idx_batched << 64 | BigUint::from_u64(*idx).unwrap();
+        }
+        data_output.push(idx_batched);
+    }
+
+    // ? Hash and upload the data output
+    let references: Vec<&BigUint> = data_output.iter().collect();
+    let data_commitment = hash_many(&references);
+
+    let data_output: Vec<String> = data_output.into_iter().map(|el| el.to_string()).collect();
+
+    // println!("\nData output:");
+    // for el in data_output.iter() {
+    //     println!("{}", el);
+    // }
+    println!(
+        "\nData commitment: {}\n=======================\n",
+        data_commitment.to_string()
+    );
+
+    let _handle = tokio::spawn(async move {
+        // ? Store the transactions
+        let serialized_data = to_vec(&data_output).expect("Serialization failed");
+        if let Err(e) = upload_file_to_storage(
+            "data_output/".to_string() + &current_batch_index.to_string(),
+            serialized_data,
+        )
+        .await
+        {
+            println!("Error uploading file to storage: {:?}", e);
+        }
+    });
+
+    return data_commitment;
+}
+
+fn _get_note_output(
+    main_storage: &MainStorage,
+    index: u64,
+    leaf_hash: &BigUint,
+) -> (u64, [BigUint; 3]) {
+    let note = main_storage
+        .read_state_update(leaf_hash, LeafNodeType::Note)
+        .0;
+
+    if note.is_none() {
+        return (index, [BigUint::zero(), BigUint::zero(), BigUint::zero()]);
+    }
+
+    let note = note.unwrap();
+
+    let hidden_amount = BigUint::from_u64(note.amount).unwrap()
+        ^ &note.blinding % BigUint::from_u64(2).unwrap().pow(64);
+
+    // & batched_note_info format: | token (32 bits) | hidden amount (64 bits) | idx (64 bits) |
+    let batched_note_info = BigUint::from_u32(note.token).unwrap() << 128
+        | hidden_amount << 64 // TODO: HIDDEN AMOUNT
+        | BigUint::from_u64(note.index).unwrap();
+
+    let commitment = hash(&BigUint::from_u64(note.amount).unwrap(), &note.blinding);
+
+    return (
+        index,
+        [
+            batched_note_info,
+            commitment,
+            note.address.x.to_biguint().unwrap(),
+        ],
+    );
+}
+
+fn _get_position_output(
+    main_storage: &MainStorage,
+    index: u64,
+    leaf_hash: &BigUint,
+) -> (u64, [BigUint; 3]) {
+    let position = main_storage
+        .read_state_update(leaf_hash, LeafNodeType::Position)
+        .2;
+
+    if position.is_none() {
+        return (index, [BigUint::zero(), BigUint::zero(), BigUint::zero()]);
+    }
+
+    let position = position.unwrap();
+
+    // & | index (59 bits) | synthetic_token (32 bits) | position_size (64 bits) | max_vlp_supply (64 bits) | vlp_token (32 bits) |
+    let batched_position_info_slot1 = BigUint::from_u32(position.index).unwrap() << 192
+        | BigUint::from_u32(position.position_header.synthetic_token).unwrap() << 160
+        | BigUint::from_u64(position.position_size).unwrap() << 96
+        | BigUint::from_u64(position.position_header.max_vlp_supply).unwrap() << 32
+        | BigUint::from_u32(position.position_header.vlp_token).unwrap();
+
+    // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+    let batched_position_info_slot2 = BigUint::from_u64(position.entry_price).unwrap() << 162
+        | BigUint::from_u64(position.liquidation_price).unwrap() << 98
+        | BigUint::from_u64(position.vlp_supply).unwrap() << 34
+        | BigUint::from_u32(position.last_funding_idx).unwrap() << 2
+        | if position.order_side == OrderSide::Long {
+            BigUint::one()
+        } else {
+            BigUint::zero()
+        } << 1
+        | if position.position_header.allow_partial_liquidations {
+            BigUint::one()
+        } else {
+            BigUint::zero()
+        };
+
+    let public_key = position.position_header.position_address;
+
+    return (
+        index,
+        [
+            batched_position_info_slot1,
+            batched_position_info_slot2,
+            public_key,
+        ],
+    );
+}
+
+fn _get_tab_output(
+    main_storage: &MainStorage,
+    index: u64,
+    leaf_hash: &BigUint,
+) -> (u64, [BigUint; 4]) {
+    let tab = main_storage
+        .read_state_update(leaf_hash, LeafNodeType::OrderTab)
+        .1;
+
+    if tab.is_none() {
+        return (
+            index,
+            [
+                BigUint::zero(),
+                BigUint::zero(),
+                BigUint::zero(),
+                BigUint::zero(),
+            ],
+        );
+    }
+
+    let tab = tab.unwrap();
+
+    let base_hidden_amount = BigUint::from_u64(tab.base_amount).unwrap()
+        ^ &tab.tab_header.base_blinding % BigUint::from_u64(2).unwrap().pow(64);
+    let quote_hidden_amount = BigUint::from_u64(tab.quote_amount).unwrap()
+        ^ &tab.tab_header.quote_blinding % BigUint::from_u64(2).unwrap().pow(64);
+
+    // & batched_tab_info_slot format: | index (59 bits) | base_token (32 bits) | quote_token (32 bits) | base_hidden_amount (64 bits) | quote_hidden_amount (64 bits)
+    let batched_tab_info = BigUint::from_u32(tab.tab_idx).unwrap() << 192
+        | BigUint::from_u32(tab.tab_header.base_token).unwrap() << 160
+        | BigUint::from_u32(tab.tab_header.quote_token).unwrap() << 128
+        | base_hidden_amount << 64
+        | quote_hidden_amount;
+
+    let base_commitment = hash(
+        &BigUint::from_u64(tab.base_amount).unwrap(),
+        &tab.tab_header.base_blinding,
+    );
+    let quote_commitment = hash(
+        &BigUint::from_u64(tab.quote_amount).unwrap(),
+        &tab.tab_header.quote_blinding,
+    );
+
+    let public_key = tab.tab_header.pub_key;
+
+    return (
+        index,
+        [
+            batched_tab_info,
+            base_commitment,
+            quote_commitment,
+            public_key,
+        ],
+    );
+}
+
 // * CHANGE MARGIN ================================================================================
 
 /// When adding extra margin to a position (to prevent liquidation), we need to update the state
@@ -263,13 +511,14 @@ pub fn split_hashmap(
 pub fn add_margin_state_updates(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     notes_in: &Vec<Note>,
     refund_note: Option<Note>,
-    position_index: u64,
-    new_position_hash: &BigUint,
+    new_position: &PerpPosition,
 ) -> std::result::Result<(), String> {
     let mut tree = state_tree.lock();
     let mut updated_state_hashes = updated_state_hashes.lock();
+    let mut transaction_output_json_m = transaction_output_json.lock();
 
     for note in notes_in.iter() {
         let leaf_hash = tree.get_leaf_by_index(note.index);
@@ -280,7 +529,13 @@ pub fn add_margin_state_updates(
 
     if let Some(refund_note) = refund_note {
         tree.update_leaf_node(&refund_note.hash, notes_in[0].index);
-        updated_state_hashes.insert(notes_in[0].index, (LeafNodeType::Note, refund_note.hash));
+        updated_state_hashes.insert(
+            notes_in[0].index,
+            (LeafNodeType::Note, refund_note.hash.clone()),
+        );
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note { note: refund_note });
     } else {
         tree.update_leaf_node(&BigUint::zero(), notes_in[0].index);
         updated_state_hashes.insert(notes_in[0].index, (LeafNodeType::Note, BigUint::zero()));
@@ -291,14 +546,20 @@ pub fn add_margin_state_updates(
         updated_state_hashes.insert(note.index, (LeafNodeType::Note, BigUint::zero()));
     }
 
-    tree.update_leaf_node(&new_position_hash, position_index);
+    tree.update_leaf_node(&new_position.hash, new_position.index as u64);
     updated_state_hashes.insert(
-        position_index,
-        (LeafNodeType::Note, new_position_hash.clone()),
+        new_position.index as u64,
+        (LeafNodeType::Note, new_position.hash.clone()),
     );
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Position {
+            position: new_position.clone(),
+        });
 
     drop(tree);
     drop(updated_state_hashes);
+    drop(transaction_output_json_m);
 
     Ok(())
 }
@@ -319,24 +580,35 @@ pub fn add_margin_state_updates(
 pub fn reduce_margin_state_updates(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     return_collateral_note: Note,
-    position_index: u64,
-    new_position_hash: &BigUint,
+    new_position: &PerpPosition,
 ) {
     let mut tree = state_tree.lock();
     let mut updated_state_hashes = updated_state_hashes.lock();
+    let mut transaction_output_json_m = transaction_output_json.lock();
 
     tree.update_leaf_node(&return_collateral_note.hash, return_collateral_note.index);
     updated_state_hashes.insert(
         return_collateral_note.index,
-        (LeafNodeType::Note, return_collateral_note.hash),
+        (LeafNodeType::Note, return_collateral_note.hash.clone()),
     );
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Note {
+            note: return_collateral_note,
+        });
 
-    tree.update_leaf_node(&new_position_hash, position_index);
+    tree.update_leaf_node(&new_position.hash, new_position.index as u64);
     updated_state_hashes.insert(
-        position_index,
-        (LeafNodeType::Position, new_position_hash.clone()),
+        new_position.index as u64,
+        (LeafNodeType::Position, new_position.hash.clone()),
     );
+    transaction_output_json_m
+        .state_updates
+        .push(StateUpdate::Position {
+            position: new_position.clone(),
+        });
 
     drop(tree);
     drop(updated_state_hashes);

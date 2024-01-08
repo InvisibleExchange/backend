@@ -2,10 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_bigint::BigUint;
 use parking_lot::Mutex;
-use serde_json::Value;
 
 use firestore_db_and_auth::ServiceSession;
 
+use crate::transaction_batch::TxOutputJson;
 use crate::utils::storage::backup_storage::BackupStorage;
 use crate::utils::storage::firestore::start_add_position_thread;
 use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
@@ -30,7 +30,7 @@ pub fn add_liquidity_to_mm(
     add_liquidity_req: OnChainAddLiqReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
 ) -> std::result::Result<PerpPosition, String> {
     //
 
@@ -96,7 +96,7 @@ pub fn add_liquidity_to_mm(
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     onchain_position_add_liquidity_json_output(
-        &swap_output_json_m,
+        &transaction_output_json_m,
         &prev_position,
         &position.hash,
         &add_liquidity_req.depositor,
@@ -106,7 +106,12 @@ pub fn add_liquidity_to_mm(
     );
 
     // ? UPDATE THE STATE TREE --------------------------------------------------------------------
-    onchain_register_mm_state_updates(state_tree, updated_state_hashes, &position);
+    onchain_register_mm_state_updates(
+        state_tree,
+        updated_state_hashes,
+        transaction_output_json_m,
+        &position,
+    );
 
     // ? UPDATE THE DATABASE ----------------------------------------------------------------------
     let _h = start_add_position_thread(position.clone(), session, backup_storage);

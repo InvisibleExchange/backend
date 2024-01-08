@@ -1,4 +1,4 @@
-use parking_lot::Mutex;
+use parking_lot::{Mutex, MutexGuard};
 use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 
 use crate::{
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, StateUpdate, TxOutputJson},
     trees::superficial_tree::SuperficialTree,
     utils::{
         errors::{send_withdrawal_error, WithdrawalThreadExecutionError},
@@ -22,6 +22,7 @@ use crate::{
 pub fn update_state_after_swap_first_fill(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
     swap_note: &Note,
@@ -43,11 +44,21 @@ pub fn update_state_after_swap_first_fill(
 
     tree.update_leaf_node(&refund_hash, refund_idx);
     updated_state_hashes.insert(refund_idx, (LeafNodeType::Note, refund_hash));
+    if let Some(note) = refund_note {
+        transaction_output_json
+            .state_updates
+            .push(StateUpdate::Note { note: note.clone() });
+    }
 
     let swap_idx = swap_note.index;
 
     tree.update_leaf_node(&swap_note.hash, swap_idx);
     updated_state_hashes.insert(swap_idx, (LeafNodeType::Note, swap_note.hash.clone()));
+    transaction_output_json
+        .state_updates
+        .push(StateUpdate::Note {
+            note: swap_note.clone(),
+        });
 
     if partial_fill_refund_note.is_some() {
         //
@@ -56,6 +67,9 @@ pub fn update_state_after_swap_first_fill(
 
         tree.update_leaf_node(&note.hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note.hash.clone()));
+        transaction_output_json
+            .state_updates
+            .push(StateUpdate::Note { note: note.clone() });
         //
     }
 
@@ -75,7 +89,7 @@ pub fn update_state_after_swap_first_fill(
 pub fn update_state_after_swap_later_fills(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     swap_note: &Note,
     new_partial_fill_refund_note: &Option<&Note>,
 ) {
@@ -90,6 +104,11 @@ pub fn update_state_after_swap_later_fills(
 
     tree.update_leaf_node(&swap_note.hash, swap_idx);
     updated_state_hashes.insert(swap_idx, (LeafNodeType::Note, swap_note.hash.clone()));
+    transaction_output_json
+        .state_updates
+        .push(StateUpdate::Note {
+            note: swap_note.clone(),
+        });
 
     if new_partial_fill_refund_note.is_some() {
         let pfr_note: &Note = new_partial_fill_refund_note.as_ref().unwrap();
@@ -97,6 +116,11 @@ pub fn update_state_after_swap_later_fills(
 
         tree.update_leaf_node(&pfr_note.hash, pfr_idx);
         updated_state_hashes.insert(pfr_idx, (LeafNodeType::Note, pfr_note.hash.clone()));
+        transaction_output_json
+            .state_updates
+            .push(StateUpdate::Note {
+                note: pfr_note.clone(),
+            });
     }
 
     drop(updated_state_hashes);
@@ -109,21 +133,26 @@ pub fn update_state_after_swap_later_fills(
 pub fn update_state_after_deposit(
     tree: &mut SuperficialTree,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     notes: &Vec<Note>,
 ) {
     //
 
     // ? Upadte the state by adding the note hashes to the merkle tree
     let mut updated_state_hashes = updated_state_hashes_m.lock();
+    let mut transaction_output_json_m = transaction_output_json.lock();
+
     for note in notes.iter() {
         let idx = note.index;
-        // let (proof, proof_pos) = tree.get_proof(idx);
-        // tree.update_node(&note.hash, idx, &proof);
 
         tree.update_leaf_node(&note.hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note.hash.clone()));
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note { note: note.clone() });
     }
     drop(updated_state_hashes);
+    drop(transaction_output_json_m);
 }
 
 // * ===============================================================================================================================================
@@ -132,6 +161,7 @@ pub fn update_state_after_deposit(
 pub fn update_state_after_withdrawal(
     tree: &mut SuperficialTree,
     updated_state_hashes: &mut HashMap<u64, (LeafNodeType, BigUint)>,
+    transaction_output_json: &Arc<Mutex<TxOutputJson>>,
     notes_in: &Vec<Note>,
     refund_note: &Option<Note>,
 ) -> Result<(), WithdrawalThreadExecutionError> {
@@ -152,8 +182,17 @@ pub fn update_state_after_withdrawal(
         ));
     }
 
+    let mut transaction_output_json_m = transaction_output_json.lock();
+
     tree.update_leaf_node(refund_note_hash, refund_idx);
     updated_state_hashes.insert(refund_idx, (LeafNodeType::Note, refund_note_hash.clone()));
+    if let Some(refund_note) = refund_note {
+        transaction_output_json_m
+            .state_updates
+            .push(StateUpdate::Note {
+                note: refund_note.clone(),
+            });
+    };
 
     for note in notes_in.iter().skip(1) {
         let idx = note.index;

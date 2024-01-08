@@ -2,11 +2,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use error_stack::Result;
 use num_bigint::BigUint;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, MutexGuard};
 
 use crate::{
     order_tab::OrderTab,
-    transaction_batch::LeafNodeType,
+    transaction_batch::{LeafNodeType, TxOutputJson},
     trees::superficial_tree::SuperficialTree,
     utils::{
         errors::{send_swap_error, SwapThreadExecutionError},
@@ -172,6 +172,7 @@ fn check_order_validity(
 pub fn update_state_after_order(
     tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
+    transaction_output_json: &mut MutexGuard<TxOutputJson>,
     spot_note_info: &Option<SpotNotesInfo>,
     note_info_output: &Option<NoteInfoExecutionOutput>,
     updated_order_tab: &Option<OrderTab>,
@@ -191,6 +192,7 @@ pub fn update_state_after_order(
         update_state_after_non_tab_order(
             tree,
             updated_state_hashes,
+            transaction_output_json,
             is_first_fill,
             notes_in,
             refund_note,
@@ -200,7 +202,12 @@ pub fn update_state_after_order(
     } else {
         let updated_order_tab = updated_order_tab.as_ref().unwrap();
 
-        update_state_after_tab_order(tree, updated_state_hashes, updated_order_tab);
+        update_state_after_tab_order(
+            tree,
+            updated_state_hashes,
+            transaction_output_json,
+            updated_order_tab,
+        );
     }
 }
 
@@ -213,9 +220,7 @@ pub fn reverify_existances(
     prev_order_tab_b: &Option<OrderTab>,
     note_info_output_b: &Option<NoteInfoExecutionOutput>,
 ) -> Result<(), SwapThreadExecutionError> {
-   
-    let state_tree = state_tree.lock();
-  
+    let state_tree_m = state_tree.lock();
 
     if note_info_output_a.is_some() {
         if note_info_output_a.is_some()
@@ -232,7 +237,7 @@ pub fn reverify_existances(
                 .as_ref()
                 .unwrap();
 
-            let leaf_hash = state_tree.get_leaf_by_index(pfr_note.index);
+            let leaf_hash = state_tree_m.get_leaf_by_index(pfr_note.index);
             if leaf_hash != pfr_note.hash {
                 return Err(send_swap_error(
                     "Note spent for swap does not exist in the state".to_string(),
@@ -247,7 +252,7 @@ pub fn reverify_existances(
             let notes_in = &order_a.spot_note_info.as_ref().unwrap().notes_in;
 
             for note in notes_in.iter() {
-                let leaf_hash = state_tree.get_leaf_by_index(note.index);
+                let leaf_hash = state_tree_m.get_leaf_by_index(note.index);
                 if leaf_hash != note.hash {
                     return Err(send_swap_error(
                         "Note spent for swap does not exist in the state".to_string(),
@@ -264,7 +269,7 @@ pub fn reverify_existances(
         let order_tab = prev_order_tab_a.as_ref().unwrap();
 
         // ? Check that the order tab hash exists in the state --------------------------------------------
-        if order_tab.hash != state_tree.get_leaf_by_index(order_tab.tab_idx as u64) {
+        if order_tab.hash != state_tree_m.get_leaf_by_index(order_tab.tab_idx as u64) {
             return Err(send_swap_error(
                 "order_tab hash does not exist in the state".to_string(),
                 Some(order_a.order_id),
@@ -290,7 +295,7 @@ pub fn reverify_existances(
                 .as_ref()
                 .unwrap();
 
-            let leaf_hash = state_tree.get_leaf_by_index(pfr_note.index);
+            let leaf_hash = state_tree_m.get_leaf_by_index(pfr_note.index);
             if leaf_hash != pfr_note.hash {
                 return Err(send_swap_error(
                     "Note spent for swap does not exist in the state".to_string(),
@@ -305,7 +310,7 @@ pub fn reverify_existances(
             let notes_in = &order_b.spot_note_info.as_ref().unwrap().notes_in;
 
             for note in notes_in.iter() {
-                let leaf_hash = state_tree.get_leaf_by_index(note.index);
+                let leaf_hash = state_tree_m.get_leaf_by_index(note.index);
                 if leaf_hash != note.hash {
                     return Err(send_swap_error(
                         "Note spent for swap does not exist in the state".to_string(),
@@ -322,7 +327,7 @@ pub fn reverify_existances(
         let order_tab = prev_order_tab_b.as_ref().unwrap();
 
         // ? Check that the order tab hash exists in the state --------------------------------------------
-        if order_tab.hash != state_tree.get_leaf_by_index(order_tab.tab_idx as u64) {
+        if order_tab.hash != state_tree_m.get_leaf_by_index(order_tab.tab_idx as u64) {
             return Err(send_swap_error(
                 "order_tab hash does not exist in the state".to_string(),
                 Some(order_b.order_id),
@@ -331,6 +336,7 @@ pub fn reverify_existances(
         }
     }
 
+    drop(state_tree_m);
 
     return Ok(());
 }

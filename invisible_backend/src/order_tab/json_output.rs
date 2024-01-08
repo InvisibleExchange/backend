@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use serde_json::Value;
 
 use crate::{
     perpetual::perp_order::CloseOrderFields,
+    transaction_batch::TxOutputJson,
     utils::{crypto_utils::Signature, notes::Note},
 };
 
@@ -12,7 +12,7 @@ use super::OrderTab;
 
 // * OPEN ORDER TAB JSON OUTPUT
 pub fn open_tab_json_output(
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     base_notes_in: &Vec<Note>,
     base_refund_note: &Option<Note>,
     quote_notes_in: &Vec<Note>,
@@ -69,14 +69,14 @@ pub fn open_tab_json_output(
         serde_json::to_value(&signature).unwrap(),
     );
 
-    let mut swap_output_json = swap_output_json_m.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
+    let mut transaction_output_json = transaction_output_json_m.lock();
+    transaction_output_json.tx_micro_batch.push(json_map);
+    drop(transaction_output_json);
 }
 
 // * CLOSE ORDER TAB JSON OUTPUT
 pub fn close_tab_json_output(
-    swap_output_json_m: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+    transaction_output_json_m: &Arc<Mutex<TxOutputJson>>,
     base_amount_change: u64,
     quote_amount_change: u64,
     base_return_note: &Note,
@@ -146,7 +146,7 @@ pub fn close_tab_json_output(
         serde_json::to_value(&signature).unwrap(),
     );
 
-    let mut swap_output_json = swap_output_json_m.lock();
-    swap_output_json.push(json_map);
-    drop(swap_output_json);
+    let mut transaction_output_json = transaction_output_json_m.lock();
+    transaction_output_json.tx_micro_batch.push(json_map);
+    drop(transaction_output_json);
 }

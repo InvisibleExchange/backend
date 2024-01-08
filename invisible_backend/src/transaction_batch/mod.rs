@@ -10,8 +10,8 @@ use std::{
 
 use error_stack::Result;
 
-use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::storage::backup_storage::BackupStorage;
+use crate::{order_tab::OrderTab, trees::superficial_tree::SuperficialTree};
 use crate::{
     perpetual::{
         liquidations::{
@@ -75,6 +75,19 @@ pub mod tx_batch_structs;
 // { ETH Mainnet: 9090909, Starknet: 7878787, ZkSync: 5656565 }
 pub const CHAIN_IDS: [u32; 3] = [9090909, 7878787, 5656565];
 
+// Vec<serde_json::Map<String, Value>>
+
+pub enum StateUpdate {
+    Note { note: Note },
+    Position { position: PerpPosition },
+    OrderTab { order_tab: OrderTab },
+}
+
+pub struct TxOutputJson {
+    pub tx_micro_batch: Vec<serde_json::Map<String, Value>>,
+    pub state_updates: Vec<StateUpdate>,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum LeafNodeType {
     Note,
@@ -85,7 +98,7 @@ pub struct TransactionBatch {
     pub state_tree: Arc<Mutex<SuperficialTree>>, // current state tree (superficial tree only stores the leaves)
     pub partial_fill_tracker: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>, // maps orderIds to partial fill refund notes and filled mounts
     pub updated_state_hashes: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>, // info to get merkle proofs at the end of the batch
-    pub swap_output_json: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>, // json output map for cairo input
+    pub transaction_output_json: Arc<Mutex<TxOutputJson>>, // json output map for cairo input
     pub blocked_order_ids: Arc<Mutex<HashMap<u64, bool>>>, // maps orderIds to whether they are blocked while another thread is processing the same order (in case of partial fills)
     //
     // pub perpetual_state_tree: Arc<Mutex<SuperficialTree>>, // current perpetual state tree (superficial tree only stores the leaves)
@@ -117,7 +130,10 @@ impl TransactionBatch {
         let state_tree = SuperficialTree::new(tree_depth);
         let partial_fill_tracker: HashMap<u64, (Option<Note>, u64)> = HashMap::new();
         let updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)> = HashMap::new();
-        let swap_output_json: Vec<serde_json::Map<String, Value>> = Vec::new();
+        let transaction_output_json: TxOutputJson = TxOutputJson {
+            tx_micro_batch: vec![],
+            state_updates: vec![],
+        };
         let blocked_order_ids: HashMap<u64, bool> = HashMap::new();
 
         // let perpetual_state_tree = SuperficialTree::new(perp_tree_depth);
@@ -158,7 +174,7 @@ impl TransactionBatch {
             state_tree: Arc::new(Mutex::new(state_tree)),
             partial_fill_tracker: Arc::new(Mutex::new(partial_fill_tracker)),
             updated_state_hashes: Arc::new(Mutex::new(updated_state_hashes)),
-            swap_output_json: Arc::new(Mutex::new(swap_output_json)),
+            transaction_output_json: Arc::new(Mutex::new(transaction_output_json)),
             blocked_order_ids: Arc::new(Mutex::new(blocked_order_ids)),
             //
             perpetual_partial_fill_tracker: Arc::new(Mutex::new(perpetual_partial_fill_tracker)),
@@ -202,9 +218,9 @@ impl TransactionBatch {
 
         let storage = self.main_storage.lock();
         if !storage.tx_db.is_empty() {
-            let swap_output_json = storage.read_storage(0);
+            let transaction_output_json = storage.read_storage(0);
             drop(storage);
-            self.restore_state(swap_output_json);
+            self.restore_state(transaction_output_json);
         }
     }
 
@@ -218,7 +234,7 @@ impl TransactionBatch {
         let state_tree = Arc::clone(&self.state_tree);
         let partial_fill_tracker = Arc::clone(&self.partial_fill_tracker);
         let updated_state_hashes = Arc::clone(&self.updated_state_hashes);
-        let swap_output_json = Arc::clone(&self.swap_output_json);
+        let transaction_output_json = Arc::clone(&self.transaction_output_json);
         let blocked_order_ids = Arc::clone(&self.blocked_order_ids);
         let session = Arc::clone(&self.firebase_session);
         let main_storage = Arc::clone(&self.main_storage);
@@ -229,7 +245,7 @@ impl TransactionBatch {
                 state_tree,
                 partial_fill_tracker,
                 updated_state_hashes,
-                swap_output_json,
+                transaction_output_json,
                 blocked_order_ids,
                 &session,
                 &main_storage,
@@ -247,7 +263,7 @@ impl TransactionBatch {
     ) -> JoinHandle<Result<PerpSwapResponse, PerpSwapExecutionError>> {
         let state_tree = Arc::clone(&self.state_tree);
         let updated_state_hashes = Arc::clone(&self.updated_state_hashes);
-        let swap_output_json = Arc::clone(&self.swap_output_json);
+        let transaction_output_json = Arc::clone(&self.transaction_output_json);
 
         let perpetual_partial_fill_tracker = Arc::clone(&self.perpetual_partial_fill_tracker);
         let partialy_opened_positions = Arc::clone(&self.partialy_opened_positions);
@@ -274,7 +290,7 @@ impl TransactionBatch {
             return transaction.execute(
                 state_tree,
                 updated_state_hashes,
-                swap_output_json,
+                transaction_output_json,
                 blocked_perp_order_ids,
                 perpetual_partial_fill_tracker,
                 partialy_opened_positions,
@@ -295,7 +311,7 @@ impl TransactionBatch {
     ) -> JoinHandle<Result<LiquidationResponse, PerpSwapExecutionError>> {
         let state_tree = self.state_tree.clone();
         let updated_state_hashes = self.updated_state_hashes.clone();
-        let swap_output_json = self.swap_output_json.clone();
+        let transaction_output_json = self.transaction_output_json.clone();
 
         let session = self.firebase_session.clone();
         let backup_storage = self.backup_storage.clone();
@@ -320,7 +336,7 @@ impl TransactionBatch {
             return liquidation_transaction.execute(
                 state_tree,
                 updated_state_hashes,
-                swap_output_json,
+                transaction_output_json,
                 insurance_fund,
                 current_index_price,
                 min_funding_idxs,
@@ -346,7 +362,7 @@ impl TransactionBatch {
             &self.updated_state_hashes,
             &self.firebase_session,
             &self.backup_storage,
-            &self.swap_output_json,
+            &self.transaction_output_json,
             notes_in,
             new_note,
             refund_note,
@@ -362,7 +378,7 @@ impl TransactionBatch {
             &self.updated_state_hashes,
             &self.firebase_session,
             &self.backup_storage,
-            &self.swap_output_json,
+            &self.transaction_output_json,
             &self.latest_index_price,
             margin_change,
         );
@@ -377,7 +393,7 @@ impl TransactionBatch {
             &self.updated_state_hashes,
             &self.firebase_session,
             &self.backup_storage,
-            &self.swap_output_json,
+            &self.transaction_output_json,
             tab_action_message,
         );
     }
@@ -392,7 +408,7 @@ impl TransactionBatch {
             &self.firebase_session,
             &self.main_storage,
             &self.backup_storage,
-            &self.swap_output_json,
+            &self.transaction_output_json,
             scmm_action_message,
         );
     }
@@ -411,7 +427,7 @@ impl TransactionBatch {
             &self.firebase_session,
             &self.main_storage,
             &self.backup_storage,
-            &self.swap_output_json,
+            &self.transaction_output_json,
             escape_message,
             &swap_funding_info,
             index_price,
@@ -440,7 +456,7 @@ impl TransactionBatch {
         let batch_transition_info = _finalize_batch_inner(
             &self.state_tree,
             &self.updated_state_hashes,
-            &self.swap_output_json,
+            &self.transaction_output_json,
             &self.main_storage,
             &self.insurance_fund,
             &mut self.funding_rates,

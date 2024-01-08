@@ -1,24 +1,45 @@
-use invisible_backend::utils::cairo_output::{format_cairo_ouput, preprocess_cairo_output};
+use std::{str::FromStr, time::Instant};
+
+use invisible_backend::utils::{
+    cairo_output::{format_cairo_ouput, preprocess_cairo_output},
+    crypto_utils::hash_many,
+};
+use num_bigint::BigUint;
+use num_traits::{FromPrimitive, Zero};
+use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let prog_output = format_cairo_ouput(test_program_output());
-    let prog_output = preprocess_cairo_output(prog_output);
+    // let prog_output = format_cairo_ouput(test_program_output());
+    // let prog_output = preprocess_cairo_output(prog_output);
 
-    println!("[");
-    for val in prog_output {
-        println!("{}n,", val);
-    }
-    println!("]");
+    // println!("[");
+    // for val in prog_output {
+    //     println!("{}n,", val);
+    // }
+    // println!("]");
+
+    let mut x = BigUint::from_str(
+        "1350061691366037849417249737527838954570626040566244765017315475912229968809",
+    )
+    .unwrap();
+
+    let serialized = serde_json::to_string(&x).unwrap();
+
+    // let p-ath =
+    //     Path::new("../../prover_contracts/cairo_contracts/transaction_batch/tx_batch_input.json");
+    // std::fs::write(path, serde_json::to_string(&output_json).unwrap()).unwrap();
+
+    println!("{}", serialized);
 
     Ok(())
 }
 
 fn test_program_output() -> &'static str {
-    return "-1440434746243531904100007457269884669604392518951606614503318327883213594285
-    -549845404218709580121643571776766175083620084819530925335484238982449935465
-    597614602336677658626
-    22300745198530623141535718272929836482691072
+    return "-45230484140781902039364308632130325836898610577401057630385528253157371784
+    -322295610916015932271215938346917252935201909527625183318895743567236191148
+    597616123369280765959
+    1461523938076101448906054530948820005610982473729
     210258926710712570525957419222609112870661182717955
     3592681469
     453755560
@@ -63,19 +84,14 @@ fn test_program_output() -> &'static str {
     5656565
     0
     0
-    704691608687245587077909074011728735611348324416891667261556284258056215266
-    104465481777471529088702081153442803765281940697
-    13066842889764036997701939897810346102003200000002";
+    11010699151384632101889
+    246527065650711893932399548081420727619250335348
+    935209463481017074549799650707641029269350349807995354666054817200388288569
+    -1176429674817412353441385465446881128424223965241031048205210386034114583600
+    -777987955261681333379195156561510799130994666060499174420417582116054718965
+    -1407144318221502259713094405480943211106849650250371755551066249187436951827
+    139851914712643908828930902860326028593076369298496735428741022793897310608";
 }
 
-// let program_output = test_program_output2();
 
-// let program_output = format_cairo_ouput(program_output);
-// // let program_output = preprocess_cairo_output(program_output);
 
-// // for (i, output) in program_output.iter().enumerate() {
-// //     println!("{},", output);
-// // }
-
-// let output = parse_cairo_output(program_output);
-// println!("output: {:?} \n", output.mm_onchain_actions);

@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use num_bigint::BigUint;
-use serde_json::Value;
 
 use error_stack::{Report, Result};
 
@@ -16,7 +15,7 @@ use super::swap_execution::{
 };
 use super::transaction_helpers::swap_helpers::{consistency_checks, NoteInfoExecutionOutput};
 use super::transaction_helpers::transaction_output::TransactionOutptut;
-use crate::transaction_batch::LeafNodeType;
+use crate::transaction_batch::{LeafNodeType, TxOutputJson};
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::Signature;
 use crate::utils::errors::{SwapThreadExecutionError, TransactionExecutionError};
@@ -70,7 +69,7 @@ impl Swap {
         tree_m: Arc<Mutex<SuperficialTree>>,
         partial_fill_tracker_m: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json_m: Arc<Mutex<TxOutputJson>>,
         blocked_order_ids_m: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
         backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -127,11 +126,12 @@ impl Swap {
 
         // ? Lock the json output before updating the state to prevent another transaction from
         // ? squeezing in between and updating the json output before this transaction is done
-        let mut swap_output_json = swap_output_json_m.lock();
+        let mut transaction_output_json = transaction_output_json_m.lock();
 
         // * Update the state if transaction was successful ===============
         update_state_and_finalize(
             &tree_m,
+            &mut transaction_output_json,
             &partial_fill_tracker_m,
             &updated_state_hashes_m,
             &blocked_order_ids_m,
@@ -151,7 +151,7 @@ impl Swap {
         let execution_output_b = execution_result.1;
 
         update_json_output(
-            &mut swap_output_json,
+            &mut transaction_output_json,
             &swap_output,
             &execution_output_a,
             &execution_output_b,
@@ -159,7 +159,7 @@ impl Swap {
             &prev_order_tab_b,
         );
 
-        drop(swap_output_json);
+        drop(transaction_output_json);
 
         // * Update the mutex order tabs and release the locks
         if let Some(mut order_tab_mutex) = order_tab_mutex_a {
@@ -202,7 +202,7 @@ impl Transaction for Swap {
         tree_m: Arc<Mutex<SuperficialTree>>,
         partial_fill_tracker_m: Arc<Mutex<HashMap<u64, (Option<Note>, u64)>>>,
         updated_state_hashes_m: Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-        swap_output_json_m: Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
+        transaction_output_json_m: Arc<Mutex<TxOutputJson>>,
         blocked_order_ids_m: Arc<Mutex<HashMap<u64, bool>>>,
         session: &Arc<Mutex<ServiceSession>>,
         _main_storage: &Arc<Mutex<MainStorage>>,
@@ -213,7 +213,7 @@ impl Transaction for Swap {
                 tree_m,
                 partial_fill_tracker_m,
                 updated_state_hashes_m,
-                swap_output_json_m,
+                transaction_output_json_m,
                 blocked_order_ids_m,
                 session,
                 backup_storage,
