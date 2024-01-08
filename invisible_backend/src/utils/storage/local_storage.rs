@@ -461,7 +461,7 @@ impl MainStorage {
         self.registerd_onchain_actions_db
             .insert(
                 data_id.to_string(),
-                serde_json::to_vec(&(action_type, data_commitment)).unwrap(),
+                serde_json::to_vec(&(action_type, data_commitment.to_string())).unwrap(),
             )
             .unwrap();
     }
@@ -481,10 +481,10 @@ impl MainStorage {
         }
         let doc_ref = doc_ref.unwrap().unwrap();
 
-        let (s_action_type, s_data_commitment): (OnchainActionType, BigUint) =
+        let (s_action_type, s_data_commitment): (OnchainActionType, String) =
             serde_json::from_slice(&doc_ref.to_vec()).unwrap();
 
-        return s_action_type == action_type && s_data_commitment == *data_commitment;
+        return s_action_type == action_type && s_data_commitment == data_commitment.to_string();
     }
 
     pub fn remove_onchain_action_commitment(&self, data_id: u64) {

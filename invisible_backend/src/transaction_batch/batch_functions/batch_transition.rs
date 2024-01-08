@@ -5,8 +5,6 @@ use std::{collections::HashMap, path::Path, sync::Arc, time::SystemTime};
 
 use error_stack::Result;
 
-use serde::{Deserialize, Serialize};
-
 use crate::trees::{superficial_tree::SuperficialTree, Tree};
 use crate::utils::storage::local_storage::MainStorage;
 use crate::{
@@ -30,7 +28,7 @@ const PARTITION_SIZE_EXPONENT: u32 = 12;
 
 //
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BatchTransitionInfo {
     pub current_batch_index: u32,
     pub funding_info: FundingInfo,

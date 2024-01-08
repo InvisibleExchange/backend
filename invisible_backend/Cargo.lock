@@ -1308,6 +1308,7 @@ dependencies = [
  "serde_json",
  "sled",
  "starknet",
+ "tiny-keccak",
  "tokio 1.21.2",
  "tokio-tcp",
  "tokio-timer",
@@ -1635,7 +1636,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "rand",
- "serde",
 ]
 
 [[package]]

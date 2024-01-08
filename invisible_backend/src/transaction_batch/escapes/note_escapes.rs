@@ -3,12 +3,12 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{
     transaction_batch::LeafNodeType,
     utils::{
-        crypto_utils::{hash_many, verify, EcPoint, Signature},
+        crypto_utils::{keccak256, verify, EcPoint, Signature},
         storage::firestore::start_delete_note_thread,
     },
 };
@@ -38,7 +38,7 @@ pub fn verify_note_escape(
     escape_notes: Vec<Note>,
     signature: Signature,
 ) -> NoteEscape {
-    let order_hash = hash_note_escape_message(escape_id, &escape_notes);
+    let order_hash = hash_note_escape_message(&escape_notes);
     // let is_signature_valid = true;
     let is_signature_valid = verify_note_signatures(&escape_notes, &signature, &order_hash);
 
@@ -122,21 +122,50 @@ fn verify_note_signatures(
 
     let pub_key: EcPoint = EcPoint::from(&pub_key_sum);
 
-    let valid = verify(&pub_key.x.to_biguint().unwrap(), order_hash, signature);
+    let valid = verify(&pub_key.x.to_biguint().unwrap(), &order_hash, signature);
     return valid;
 }
 
-fn hash_note_escape_message(escape_id: u32, escape_notes: &Vec<Note>) -> BigUint {
-    let mut hash_inputs: Vec<&BigUint> = Vec::new();
-
-    let escape_id = BigUint::from_u32(escape_id).unwrap();
-    hash_inputs.push(&escape_id);
-
-    escape_notes
+fn hash_note_escape_message(escape_notes: &Vec<Note>) -> BigUint {
+    let hash_inputs = escape_notes
         .iter()
-        .for_each(|note| hash_inputs.push(&note.hash));
+        .map(|note| hash_note_keccak(&note))
+        .collect::<Vec<BigUint>>();
 
-    let order_hash = hash_many(&hash_inputs);
+    let escape_hash = keccak256(&hash_inputs);
 
-    return order_hash;
+    let p = BigUint::from_str(
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
+    )
+    .unwrap();
+    let hash_on_curve = escape_hash % &p;
+
+    return hash_on_curve;
+}
+
+pub fn hash_note_keccak(note: &Note) -> BigUint {
+    // & H = H({address, token, amount, blinding})
+
+    let mut input_arr = Vec::new();
+
+    let address_x = note.address.x.to_biguint().unwrap();
+    input_arr.push(address_x);
+
+    let token = BigUint::from_u32(note.token).unwrap();
+    input_arr.push(token);
+
+    let amount = BigUint::from_u64(note.amount).unwrap();
+    input_arr.push(amount);
+
+    input_arr.push(note.blinding.clone());
+
+    let note_hash = keccak256(&input_arr);
+
+    let p = BigUint::from_str(
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
+    )
+    .unwrap();
+    let hash_on_curve = note_hash % &p;
+
+    return hash_on_curve;
 }

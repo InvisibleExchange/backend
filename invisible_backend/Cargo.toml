@@ -18,11 +18,9 @@ name = "invisible_backend"
 crate-type = ["cdylib", "rlib"]
 
 
-
-
 [dependencies]
 primitive-types = "0.12.0"
-num-bigint = { version = "0.4.4", features = ["rand", "serde"] }
+num-bigint = { version = "0.4.4", features = ["rand"] }
 rustc-serialize = "0.3"
 num-integer = "0.1.45"
 num-traits = "0.2.15"
@@ -53,6 +51,7 @@ async-recursion = "1.0.2"
 starknet = { path = "crates/starknet-rs" }
 reqwest = "0.11.17"
 jsonwebtoken = "9.1.0"
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 
 
 [build-dependencies]

@@ -421,9 +421,9 @@ fn parse_withdrawal_outputs(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OnChainMMActionOutput {
-    pub mm_position_address: BigUint,
-    pub depositor: BigUint,
-    pub batched_action_info: BigUint,
+    pub mm_position_address: String,
+    pub depositor: String,
+    pub batched_action_info: String,
 }
 
 fn parse_onchain_mm_actions(
@@ -438,10 +438,10 @@ fn parse_onchain_mm_actions(
     let mut mm_actions: Vec<OnChainMMActionOutput> = Vec::new();
 
     for i in 0..num_actions {
-        let mm_position_address = output[(i * 2) as usize].clone();
-        let depositor = output[(i * 2 + 1) as usize].clone();
+        let mm_position_address = output[(i * 2) as usize].to_string();
+        let depositor = output[(i * 2 + 1) as usize].to_string();
 
-        let batched_action_info = output[(i * 3 + 2) as usize].clone();
+        let batched_action_info = output[(i * 3 + 2) as usize].to_string();
 
         // let split_vec = split_by_bytes(&batch_registrations_info, vec![1, 32, 64]);
         // let is_perp = split_vec[0].to_u8().unwrap() == 1;
@@ -474,9 +474,9 @@ pub struct EscapeOutput {
     pub escape_id: u32,
     pub is_valid: bool,
     pub escape_type: EscapeType,
-    pub escape_message_hash: BigUint,
-    pub signature_r: BigUint,
-    pub signature_s: BigUint,
+    pub escape_message_hash: String,
+    pub signature_r: String,
+    pub signature_s: String,
 }
 
 fn parse_escape_outputs(
@@ -503,9 +503,9 @@ fn parse_escape_outputs(
             escape_id,
             is_valid,
             escape_type,
-            escape_message_hash: output[(i * 2 + 1) as usize].clone(),
-            signature_r: output[(i * 2 + 2) as usize].clone(),
-            signature_s: output[(i * 2 + 3) as usize].clone(),
+            escape_message_hash: output[(i * 2 + 1) as usize].to_string(),
+            signature_r: output[(i * 2 + 2) as usize].to_string(),
+            signature_s: output[(i * 2 + 3) as usize].to_string(),
         };
 
         escape_outputs.push(escape);
@@ -523,11 +523,11 @@ pub struct PositionEscapeOutput {
     pub is_valid: bool,
     pub escape_value: u64,
     pub recipient: u64,
-    pub escape_message_hash: BigUint,
-    pub signature_a_r: BigUint,
-    pub signature_a_s: BigUint,
-    pub signature_b_r: BigUint,
-    pub signature_b_s: BigUint,
+    pub escape_message_hash: String,
+    pub signature_a_r: String,
+    pub signature_a_s: String,
+    pub signature_b_r: String,
+    pub signature_b_s: String,
 }
 
 fn parse_position_escape_outputs(
@@ -551,11 +551,11 @@ fn parse_position_escape_outputs(
             is_valid,
             escape_value,
             recipient: output[(i * 2 + 1) as usize].to_u64().unwrap(),
-            escape_message_hash: output[(i * 2 + 2) as usize].clone(),
-            signature_a_r: output[(i * 2 + 3) as usize].clone(),
-            signature_a_s: output[(i * 2 + 4) as usize].clone(),
-            signature_b_r: output[(i * 2 + 5) as usize].clone(),
-            signature_b_s: output[(i * 2 + 6) as usize].clone(),
+            escape_message_hash: output[(i * 2 + 2) as usize].to_string(),
+            signature_a_r: output[(i * 2 + 3) as usize].to_string(),
+            signature_a_s: output[(i * 2 + 4) as usize].to_string(),
+            signature_b_r: output[(i * 2 + 5) as usize].to_string(),
+            signature_b_s: output[(i * 2 + 6) as usize].to_string(),
         };
 
         escape_outputs.push(escape);

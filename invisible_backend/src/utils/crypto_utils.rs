@@ -77,6 +77,38 @@ pub fn verify(stark_key: &BigUint, msg_hash: &BigUint, signature: &Signature) ->
     }
 }
 
+use tiny_keccak::{Hasher, Keccak};
+
+pub fn keccak256(hash_inputs: &Vec<BigUint>) -> BigUint {
+    let mut output = [0u8; 32];
+
+    let bytes = hash_inputs
+        .iter()
+        .map(|el| biguint_to_bytes_padded(el))
+        .flatten()
+        .collect::<Vec<u8>>();
+
+    let mut hasher = Keccak::v256();
+    hasher.update(bytes.as_ref());
+    hasher.finalize(&mut output);
+
+    BigUint::from_bytes_be(&output[..])
+}
+
+fn biguint_to_bytes_padded(num: &BigUint) -> Vec<u8> {
+    // Convert to big endian bytes
+    let mut bytes = num.to_bytes_be();
+
+    // Pad to 32 bytes
+    if bytes.len() < 32 {
+        let mut padded = vec![0; 32 - bytes.len()];
+        padded.append(&mut bytes);
+        bytes = padded;
+    }
+
+    return bytes;
+}
+
 // * STRUCTS ======================================================================================
 
 use serde::ser::{Serialize, SerializeStruct, SerializeTuple, Serializer};
