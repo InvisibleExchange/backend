@@ -5,10 +5,11 @@ use serde_json::{Map, Value};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{
-    transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree, utils::notes::Note,
+    order_tab::OrderTab, transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree,
+    utils::notes::Note,
 };
 
-use super::helpers::{rebuild_swap_note, restore_partial_fill_refund_note};
+use super::helpers::{order_tab_from_json, rebuild_swap_note, restore_partial_fill_refund_note};
 
 pub fn restore_spot_order_execution(
     tree_m: &Arc<Mutex<SuperficialTree>>,
@@ -49,6 +50,8 @@ pub fn restore_spot_order_execution(
             .as_str()
             .unwrap();
         let updated_tab_hash = BigUint::from_str(updated_tab_hash).unwrap();
+
+        // TODO: TESTING
 
         state_tree_m.update_leaf_node(&updated_tab_hash, tab_idx);
         updated_state_hashes.insert(tab_idx, (LeafNodeType::OrderTab, updated_tab_hash));
@@ -179,6 +182,76 @@ fn restore_after_swap_later_fills(
 
     drop(updated_state_hashes);
     drop(tree);
+}
+
+// * Order tabs ** //
+fn get_updated_order_tab(transaction: &Map<String, Value>, is_a: bool) -> OrderTab {
+    // ? Get the info --------------------------
+
+    let tab_json = transaction
+        .get(if is_a {
+            "prev_order_tab_a"
+        } else {
+            "prev_order_tab_b"
+        })
+        .unwrap();
+
+    let order_json: &Value = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a { "order_a" } else { "order_b" })
+        .unwrap();
+    let token_received = order_json.get("token_received").unwrap().as_u64().unwrap() as u32;
+
+    let spent_amount_x = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a {
+            "spent_amount_a"
+        } else {
+            "spent_amount_b"
+        })
+        .unwrap()
+        .as_u64()
+        .unwrap();
+
+    let spent_amount_y = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a {
+            "spent_amount_b"
+        } else {
+            "spent_amount_a"
+        })
+        .unwrap()
+        .as_u64()
+        .unwrap();
+
+    let fee_taken_x = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a { "fee_taken_a" } else { "fee_taken_b" })
+        .unwrap()
+        .as_u64()
+        .unwrap();
+
+    // ? Make the update
+
+    let mut order_tab = order_tab_from_json(tab_json);
+
+    let is_buy = order_tab.tab_header.base_token == token_received;
+
+    if is_buy {
+        order_tab.quote_amount -= spent_amount_x;
+        order_tab.base_amount += spent_amount_y - fee_taken_x;
+    } else {
+        order_tab.base_amount -= spent_amount_x;
+        order_tab.quote_amount += spent_amount_y - fee_taken_x;
+    }
+
+    order_tab.update_hash();
+
+    return order_tab;
 }
 
 // * =========================================================================================================================

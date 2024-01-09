@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{
+    order_tab::{OrderTab, TabHeader},
     perpetual::{COLLATERAL_TOKEN, DUST_AMOUNT_PER_ASSET},
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
@@ -180,6 +181,63 @@ pub fn restore_partial_fill_refund_note(
         new_partial_refund_amount,
         BigUint::from_str(note0.get("blinding").unwrap().as_str().unwrap()).unwrap(),
     ));
+}
+
+// * ORDER TABS * //
+
+pub fn order_tab_from_json(tab_json: &Value) -> OrderTab {
+    let tab_header = TabHeader::new(
+        tab_json
+            .get("tab_header")
+            .unwrap()
+            .get("base_token")
+            .unwrap()
+            .as_u64()
+            .unwrap() as u32,
+        tab_json
+            .get("tab_header")
+            .unwrap()
+            .get("quote_token")
+            .unwrap()
+            .as_u64()
+            .unwrap() as u32,
+        BigUint::from_str(
+            tab_json
+                .get("tab_header")
+                .unwrap()
+                .get("base_blinding")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap(),
+        BigUint::from_str(
+            tab_json
+                .get("tab_header")
+                .unwrap()
+                .get("quotee_blinding")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap(),
+        BigUint::from_str(
+            tab_json
+                .get("tab_header")
+                .unwrap()
+                .get("pub_key")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap(),
+    );
+
+    return OrderTab::new(
+        tab_header,
+        tab_json.get("base_amount").unwrap().as_u64().unwrap(),
+        tab_json.get("quote_amount").unwrap().as_u64().unwrap(),
+    );
 }
 
 // * UPDATE MARGIN RESTORE FUNCTIONS ================================================================================

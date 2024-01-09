@@ -99,22 +99,22 @@ initFundingInfo(client, updateFundingInfo);
 
 // * EXECUTE DEPOSIT -----------------------------------------------------------------
 app.post("/execute_deposit", async (req, res) => {
-  let isValid = await isDepositValid(req.body, db);
+  // let isValid = await isDepositValid(req.body, db);
 
-  if (!isValid) {
-    res.send({
-      response: { successful: false, error_message: "Unregistered deposit" },
-    });
-    return;
-  }
+  // if (!isValid) {
+  //   res.send({
+  //     response: { successful: false, error_message: "Unregistered deposit" },
+  //   });
+  //   return;
+  // }
 
   client.execute_deposit(req.body, function (err, response) {
     if (err) {
       console.log(err);
     } else {
-      if (response.successful) {
-        depositProcessedCallback(db, req.body.deposit_id);
-      }
+      // if (response.successful) {
+      //   depositProcessedCallback(db, req.body.deposit_id);
+      // }
 
       res.send({ response: response });
     }
@@ -245,7 +245,6 @@ app.post("/modify_order_tab", (req, res) => {
     }
   });
 });
-
 
 // * GET LIQUIDITY ---------------------------------------------------------------------
 app.post("/get_liquidity", (req, res) => {

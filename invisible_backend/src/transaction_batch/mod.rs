@@ -56,7 +56,7 @@ use self::{
         },
     },
     escapes::verify_escapes::{_execute_forced_escape_inner, _get_position_close_escape_info},
-    restore_state_helpers::_restore_state_inner,
+    restore_state::_restore_state_inner,
 };
 
 // TODO: This could be weighted sum of different transactions (e.g. 5 for swaps, 1 for deposits, 1 for withdrawals)
@@ -68,7 +68,7 @@ use self::{
 
 pub mod batch_functions;
 pub mod escapes;
-pub mod restore_state_helpers;
+pub mod restore_state;
 pub mod tx_batch_helpers;
 pub mod tx_batch_structs;
 

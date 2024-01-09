@@ -98,21 +98,21 @@ impl Deposit {
                 ));
             }
 
-            // ? Verify the deposit has been registered
-            let data_commitment = self.get_action_commitment();
-            let main_storage_m = main_storage.lock();
-            if !main_storage_m.does_commitment_exists(
-                OnchainActionType::Deposit,
-                self.deposit_id % 2_u64.pow(32),
-                &data_commitment,
-            ) {
-                return Err(send_deposit_error(
-                    "deposit not registered".to_string(),
-                    Some(format!("deposit not registered: {}", self.deposit_id)),
-                ));
-            }
-            main_storage_m.remove_onchain_action_commitment(self.deposit_id % 2_u64.pow(32));
-            drop(main_storage_m);
+            // // ? Verify the deposit has been registered
+            // let data_commitment = self.get_action_commitment();
+            // let main_storage_m = main_storage.lock();
+            // if !main_storage_m.does_commitment_exists(
+            //     OnchainActionType::Deposit,
+            //     self.deposit_id % 2_u64.pow(32),
+            //     &data_commitment,
+            // ) {
+            //     return Err(send_deposit_error(
+            //         "deposit not registered".to_string(),
+            //         Some(format!("deposit not registered: {}", self.deposit_id)),
+            //     ));
+            // }
+            // main_storage_m.remove_onchain_action_commitment(self.deposit_id % 2_u64.pow(32));
+            // drop(main_storage_m);
 
             // * After the deposit is verified to be valid update the state ================ //
 
