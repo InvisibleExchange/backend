@@ -49,8 +49,6 @@ pub struct PositionEscape {
     signature_b: Signature,
     new_funding_idx: u32,
     index_price: u64,
-    position_idx: u32,
-    new_position_hash: String,
 }
 
 pub fn verify_position_escape(
@@ -68,7 +66,7 @@ pub fn verify_position_escape(
     signature_b: Signature,
     swap_funding_info: &SwapFundingInfo,
     index_price: u64,
-) -> PositionEscape {
+) -> (PositionEscape, Option<PerpPosition>) {
     let mut position_escape = PositionEscape {
         escape_id,
         is_valid_a: true,
@@ -86,8 +84,6 @@ pub fn verify_position_escape(
         signature_b: signature_b.clone(),
         new_funding_idx: swap_funding_info.current_funding_idx,
         index_price,
-        position_idx: 0,
-        new_position_hash: "".to_string(),
     };
 
     // ? Verify the signatures
@@ -106,13 +102,13 @@ pub fn verify_position_escape(
         signature_b,
         order_hash,
     ) {
-        return position_escape;
+        return (position_escape, None);
     }
 
     // * Order_a ---------------------------------------------------------------
     // ? Verify position synthetic token is valid
     if !SYNTHETIC_ASSETS.contains(&position_a.position_header.synthetic_token) {
-        return position_escape;
+        return (position_escape, None);
     }
 
     // ? Verify position exists
@@ -120,7 +116,7 @@ pub fn verify_position_escape(
     if !position_exists {
         position_escape.is_valid_a = false;
         position_escape.valid_leaf_a = leaf_node;
-        return position_escape;
+        return (position_escape, None);
     }
 
     // ? Verify position is not liquidatable
@@ -128,7 +124,7 @@ pub fn verify_position_escape(
         .is_position_liquidatable(close_price, index_price)
         .0
     {
-        return position_escape;
+        return (position_escape, None);
     };
 
     // * Order_b ---------------------------------------------------------------
@@ -144,7 +140,7 @@ pub fn verify_position_escape(
         if let Some(invalid_note) = invalid_note {
             position_escape.is_valid_b = false;
             position_escape.invalid_note = Some(invalid_note);
-            return position_escape;
+            return (position_escape, None);
         }
 
         notes_in = Some(open_order_fields_b.notes_in.clone());
@@ -159,18 +155,15 @@ pub fn verify_position_escape(
             swap_funding_info.current_funding_idx,
         );
         if let Err(_e) = res {
-            return position_escape;
+            return (position_escape, None);
         }
         new_position_b = res.unwrap();
-
-        position_escape.position_idx = new_position_b.index as u32;
-        position_escape.new_position_hash = new_position_b.hash.to_string();
     } else if let Some(position_b) = position_b {
         let (position_exists, leaf_node) = verify_position_exists(state_tree, &position_b);
         if !position_exists {
             position_escape.is_position_valid_b = false;
             position_escape.valid_leaf_b = leaf_node;
-            return position_escape;
+            return (position_escape, None);
         }
 
         let res = handle_counter_party_modify_order(
@@ -181,12 +174,9 @@ pub fn verify_position_escape(
             index_price,
         );
         if let Err(_e) = res {
-            return position_escape;
+            return (position_escape, None);
         }
         new_position_b = res.unwrap();
-
-        position_escape.position_idx = new_position_b.index as u32;
-        position_escape.new_position_hash = new_position_b.hash.to_string();
 
         notes_in = None;
         refund_note = None;
@@ -201,14 +191,14 @@ pub fn verify_position_escape(
         firebase_session,
         backup_storage,
         position_a,
-        new_position_b,
+        new_position_b.clone(),
         notes_in,
         refund_note,
     );
 
     println!("VALID POSITION ESCAPE: {}", escape_id);
 
-    return position_escape;
+    return (position_escape, Some(new_position_b));
 }
 
 fn handle_counter_party_open_order(

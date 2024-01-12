@@ -6,6 +6,12 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree};
 
+use super::helpers::{
+    perp_helpers::position_from_json,
+    spot_helpers::{close_tab, open_new_tab, order_tab_from_json},
+    state_helpers::restore_mm_action,
+};
+
 // * OPEN ORDER TAB RESTORE FUNCTIONS ================================================================================
 
 pub fn restore_open_order_tab(
@@ -59,11 +65,29 @@ pub fn restore_open_order_tab(
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note_out_hash));
     }
 
+    let add_only = transaction.get("add_only").unwrap().as_bool().unwrap();
+
     // ? Order tab
     let order_tab = transaction.get("order_tab").unwrap();
     let idx: u64 = order_tab.get("tab_idx").unwrap().as_u64().unwrap();
-    let tab_hash = order_tab.get("hash").unwrap().as_str().unwrap();
-    let tab_hash = BigUint::from_str(tab_hash).unwrap();
+
+    let tab_hash;
+    if add_only {
+        let tab_hash_ = transaction.get("updated_tab_hash").unwrap();
+        tab_hash = BigUint::from_str(tab_hash_.as_str().unwrap()).unwrap();
+    } else {
+        let tab_hash_ = order_tab.get("hash").unwrap().as_str().unwrap();
+        tab_hash = BigUint::from_str(tab_hash_).unwrap();
+    }
+
+    // TODO =======================================================================================================================================
+    let new_order_tab = open_new_tab(transaction);
+
+    if new_order_tab.hash != tab_hash {
+        println!("tab Open: Tab hash mismatch");
+    }
+
+    // TODO =======================================================================================================================================
 
     state_tree.update_leaf_node(&tab_hash, idx);
     updated_state_hashes.insert(idx, (LeafNodeType::OrderTab, tab_hash));
@@ -91,6 +115,22 @@ pub fn restore_close_order_tab(
     let quote_refund_note_hash =
         BigUint::from_str(quote_refund_note_hash.as_str().unwrap()).unwrap();
 
+    // TODO =======================================================================================================================================
+    let prev_order_tab = transaction.get("order_tab").unwrap();
+    let order_tab = order_tab_from_json(prev_order_tab);
+
+    let (base_return_note, quote_return_note, new_order_tab) = close_tab(transaction, order_tab);
+
+    if base_return_note.hash != base_return_note_hash {
+        println!("tab close: base Note hash mismatch");
+    }
+
+    if quote_return_note.hash != quote_refund_note_hash {
+        println!("tab close: quote Note hash mismatch");
+    }
+
+    // TODO =======================================================================================================================================
+
     state_tree.update_leaf_node(
         &base_return_note_hash,
         base_return_note_index.as_u64().unwrap(),
@@ -112,8 +152,25 @@ pub fn restore_close_order_tab(
     // ? Order tab
     let order_tab = transaction.get("order_tab").unwrap();
     let idx: u64 = order_tab.get("tab_idx").unwrap().as_u64().unwrap();
-    let updated_tab_hash = order_tab.get("updated_tab_hash").unwrap().as_str().unwrap();
+    let updated_tab_hash = transaction
+        .get("updated_tab_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
     let updated_tab_hash = BigUint::from_str(updated_tab_hash).unwrap();
+
+    // TODO ======================================================================================================================================
+
+    let thash = if let Some(tab) = new_order_tab {
+        tab.hash
+    } else {
+        BigUint::zero()
+    };
+    if thash != updated_tab_hash {
+        println!("tab close: Tab hash mismatch");
+    }
+
+    // TODO =======================================================================================================================================
 
     state_tree.update_leaf_node(&updated_tab_hash, idx);
     updated_state_hashes.insert(idx, (LeafNodeType::OrderTab, updated_tab_hash));
@@ -141,6 +198,17 @@ pub fn restore_onchain_mm_action(
         .as_str()
         .unwrap();
     let pos_hash = BigUint::from_str(pos_hash).unwrap();
+
+    // TODO =======================================================================================================================================
+
+    let prev_position = position_from_json(position);
+    let updated_position = restore_mm_action(transaction, prev_position);
+
+    if updated_position.hash != pos_hash {
+        println!("Onchain mm action: Position Hash mismatch");
+    }
+
+    // TODO =======================================================================================================================================
 
     state_tree_m.update_leaf_node(&pos_hash, idx);
     updated_state_hashes_m.insert(idx, (LeafNodeType::Position, pos_hash));

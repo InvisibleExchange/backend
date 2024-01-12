@@ -7,6 +7,8 @@ use serde_json::{Map, Value};
 
 use crate::{transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree};
 
+use super::helpers::perp_helpers::position_from_json;
+
 pub fn restore_forced_note_escape(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
@@ -117,6 +119,17 @@ pub fn restore_forced_position_escape(
     updated_state_hashes.insert(idx, (LeafNodeType::Position, BigUint::zero()));
 
     let new_position_hash = BigUint::from_str(new_position_hash.as_str().unwrap()).unwrap();
+
+    // TODO =======================================================================================================================================
+    let new_position_b = transaction.get("new_position_b").unwrap();
+    let new_position_b = position_from_json(new_position_b);
+
+    if new_position_b.hash != new_position_hash {
+        println!("position escape: Position hash mismatch");
+    }
+
+    // TODO =======================================================================================================================================
+
     state_tree.update_leaf_node(&new_position_hash, new_position_index);
     updated_state_hashes.insert(
         new_position_index,

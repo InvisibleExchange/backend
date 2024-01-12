@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tx_batch.init();
 
     // TODO: TESTING ==========================================================
-    println!("\nstate tree: {:?}", tx_batch.state_tree.lock().leaf_nodes);
+    // println!("\nstate tree: {:?}", tx_batch.state_tree.lock().leaf_nodes);
 
     // println!("funding rates: {:?}", tx_batch.funding_rates);
     // println!("funding prices: {:?}", tx_batch.funding_prices);

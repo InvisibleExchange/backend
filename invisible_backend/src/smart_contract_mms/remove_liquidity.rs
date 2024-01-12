@@ -58,33 +58,11 @@ pub fn remove_liquidity_from_order_tab(
         return Err("Invalid Signature".to_string());
     }
 
-    // let is_full_close =
-    //     vlp_amount >= position.vlp_supply - DUST_AMOUNT_PER_ASSET[&COLLATERAL_TOKEN.to_string()];
-
-    let return_collateral_amount = get_return_collateral_amount(
-        remove_liquidity_req.vlp_amount,
-        position.vlp_supply,
-        position.margin,
-    );
-
-    let mm_fee: i64 =
-        (return_collateral_amount as i64 - remove_liquidity_req.initial_value as i64) * 20 / 100; // 20% fee
-    let mm_fee = std::cmp::max(0, mm_fee) as u64;
-
-    // ? Adding to an existing order tab
-    let prev_position = position;
-
-    let mut new_position = prev_position.clone();
-
-    new_position.margin -= return_collateral_amount;
-    new_position.vlp_supply -= remove_liquidity_req.vlp_amount;
-    new_position.update_position_info();
-
     // ? Verify the registration has been registered
     let data_commitment = get_remove_liquidity_commitment(
         remove_liquidity_req.mm_action_id,
         &remove_liquidity_req.depositor,
-        &prev_position.position_header.position_address,
+        &position.position_header.position_address,
         remove_liquidity_req.initial_value,
         remove_liquidity_req.vlp_amount,
     )?;
@@ -98,6 +76,25 @@ pub fn remove_liquidity_from_order_tab(
     }
     main_storage_m.remove_onchain_action_commitment(remove_liquidity_req.mm_action_id as u64);
     drop(main_storage_m);
+
+    let return_collateral_amount = get_return_collateral_amount(
+        remove_liquidity_req.vlp_amount,
+        position.vlp_supply,
+        position.margin,
+    );
+
+    let mm_fee: i64 =
+        (return_collateral_amount as i64 - remove_liquidity_req.initial_value as i64) * 20 / 100; // 20% fee
+    let mm_fee = std::cmp::max(0, mm_fee) as u64;
+
+    // ? Remove from an existing order tab
+    let prev_position = position;
+
+    let mut new_position = prev_position.clone();
+
+    new_position.margin -= return_collateral_amount;
+    new_position.vlp_supply -= remove_liquidity_req.vlp_amount;
+    new_position.update_position_info();
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     onchain_position_remove_liquidity_json_output(

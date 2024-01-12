@@ -4,7 +4,8 @@ use crate::{
     matching_engine::get_quote_qty,
     perpetual::{
         get_price, perp_helpers::perp_swap_helpers::get_max_leverage, perp_position::PerpPosition,
-        scale_down_price, OrderSide, COLLATERAL_TOKEN, LEVERAGE_DECIMALS, SYNTHETIC_ASSETS,
+        scale_down_price, OrderSide, COLLATERAL_TOKEN, COLLATERAL_TOKEN_DECIMALS,
+        DECIMALS_PER_ASSET, LEVERAGE_DECIMALS, PRICE_DECIMALS_PER_ASSET, SYNTHETIC_ASSETS,
     },
     transaction_batch::tx_batch_structs::SwapFundingInfo,
     trees::superficial_tree::SuperficialTree,
@@ -62,17 +63,17 @@ pub fn open_new_position_after_liquidation(
 
     let init_margin = liquidation_order.open_order_fields.initial_margin + liquidator_fee;
 
-    let price = scale_down_price(market_price, liquidation_order.synthetic_token);
-    let collateral_amount = get_quote_qty(
-        liquidated_size,
-        price,
-        liquidation_order.synthetic_token,
-        COLLATERAL_TOKEN,
-        None,
-    );
+    let synthetic_token = liquidation_order.synthetic_token;
 
-    let leverage = (collateral_amount as u128 * 10_u128.pow(LEVERAGE_DECIMALS as u32)
-        / init_margin as u128) as u64;
+    let multiplier: u128 = 10_u128.pow(
+        (DECIMALS_PER_ASSET[&synthetic_token.to_string()]
+            + PRICE_DECIMALS_PER_ASSET[&synthetic_token.to_string()]
+            - COLLATERAL_TOKEN_DECIMALS) as u32,
+    );
+    let scaler = 10_u128.pow(LEVERAGE_DECIMALS as u32);
+
+    let leverage = (liquidated_size as u128 * market_price as u128 * scaler
+        / (init_margin as u128 * multiplier)) as u64;
 
     // ? Check that leverage is valid relative to the notional position size
     let max_leverage = get_max_leverage(liquidation_order.synthetic_token, liquidated_size);

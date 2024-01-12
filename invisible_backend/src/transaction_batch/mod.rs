@@ -466,6 +466,8 @@ impl TransactionBatch {
             &self.state_tree,
             &self.updated_state_hashes,
             &self.perpetual_partial_fill_tracker,
+            &self.funding_rates,
+            &self.funding_prices,
             transactions,
         )
     }

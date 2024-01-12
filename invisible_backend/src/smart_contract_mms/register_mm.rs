@@ -73,11 +73,6 @@ pub fn onchain_register_mm(
         register_mm_req.mm_action_id as u64,
         &data_commitment,
     ) {
-        println!(
-            "data_commitment: {} - {}",
-            register_mm_req.mm_action_id as u64, data_commitment
-        );
-
         return Err("MM Registration not registered".to_string());
     }
     main_storage_m.remove_onchain_action_commitment(register_mm_req.mm_action_id as u64);

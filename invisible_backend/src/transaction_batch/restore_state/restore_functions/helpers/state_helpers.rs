@@ -5,240 +5,14 @@ use serde_json::{Map, Value};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{
-    order_tab::{OrderTab, TabHeader},
-    perpetual::{COLLATERAL_TOKEN, DUST_AMOUNT_PER_ASSET},
+    perpetual::{perp_position::PerpPosition, COLLATERAL_TOKEN},
     transaction_batch::LeafNodeType,
     trees::superficial_tree::SuperficialTree,
     utils::crypto_utils::EcPoint,
     utils::notes::Note,
 };
 
-// * HELPER FUNCTIONS ============================================================================================
-
-pub fn rebuild_swap_note(transaction: &Map<String, Value>, is_a: bool) -> Note {
-    let order_indexes_json = transaction
-        .get("indexes")
-        .unwrap()
-        .get(if is_a { "order_a" } else { "order_b" })
-        .unwrap();
-
-    let swap_idx = order_indexes_json
-        .get("swap_note_idx")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-
-    let order_json: &Value = transaction
-        .get("swap_data")
-        .unwrap()
-        .get(if is_a { "order_a" } else { "order_b" })
-        .unwrap();
-    let spot_note_info = order_json.get("spot_note_info").unwrap();
-    let dest_received_address = spot_note_info.get("dest_received_address").unwrap();
-    let address = EcPoint {
-        x: BigInt::from_str(dest_received_address.get("x").unwrap().as_str().unwrap()).unwrap(),
-        y: BigInt::from_str(dest_received_address.get("y").unwrap().as_str().unwrap()).unwrap(),
-    };
-
-    let dest_received_blinding = BigUint::from_str(
-        spot_note_info
-            .get("dest_received_blinding")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-    )
-    .unwrap();
-
-    let spent_amount_y = transaction
-        .get("swap_data")
-        .unwrap()
-        .get(if is_a {
-            "spent_amount_b"
-        } else {
-            "spent_amount_a"
-        })
-        .unwrap()
-        .as_u64()
-        .unwrap();
-
-    let fee_taken_x = transaction
-        .get("swap_data")
-        .unwrap()
-        .get(if is_a { "fee_taken_a" } else { "fee_taken_b" })
-        .unwrap()
-        .as_u64()
-        .unwrap();
-
-    let token_received = order_json.get("token_received").unwrap().as_u64().unwrap();
-
-    return Note::new(
-        swap_idx,
-        address,
-        token_received as u32,
-        spent_amount_y - fee_taken_x,
-        dest_received_blinding,
-    );
-}
-
-pub fn restore_partial_fill_refund_note(
-    transaction: &Map<String, Value>,
-    is_a: bool,
-) -> Option<Note> {
-    let order = transaction
-        .get("swap_data")
-        .unwrap()
-        .get(if is_a { "order_a" } else { "order_b" })
-        .unwrap();
-
-    let prev_pfr_note = transaction.get(if is_a {
-        "prev_pfr_note_a"
-    } else {
-        "prev_pfr_note_b"
-    });
-
-    let new_partial_refund_amount = if !prev_pfr_note.unwrap().is_null() {
-        prev_pfr_note
-            .unwrap()
-            .get("amount")
-            .unwrap()
-            .as_u64()
-            .unwrap()
-            - transaction
-                .get("swap_data")
-                .unwrap()
-                .get(if is_a {
-                    "spent_amount_a"
-                } else {
-                    "spent_amount_b"
-                })
-                .unwrap()
-                .as_u64()
-                .unwrap()
-    } else {
-        order.get("amount_spent").unwrap().as_u64().unwrap()
-            - transaction
-                .get("swap_data")
-                .unwrap()
-                .get(if is_a {
-                    "spent_amount_a"
-                } else {
-                    "spent_amount_b"
-                })
-                .unwrap()
-                .as_u64()
-                .unwrap()
-    };
-
-    if new_partial_refund_amount
-        <= DUST_AMOUNT_PER_ASSET[&order
-            .get("token_spent")
-            .unwrap()
-            .as_u64()
-            .unwrap()
-            .to_string()]
-    {
-        return None;
-    }
-
-    let idx = transaction
-        .get("indexes")
-        .unwrap()
-        .get(if is_a { "order_a" } else { "order_b" })
-        .unwrap()
-        .get("partial_fill_idx")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-
-    let spot_note_info = &order.get("spot_note_info").unwrap();
-    let note0 = &spot_note_info.get("notes_in").unwrap().as_array().unwrap()[0];
-
-    return Some(Note::new(
-        idx,
-        EcPoint::new(
-            &BigUint::from_str(
-                note0
-                    .get("address")
-                    .unwrap()
-                    .get("x")
-                    .unwrap()
-                    .as_str()
-                    .unwrap(),
-            )
-            .unwrap(),
-            &BigUint::from_str(
-                note0
-                    .get("address")
-                    .unwrap()
-                    .get("y")
-                    .unwrap()
-                    .as_str()
-                    .unwrap(),
-            )
-            .unwrap(),
-        ),
-        order.get("token_spent").unwrap().as_u64().unwrap() as u32,
-        new_partial_refund_amount,
-        BigUint::from_str(note0.get("blinding").unwrap().as_str().unwrap()).unwrap(),
-    ));
-}
-
-// * ORDER TABS * //
-
-pub fn order_tab_from_json(tab_json: &Value) -> OrderTab {
-    let tab_header = TabHeader::new(
-        tab_json
-            .get("tab_header")
-            .unwrap()
-            .get("base_token")
-            .unwrap()
-            .as_u64()
-            .unwrap() as u32,
-        tab_json
-            .get("tab_header")
-            .unwrap()
-            .get("quote_token")
-            .unwrap()
-            .as_u64()
-            .unwrap() as u32,
-        BigUint::from_str(
-            tab_json
-                .get("tab_header")
-                .unwrap()
-                .get("base_blinding")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap(),
-        BigUint::from_str(
-            tab_json
-                .get("tab_header")
-                .unwrap()
-                .get("quotee_blinding")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap(),
-        BigUint::from_str(
-            tab_json
-                .get("tab_header")
-                .unwrap()
-                .get("pub_key")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap(),
-    );
-
-    return OrderTab::new(
-        tab_header,
-        tab_json.get("base_amount").unwrap().as_u64().unwrap(),
-        tab_json.get("quote_amount").unwrap().as_u64().unwrap(),
-    );
-}
+use super::perp_helpers::position_from_json;
 
 // * UPDATE MARGIN RESTORE FUNCTIONS ================================================================================
 
@@ -267,6 +41,24 @@ pub fn restore_margin_update(
             .unwrap(),
     )
     .unwrap();
+
+    // TODO =======================================================================================================================================
+    let margin_change = transaction.get("margin_change").unwrap();
+
+    let prev_position = margin_change.get("position").unwrap();
+    let mut position = position_from_json(prev_position);
+
+    let change_amount = margin_change
+        .get("margin_change")
+        .unwrap()
+        .as_i64()
+        .unwrap();
+
+    position.modify_margin(change_amount).unwrap();
+
+    //TODO: CHECK IF CORRECT
+
+    // TODO =======================================================================================================================================
 
     if !transaction
         .get("margin_change")
@@ -444,4 +236,79 @@ pub fn restore_note_split(
 
     drop(updated_state_hashes);
     drop(state_tree);
+}
+
+// * ONCHAIN MM ACTION ============================================================0
+
+pub fn restore_mm_action(
+    transaction: &Map<String, Value>,
+    mut position: PerpPosition,
+) -> PerpPosition {
+    let action_type = transaction.get("action_type").unwrap().as_str().unwrap();
+
+    match action_type {
+        "register_mm" => {
+            // ? Registering a new position
+            let vlp_token = transaction.get("vlp_token").unwrap().as_u64().unwrap() as u32;
+            let max_vlp_supply = transaction.get("max_vlp_supply").unwrap().as_u64().unwrap();
+
+            let vlp_amount = position.margin;
+
+            // ? register mm position
+            position.position_header.vlp_token = vlp_token;
+            position.position_header.max_vlp_supply = max_vlp_supply;
+
+            position.vlp_supply = vlp_amount;
+
+            position.position_header.update_hash();
+            position.hash = position.hash_position();
+
+            return position;
+        }
+        "add_liquidity" => {
+            // ? Adding to an existing position
+
+            let initial_value = transaction.get("initial_value").unwrap().as_u64().unwrap();
+            let vlp_amount = transaction.get("vlp_amount").unwrap().as_u64().unwrap();
+
+            position.margin += initial_value;
+            position.vlp_supply += vlp_amount;
+            position.update_position_info();
+
+            return position;
+        }
+        "remove_liquidity" => {
+            // ? Remove from an existing order tab
+            let return_collateral_amount = transaction
+                .get("return_collateral_amount")
+                .unwrap()
+                .as_u64()
+                .unwrap();
+            let vlp_amount = transaction.get("vlp_amount").unwrap().as_u64().unwrap();
+
+            position.margin -= return_collateral_amount;
+            position.vlp_supply -= vlp_amount;
+            position.update_position_info();
+
+            return position;
+        }
+        "close_mm_position" => {
+            // ? Adding to an existing order tab
+
+            let return_collateral_amount = transaction
+                .get("return_collateral_amount")
+                .unwrap()
+                .as_u64()
+                .unwrap();
+
+            position.margin -= return_collateral_amount;
+            position.vlp_supply = 0;
+            position.update_position_info();
+
+            return position;
+        }
+        _ => {
+            panic!("Invalid onchain mm action type")
+        }
+    }
 }

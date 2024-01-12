@@ -2,6 +2,7 @@ use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use parking_lot::Mutex;
+use rustc_serialize::json;
 use serde_json::Value;
 use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};
@@ -201,7 +202,7 @@ pub fn _execute_forced_escape_inner(
         );
         drop(main_storage_m);
 
-        let position_escape = verify_position_escape(
+        let (position_escape, new_position_b) = verify_position_escape(
             state_tree,
             updated_state_hashes,
             firebase_session,
@@ -230,6 +231,10 @@ pub fn _execute_forced_escape_inner(
         json_map.insert(
             String::from("position_escape"),
             serde_json::to_value(&position_escape).unwrap(),
+        );
+        json_map.insert(
+            String::from("new_position_b"),
+            serde_json::to_value(&new_position_b).unwrap(),
         );
 
         let mut swap_output_json_m = swap_output_json.lock();

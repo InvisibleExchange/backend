@@ -9,7 +9,9 @@ use crate::{
     utils::notes::Note,
 };
 
-use super::helpers::{order_tab_from_json, rebuild_swap_note, restore_partial_fill_refund_note};
+use super::helpers::spot_helpers::{
+    order_tab_from_json, rebuild_swap_note, restore_partial_fill_refund_note,
+};
 
 pub fn restore_spot_order_execution(
     tree_m: &Arc<Mutex<SuperficialTree>>,
@@ -51,7 +53,15 @@ pub fn restore_spot_order_execution(
             .unwrap();
         let updated_tab_hash = BigUint::from_str(updated_tab_hash).unwrap();
 
-        // TODO: TESTING
+        // TODO: ==============================
+
+        let updated_order_tab = get_updated_order_tab(transaction, is_a);
+
+        if updated_order_tab.hash != updated_tab_hash {
+            println!("1.0: Order tab hash mismatch");
+        }
+
+        // TODO: ==============================
 
         state_tree_m.update_leaf_node(&updated_tab_hash, tab_idx);
         updated_state_hashes.insert(tab_idx, (LeafNodeType::OrderTab, updated_tab_hash));

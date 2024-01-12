@@ -57,6 +57,24 @@ pub fn close_onchain_mm(
         return Err("Invalid Signature".to_string());
     }
 
+    // ? Verify the registration has been registered
+    let data_commitment = get_close_mm_commitment(
+        close_req.mm_action_id,
+        &position.position_header.position_address,
+        close_req.initial_value_sum,
+        close_req.vlp_amount_sum,
+    );
+    let main_storage_m = main_storage.lock();
+    if !main_storage_m.does_commitment_exists(
+        OnchainActionType::MMClosePosition,
+        close_req.mm_action_id as u64,
+        &data_commitment,
+    ) {
+        return Err("MM Registration not registered".to_string());
+    }
+    main_storage_m.remove_onchain_action_commitment(close_req.mm_action_id as u64);
+    drop(main_storage_m);
+
     let return_collateral_amount = get_return_collateral_amount(
         close_req.vlp_amount_sum,
         position.vlp_supply,
@@ -67,7 +85,7 @@ pub fn close_onchain_mm(
         (return_collateral_amount as i64 - close_req.initial_value_sum as i64) * 20 / 100; // 20% fee
     let mm_fee = std::cmp::max(0, mm_fee) as u64;
 
-    // ? Adding to an existing order tab
+    // ? Closing an existing order tab
     let prev_position = position;
 
     let mut new_position = prev_position.clone();
@@ -75,24 +93,6 @@ pub fn close_onchain_mm(
     new_position.margin -= return_collateral_amount;
     new_position.vlp_supply = 0;
     new_position.update_position_info();
-
-    // ? Verify the registration has been registered
-    let data_commitment = get_close_mm_commitment(
-        close_req.mm_action_id,
-        &prev_position.position_header.position_address,
-        close_req.initial_value_sum,
-        close_req.vlp_amount_sum,
-    );
-    let main_storage_m = main_storage.lock();
-    if !main_storage_m.does_commitment_exists(
-        OnchainActionType::MMClosePosition,
-        close_req.mm_action_id as u64 ,
-        &data_commitment,
-    ) {
-        return Err("MM Registration not registered".to_string());
-    }
-    main_storage_m.remove_onchain_action_commitment(close_req.mm_action_id as u64 );
-    drop(main_storage_m);
 
     // ? GENERATE THE JSON_OUTPUT -----------------------------------------------------------------
     onchain_position_close_json_output(
