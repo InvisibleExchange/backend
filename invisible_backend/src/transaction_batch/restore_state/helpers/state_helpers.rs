@@ -42,24 +42,6 @@ pub fn restore_margin_update(
     )
     .unwrap();
 
-    // TODO =======================================================================================================================================
-    let margin_change = transaction.get("margin_change").unwrap();
-
-    let prev_position = margin_change.get("position").unwrap();
-    let mut position = position_from_json(prev_position);
-
-    let change_amount = margin_change
-        .get("margin_change")
-        .unwrap()
-        .as_i64()
-        .unwrap();
-
-    position.modify_margin(change_amount).unwrap();
-
-    //TODO: CHECK IF CORRECT
-
-    // TODO =======================================================================================================================================
-
     if !transaction
         .get("margin_change")
         .unwrap()
@@ -95,10 +77,9 @@ pub fn restore_margin_update(
 
         for note in notes_in.iter().skip(1) {
             let idx = note.get("index").unwrap().as_u64().unwrap();
-            let note_hash = BigUint::from_str(note.get("hash").unwrap().as_str().unwrap()).unwrap();
 
-            tree.update_leaf_node(&note_hash, idx);
-            updated_state_hashes.insert(idx, (LeafNodeType::Note, note_hash));
+            tree.update_leaf_node(&BigUint::zero(), idx);
+            updated_state_hashes.insert(idx, (LeafNodeType::Note, BigUint::zero()));
         }
 
         // ? Update the position state tree
@@ -127,7 +108,7 @@ pub fn restore_margin_update(
     }
 }
 
-fn rebuild_return_collateral_note(transaction: &Map<String, Value>) -> Note {
+pub fn rebuild_return_collateral_note(transaction: &Map<String, Value>) -> Note {
     let index = transaction.get("zero_idx").unwrap().as_u64().unwrap();
     let addr = EcPoint {
         x: BigInt::from_str(

@@ -8,7 +8,7 @@ use crate::{
     transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree, utils::notes::Note,
 };
 
-use super::helpers::{
+use super::super::helpers::{
     perp_helpers::{
         open_pos_after_liquidations, position_from_json, refund_partial_fill,
         return_collateral_on_close, update_liquidated_position, update_position_close,
@@ -35,61 +35,6 @@ pub fn restore_perp_order_execution(
 
     match order.get("position_effect_type").unwrap().as_str().unwrap() {
         "Open" => {
-            // TODO =======================================================================================================================================
-            let new_pfr_note = refund_partial_fill(transaction, is_a);
-            if let Some(new_pfr_note) = new_pfr_note {
-                let new_pfr_hash = &transaction
-                    .get(if is_a {
-                        "new_pfr_note_hash_a"
-                    } else {
-                        "new_pfr_note_hash_b"
-                    })
-                    .unwrap()
-                    .as_str()
-                    .unwrap();
-                if new_pfr_hash != &new_pfr_note.hash.to_string() {
-                    println!(
-                        "PFR NOTE HASH MISMETCH{} {}",
-                        new_pfr_hash,
-                        new_pfr_note.hash.to_string()
-                    );
-                }
-            }
-            // TODO =======================================================================================================================================
-
-            // ======
-
-            // TODO =======================================================================================================================================
-            let prev_position = transaction
-                .get(if is_a {
-                    "prev_position_a"
-                } else {
-                    "prev_position_b"
-                })
-                .unwrap();
-            let prev_position = if prev_position.is_null() {
-                None
-            } else {
-                Some(position_from_json(prev_position))
-            };
-
-            let updated_position = update_position_open(transaction, prev_position, is_a);
-
-            let new_pos_hash = transaction.get(if is_a {
-                "new_position_hash_a"
-            } else {
-                "new_position_hash_b"
-            });
-
-            if updated_position.hash.to_string() != new_pos_hash.unwrap().as_str().unwrap() {
-                println!(
-                    "Perp Order position hash: {} {}",
-                    updated_position.hash.to_string(),
-                    new_pos_hash.unwrap().as_str().unwrap()
-                );
-            }
-            // TODO =======================================================================================================================================
-
             if transaction
                 .get(if is_a {
                     "prev_pfr_note_a"
@@ -161,105 +106,7 @@ pub fn restore_perp_order_execution(
             }
         }
 
-        "Modify" => {
-            // TODO =======================================================================================================================================
-            let prev_position = transaction
-                .get(if is_a {
-                    "prev_position_a"
-                } else {
-                    "prev_position_b"
-                })
-                .unwrap();
-            let prev_position = position_from_json(prev_position);
-
-            let updated_position = update_position_modify(
-                transaction,
-                prev_position,
-                is_a,
-                funding_rates,
-                funding_prices,
-            );
-
-            let new_pos_hash = transaction.get(if is_a {
-                "new_position_hash_a"
-            } else {
-                "new_position_hash_b"
-            });
-
-            if updated_position.hash.to_string() != new_pos_hash.unwrap().as_str().unwrap() {
-                println!(
-                    "MODIFY: {} {}",
-                    updated_position.hash.to_string(),
-                    new_pos_hash.unwrap().as_str().unwrap()
-                );
-            }
-
-            // TODO =======================================================================================================================================
-        }
         "Close" => {
-            // TODO =======================================================================================================================================
-            let prev_position = transaction
-                .get(if is_a {
-                    "prev_position_a"
-                } else {
-                    "prev_position_b"
-                })
-                .unwrap();
-            let prev_position = position_from_json(prev_position);
-
-            let (collateral_returned, updated_position) = update_position_close(
-                transaction,
-                prev_position,
-                is_a,
-                funding_rates,
-                funding_prices,
-            );
-
-            let collateral_return_note =
-                return_collateral_on_close(transaction, is_a, collateral_returned);
-
-            // * ============== * //
-
-            let ret_coll_hash = &transaction
-                .get(if is_a {
-                    "return_collateral_hash_a"
-                } else {
-                    "return_collateral_hash_b"
-                })
-                .unwrap();
-
-            if ret_coll_hash.as_str().unwrap() != collateral_return_note.hash.to_string() {
-                println!(
-                    "RETURN COLLATERAL NOTE HASH MISMATCH: {} {}",
-                    ret_coll_hash.as_str().unwrap(),
-                    collateral_return_note.hash.to_string()
-                );
-            }
-
-            let new_pos_hash = transaction.get(if is_a {
-                "new_position_hash_a"
-            } else {
-                "new_position_hash_b"
-            });
-
-            let updated_hash = if let Some(pos) = updated_position {
-                pos.hash.to_string()
-            } else {
-                String::from("0")
-            };
-
-            let new_pos_hash_test = if let Some(hash) = new_pos_hash.unwrap().as_str() {
-                hash
-            } else {
-                "0"
-            };
-
-            if updated_hash != new_pos_hash_test {
-                println!("CLOSE: {} {}", updated_hash, new_pos_hash_test);
-            }
-
-            // TODO =======================================================================================================================================
-
             // ? Close position
             restore_return_collateral_note(
                 tree_m,
@@ -371,47 +218,7 @@ pub fn restore_liquidation_order_execution(
         .as_str()
         .unwrap();
 
-    // TODO =======================================================================================================================================
-
-    let liquidated_position = transaction
-        .get("liquidation_order")
-        .unwrap()
-        .get("position")
-        .unwrap();
-    let liquidated_position = position_from_json(liquidated_position);
-
-    let (liquidated_size, liquidator_fee, liquidated_position) = update_liquidated_position(
-        transaction,
-        liquidated_position,
-        funding_rates,
-        funding_prices,
-    );
-
-    let new_position = open_pos_after_liquidations(transaction, liquidated_size, liquidator_fee);
-
-    let liq_pos_hash = if let Some(pos) = liquidated_position {
-        pos.hash.to_string()
-    } else {
-        String::from("0")
-    };
-
-    if liq_pos_hash != new_liquidated_position_hash {
-        println!(
-            "LIQUIDATION: {} {}",
-            liq_pos_hash, new_liquidated_position_hash
-        );
-    }
-
-    if new_position.hash.to_string() != new_position_hash {
-        println!(
-            "LIQUIDATION: {} {}",
-            new_position.hash.to_string(),
-            new_position_hash
-        );
-    }
-
-    // TODO =======================================================================================================================================
-
+   
     tree.update_leaf_node(
         &BigUint::from_str(new_position_hash).unwrap(),
         new_position_idx,

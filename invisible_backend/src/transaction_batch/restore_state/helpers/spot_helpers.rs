@@ -179,6 +179,76 @@ pub fn restore_partial_fill_refund_note(
 
 // * ORDER TABS * //
 
+// * Order tabs ** //
+pub fn get_updated_order_tab(transaction: &Map<String, Value>, is_a: bool) -> OrderTab {
+    // ? Get the info --------------------------
+
+    let tab_json = transaction
+        .get(if is_a {
+            "prev_order_tab_a"
+        } else {
+            "prev_order_tab_b"
+        })
+        .unwrap();
+
+    let order_json: &Value = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a { "order_a" } else { "order_b" })
+        .unwrap();
+    let token_received = order_json.get("token_received").unwrap().as_u64().unwrap() as u32;
+
+    let spent_amount_x = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a {
+            "spent_amount_a"
+        } else {
+            "spent_amount_b"
+        })
+        .unwrap()
+        .as_u64()
+        .unwrap();
+
+    let spent_amount_y = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a {
+            "spent_amount_b"
+        } else {
+            "spent_amount_a"
+        })
+        .unwrap()
+        .as_u64()
+        .unwrap();
+
+    let fee_taken_x = transaction
+        .get("swap_data")
+        .unwrap()
+        .get(if is_a { "fee_taken_a" } else { "fee_taken_b" })
+        .unwrap()
+        .as_u64()
+        .unwrap();
+
+    // ? Make the update
+
+    let mut order_tab = order_tab_from_json(tab_json);
+
+    let is_buy = order_tab.tab_header.base_token == token_received;
+
+    if is_buy {
+        order_tab.quote_amount -= spent_amount_x;
+        order_tab.base_amount += spent_amount_y - fee_taken_x;
+    } else {
+        order_tab.base_amount -= spent_amount_x;
+        order_tab.quote_amount += spent_amount_y - fee_taken_x;
+    }
+
+    order_tab.update_hash();
+
+    return order_tab;
+}
+
 pub fn open_new_tab(transaction: &Map<String, Value>) -> OrderTab {
     let add_only = transaction.get("add_only").unwrap().as_bool().unwrap();
 
@@ -259,6 +329,21 @@ pub fn close_tab(
 }
 
 // * HELPERS * //
+
+pub fn note_from_json(note_json: &Value) -> Note {
+    let index = note_json.get("index").unwrap().as_u64().unwrap();
+    let token = note_json.get("token").unwrap().as_u64().unwrap() as u32;
+    let amount = note_json.get("amount").unwrap().as_u64().unwrap();
+
+    let addr = note_json.get("address").unwrap();
+    let address = EcPoint::new(
+        &BigUint::from_str(addr.get("x").unwrap().as_str().unwrap()).unwrap(),
+        &BigUint::from_str(addr.get("y").unwrap().as_str().unwrap()).unwrap(),
+    );
+    let blinding = BigUint::from_str(note_json.get("blinding").unwrap().as_str().unwrap()).unwrap();
+
+    return Note::new(index, address, token, amount, blinding);
+}
 
 pub fn order_tab_from_json(tab_json: &Value) -> OrderTab {
     let tab_header = tab_json.get("tab_header").unwrap();
