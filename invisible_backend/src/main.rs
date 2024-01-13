@@ -2,14 +2,18 @@ use invisible_backend::utils::cairo_output::{format_cairo_ouput, preprocess_cair
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let prog_output = format_cairo_ouput(test_program_output());
-    let prog_output = preprocess_cairo_output(prog_output);
+    // let prog_output = format_cairo_ouput(test_program_output());
+    // let prog_output = preprocess_cairo_output(prog_output);
 
-    println!("[");
-    for val in prog_output {
-        println!("{}n,", val);
-    }
-    println!("]");
+    // println!("[");
+    // for val in prog_output {
+    //     println!("{}n,", val);
+    // }
+    // println!("]");
+
+
+    
+
 
     Ok(())
 }

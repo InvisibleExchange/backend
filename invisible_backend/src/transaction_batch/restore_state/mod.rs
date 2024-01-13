@@ -44,8 +44,6 @@ pub fn _restore_state_inner(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     perpetual_partial_fill_tracker: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
-    funding_rates: &HashMap<u32, Vec<i64>>,
-    funding_prices: &HashMap<u32, Vec<u64>>,
     transactions: Vec<Map<String, Value>>,
 ) {
     for transaction in transactions {
@@ -54,6 +52,8 @@ pub fn _restore_state_inner(
             .unwrap()
             .as_str()
             .unwrap();
+
+        println!("transaction_type: {:?}", transaction_type);
 
         match transaction_type {
             "deposit" => {
@@ -99,8 +99,6 @@ pub fn _restore_state_inner(
                     &state_tree,
                     &updated_state_hashes,
                     &perpetual_partial_fill_tracker,
-                    funding_rates,
-                    funding_prices,
                     &transaction,
                     true,
                 );
@@ -110,8 +108,6 @@ pub fn _restore_state_inner(
                     &state_tree,
                     &updated_state_hashes,
                     &perpetual_partial_fill_tracker,
-                    funding_rates,
-                    funding_prices,
                     &transaction,
                     false,
                 );
@@ -119,8 +115,6 @@ pub fn _restore_state_inner(
             "liquidation_order" => restore_liquidation_order_execution(
                 &state_tree,
                 &updated_state_hashes,
-                funding_rates,
-                funding_prices,
                 &transaction,
             ),
             "margin_change" => {
@@ -163,7 +157,7 @@ pub fn _get_da_updates_inner(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
     funding_rates: &HashMap<u32, Vec<i64>>,
     funding_prices: &HashMap<u32, Vec<u64>>,
-    transactions: Vec<Map<String, Value>>,
+    transactions: &Vec<Map<String, Value>>,
 ) -> (BigUint, Vec<String>) {
     let mut note_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
     let mut position_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
@@ -243,18 +237,24 @@ pub fn _get_da_updates_inner(
             "note_split" => {
                 note_split_da_output(updated_state_hashes, &mut note_outputs, &transaction)
             }
-            "open_order_tab" => open_order_tab_da_output(
-                updated_state_hashes,
-                &mut note_outputs,
-                &mut tab_outputs,
-                &transaction,
-            ),
-            "close_order_tab" => close_order_tab_da_ouput(
-                updated_state_hashes,
-                &mut note_outputs,
-                &mut tab_outputs,
-                &transaction,
-            ),
+            "open_order_tab" => {
+                open_order_tab_da_output(
+                    updated_state_hashes,
+                    &mut note_outputs,
+                    &mut tab_outputs,
+                    &transaction,
+                );
+            }
+            "close_order_tab" => {
+                println!("close_order_tab");
+
+                close_order_tab_da_ouput(
+                    updated_state_hashes,
+                    &mut note_outputs,
+                    &mut tab_outputs,
+                    &transaction,
+                )
+            }
             "onchain_mm_action" => onchain_mm_action_da_output(
                 updated_state_hashes,
                 &mut position_outputs,
@@ -290,6 +290,14 @@ pub fn _get_da_updates_inner(
     position_outputs.sort_unstable();
     tab_outputs.sort_unstable();
     zero_indexes.sort_unstable();
+
+    // Remove duplicates
+    note_outputs.dedup();
+    position_outputs.dedup();
+    tab_outputs.dedup();
+    zero_indexes.dedup();
+
+    println!("tab_outputs: {:?}", tab_outputs);
 
     // Join all the outputs into a single vector
     let mut data_output: Vec<BigUint> = Vec::new();

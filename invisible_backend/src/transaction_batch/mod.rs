@@ -49,7 +49,7 @@ use crate::transaction_batch::{
 use self::{
     batch_functions::{
         admin_functions::{_init_inner, _per_minute_funding_updates, _update_index_prices_inner},
-        batch_transition::{_finalize_batch_inner, _transition_state},
+        batch_transition::{_construct_da_output, _finalize_batch_inner, _transition_state},
         state_modifications::{
             _change_position_margin_inner, _execute_order_tab_modification_inner,
             _execute_sc_mm_modification_inner, _split_notes_inner,
@@ -455,6 +455,16 @@ impl TransactionBatch {
         // TODO: This requires spinning up a spot instances on aws to handle the load
         _transition_state(&self.main_storage, batch_transition_info)?;
 
+        // * =================================================================
+
+        let tx_batch_index = self.main_storage.lock().latest_batch - 1;
+        _construct_da_output(
+            &self.main_storage,
+            &self.funding_rates,
+            &self.funding_prices,
+            tx_batch_index,
+        );
+
         Ok(())
     }
 
@@ -466,8 +476,6 @@ impl TransactionBatch {
             &self.state_tree,
             &self.updated_state_hashes,
             &self.perpetual_partial_fill_tracker,
-            &self.funding_rates,
-            &self.funding_prices,
             transactions,
         )
     }

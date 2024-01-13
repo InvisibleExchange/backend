@@ -12,8 +12,6 @@ use crate::{
     utils::notes::Note,
 };
 
-use super::perp_helpers::position_from_json;
-
 // * UPDATE MARGIN RESTORE FUNCTIONS ================================================================================
 
 pub fn restore_margin_update(

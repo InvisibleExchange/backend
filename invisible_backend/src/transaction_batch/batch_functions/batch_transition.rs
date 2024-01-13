@@ -1,10 +1,12 @@
 use num_bigint::BigUint;
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use serde_json::{to_vec, Map, Value};
 use std::{collections::HashMap, path::Path, sync::Arc, time::SystemTime};
 
 use error_stack::Result;
 
+use crate::transaction_batch::restore_state::_get_da_updates_inner;
 use crate::trees::{superficial_tree::SuperficialTree, Tree};
 use crate::utils::storage::local_storage::MainStorage;
 use crate::{
@@ -28,7 +30,7 @@ const PARTITION_SIZE_EXPONENT: u32 = 12;
 
 //
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchTransitionInfo {
     pub current_batch_index: u32,
     pub funding_info: FundingInfo,
@@ -57,14 +59,14 @@ pub fn _finalize_batch_inner(
     state_tree.update_zero_idxs();
 
     let main_storage = main_storage.clone();
-    let mut main_storage = main_storage.lock();
+    let mut main_storage_m = main_storage.lock();
     let latest_output_json = swap_output_json.clone();
     let latest_output_json = latest_output_json.lock();
 
-    let current_batch_index = main_storage.latest_batch;
+    let current_batch_index = main_storage_m.latest_batch;
 
     // ? Store the latest output json
-    main_storage.store_micro_batch(&latest_output_json);
+    main_storage_m.store_micro_batch(&latest_output_json);
 
     let min_funding_idxs = &min_funding_idxs;
     let funding_rates = &funding_rates;
@@ -87,7 +89,7 @@ pub fn _finalize_batch_inner(
 
     // ? Drop the locks before updating the trees
     drop(state_tree);
-    drop(main_storage);
+    drop(main_storage_m);
     drop(updated_state_hashes_c);
 
     // ? Reset the batch
@@ -127,13 +129,20 @@ pub fn _finalize_batch_inner(
         serde_json::to_value(&rough_timestamp).unwrap_or_default(),
     );
 
-    BatchTransitionInfo {
+    let batch_transition_info = BatchTransitionInfo {
         current_batch_index,
         funding_info,
         price_info_json,
         updated_state_hashes,
         exchange_state_storage,
-    }
+    };
+
+    // ? Store the batch transition info locally
+    let main_storage_m = main_storage.lock();
+    main_storage_m.store_batch_transition_info(&batch_transition_info);
+    drop(main_storage_m);
+
+    return batch_transition_info;
 }
 
 /// This function updates the merkle trees and stores them to disk.
@@ -182,8 +191,58 @@ pub fn _transition_state(
         preimage_json,
     );
 
-    // & Write transaction batch json to database
+    // & Store the transactions and the tx_batch info in the database
+    store_transactions_data(
+        output_json,
+        batch_transition_info.current_batch_index,
+        batch_transition_info.exchange_state_storage,
+        &main_storage_m,
+    );
 
+    println!("Transaction batch finalized successfully!");
+
+    return Ok(());
+}
+
+pub fn _construct_da_output(
+    main_storage_m: &Arc<Mutex<MainStorage>>,
+    funding_rates: &HashMap<u32, Vec<i64>>,
+    funding_prices: &HashMap<u32, Vec<u64>>,
+    tx_batch_index: u32,
+) {
+    let main_storage = main_storage_m.lock();
+    let swap_output_json = main_storage.read_storage(1);
+
+    let batch_transition_info = main_storage
+        .read_batch_transition_info(tx_batch_index)
+        .unwrap();
+    drop(main_storage);
+
+    let (da_commitment, da_output_data) = _get_da_updates_inner(
+        &batch_transition_info.updated_state_hashes,
+        &funding_rates,
+        &funding_prices,
+        &swap_output_json,
+    );
+
+    // for (i, val) in da_output_data.iter().enumerate() {
+    //     println!("{},", val);
+    // }
+
+    println!("DA Commitment: {}", da_commitment);
+
+    store_da_data_output(da_output_data, batch_transition_info.current_batch_index);
+}
+
+// * ======================================================================================
+
+/// Stores all the transactions in the database
+fn store_transactions_data(
+    output_json: Map<String, Value>,
+    current_batch_index: u32,
+    exchange_state_storage: Map<String, Value>,
+    main_storage_m: &Arc<Mutex<MainStorage>>,
+) {
     // Todo: This is for testing only ----------------------------
     let path =
         Path::new("../../prover_contracts/cairo_contracts/transaction_batch/tx_batch_input.json");
@@ -209,7 +268,7 @@ pub fn _transition_state(
         // ? Store the transactions
         let serialized_data = to_vec(&output_json).expect("Serialization failed");
         if let Err(e) = upload_file_to_storage(
-            "tx_batches/".to_string() + &batch_transition_info.current_batch_index.to_string(),
+            "tx_batches/".to_string() + &current_batch_index.to_string(),
             serialized_data,
         )
         .await
@@ -218,12 +277,9 @@ pub fn _transition_state(
         }
 
         // ? store other relevant state info
-        let serialized_data =
-            to_vec(&batch_transition_info.exchange_state_storage).expect("Serialization failed");
+        let serialized_data = to_vec(&exchange_state_storage).expect("Serialization failed");
         if let Err(e) = upload_file_to_storage(
-            "tx_batches/".to_string()
-                + &batch_transition_info.current_batch_index.to_string()
-                + "_state_info",
+            "tx_batches/".to_string() + &current_batch_index.to_string() + "_state_info",
             serialized_data,
         )
         .await
@@ -231,14 +287,25 @@ pub fn _transition_state(
             println!("Error uploading file to storage: {:?}", e);
         }
     });
-
-    println!("Transaction batch finalized successfully!");
-
-    return Ok(());
 }
 
-// * ======================================================================================
+/// Stores The DA output data in the database
+fn store_da_data_output(da_output: Vec<String>, current_batch_index: u32) {
+    let _handle = tokio::spawn(async move {
+        // ? Store the transactions
+        let serialized_data = to_vec(&da_output).expect("Serialization failed");
+        if let Err(e) = upload_file_to_storage(
+            "da_output/".to_string() + &current_batch_index.to_string(),
+            serialized_data,
+        )
+        .await
+        {
+            println!("Error uploading file to storage: {:?}", e);
+        }
+    });
+}
 
+// & TREE UPDATES ------------------------------ & //
 pub fn update_trees(
     updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)>,
 ) -> Result<(BigUint, BigUint, Map<String, Value>), BatchFinalizationError> {

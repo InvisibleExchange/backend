@@ -42,21 +42,22 @@ pub fn update_position_open(
         let leverage = (spent_collateral as u128 * 10_u128.pow(LEVERAGE_DECIMALS as u32)
             / (init_margin - fee_taken) as u128) as u64;
 
-        // println!("order: {:#?}", order);
         let open_order_fields = order.get("open_order_fields").unwrap();
-        let allow_partial_liquidations = open_order_fields
-            .get("allow_partial_liquidations")
-            .unwrap()
-            .as_bool()
-            .unwrap_or(
-                // TODO: Delete this later
-                open_order_fields
-                    .get("allow_partial_liquidations")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    == "true",
-            );
+
+        let allow_partial_liq = open_order_fields.get("allow_partial_liquidations").unwrap();
+
+        let allow_partial_liquidations;
+        if let Some(res) = allow_partial_liq.as_bool() {
+            allow_partial_liquidations = res;
+        } else {
+            // TODO: Delete this later
+            allow_partial_liquidations = open_order_fields
+                .get("allow_partial_liquidations")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                == "true";
+        }
 
         let position_address = open_order_fields
             .get("position_address")

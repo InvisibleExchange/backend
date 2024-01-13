@@ -253,11 +253,6 @@ pub fn open_new_tab(transaction: &Map<String, Value>) -> OrderTab {
     let add_only = transaction.get("add_only").unwrap().as_bool().unwrap();
 
     if add_only {
-        let order_tab = transaction.get("order_tab").unwrap();
-        let order_tab = order_tab_from_json(order_tab);
-
-        return order_tab;
-    } else {
         let prev_order_tab = transaction.get("order_tab").unwrap();
         let mut order_tab = order_tab_from_json(prev_order_tab);
 
@@ -282,6 +277,11 @@ pub fn open_new_tab(transaction: &Map<String, Value>) -> OrderTab {
         order_tab.quote_amount += quote_amount;
 
         order_tab.update_hash();
+
+        return order_tab;
+    } else {
+        let order_tab = transaction.get("order_tab").unwrap();
+        let order_tab = order_tab_from_json(order_tab);
 
         return order_tab;
     }
@@ -356,11 +356,15 @@ pub fn order_tab_from_json(tab_json: &Value) -> OrderTab {
         BigUint::from_str(tab_header.get("pub_key").unwrap().as_str().unwrap()).unwrap(),
     );
 
-    return OrderTab::new(
+    let mut order_tab = OrderTab::new(
         tab_header,
         tab_json.get("base_amount").unwrap().as_u64().unwrap(),
         tab_json.get("quote_amount").unwrap().as_u64().unwrap(),
     );
+
+    order_tab.tab_idx = tab_json.get("tab_idx").unwrap().as_u64().unwrap() as u32;
+
+    return order_tab;
 }
 
 fn sum_notes_in(notes_in: &Vec<Value>, refund_note: &Value) -> u64 {
@@ -368,7 +372,11 @@ fn sum_notes_in(notes_in: &Vec<Value>, refund_note: &Value) -> u64 {
     for note in notes_in {
         sum += note.get("amount").unwrap().as_u64().unwrap();
     }
-    sum -= refund_note.get("amount").unwrap().as_u64().unwrap();
+
+    if !refund_note.is_null() {
+        sum -= refund_note.get("amount").unwrap().as_u64().unwrap();
+    }
+
     return sum;
 }
 

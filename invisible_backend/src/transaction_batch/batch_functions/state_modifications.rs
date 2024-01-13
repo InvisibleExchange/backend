@@ -247,10 +247,6 @@ pub fn _change_position_margin_inner(
             String::from("new_position_hash"),
             serde_json::to_value(position.hash.to_string()).unwrap(),
         );
-        json_map.insert(
-            String::from("zero_idx"),
-            serde_json::to_value(z_index).unwrap(),
-        );
 
         let mut swap_output_json = swap_output_json.lock();
         swap_output_json.push(json_map);
@@ -291,11 +287,11 @@ pub fn _change_position_margin_inner(
     } else {
         let mut tree = state_tree.lock();
 
-        let index = tree.first_zero_idx();
+        z_index = tree.first_zero_idx();
         drop(tree);
 
         let return_collateral_note = Note::new(
-            index,
+            z_index,
             margin_change
                 .close_order_fields
                 .as_ref()
@@ -349,8 +345,6 @@ pub fn _change_position_margin_inner(
 
         let _handle =
             start_add_note_thread(return_collateral_note, &firebase_session, &backup_storage);
-
-        z_index = index;
     }
 
     Ok((z_index, position))

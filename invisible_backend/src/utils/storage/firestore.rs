@@ -213,12 +213,12 @@ pub fn start_add_position_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
 
-        let valid_indexes: Vec<u32> = vec![0, 1, 10, 2, 3, 7];
+        // let valid_indexes: Vec<u32> = vec![0, 1, 10, 2, 3, 7];
 
         // TODO
-        if valid_indexes.contains(&position.index) {
-            store_new_position(&session_, &backup, &position);
-        }
+        // if valid_indexes.contains(&position.index) {
+        store_new_position(&session_, &backup, &position);
+        // }
 
         store_new_position(&session_, &backup, &position);
         drop(session_);

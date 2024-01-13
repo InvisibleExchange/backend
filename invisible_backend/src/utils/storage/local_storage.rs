@@ -7,8 +7,12 @@ use serde_json::{json, Map, Value};
 use sled::Config;
 
 use crate::{
-    order_tab::OrderTab, perpetual::perp_position::PerpPosition,
-    transaction_batch::tx_batch_structs::OracleUpdate, utils::notes::Note,
+    order_tab::OrderTab,
+    perpetual::perp_position::PerpPosition,
+    transaction_batch::{
+        batch_functions::batch_transition::BatchTransitionInfo, tx_batch_structs::OracleUpdate,
+    },
+    utils::notes::Note,
 };
 
 use super::firestore::upload_file_to_storage;
@@ -33,10 +37,10 @@ pub struct MainStorage {
     pub state_updates_db: sled::Db, // Stores the state updates of the transactions executed this batch (notes/positions/orders)
     pub price_db: sled::Db, // Stores the price data of the current batch (min/max price with signatures)
     pub funding_db: sled::Db, // Stores the funding data since the begining(funding rates/prices)
-    pub processed_deposits_db: sled::Db, // Deposit ids of all the deposits that were processed so far
     pub registerd_onchain_actions_db: sled::Db, // Onchain actions that were registered by the server
     pub latest_batch: u32,                      // every transaction batch stores data separately
     pub db_pending_updates: sled::Db, // small batches of txs that get pushed to the db periodically
+    pub batch_transition_info_db: sled::Db, // stores the batch transition info after every batch
 }
 
 impl MainStorage {
@@ -44,13 +48,12 @@ impl MainStorage {
         let dir = fs::read_dir("storage/transaction_data");
 
         let batch_index = match dir {
-            Ok(dir) => {
-                dir.filter(|entry| entry.as_ref().map(|e| e.path().is_dir()).unwrap_or(false))
-                    .count()
-                    - 1
-            }
-            Err(_) => 0,
+            Ok(dir) => dir
+                .filter(|entry| entry.as_ref().map(|e| e.path().is_dir()).unwrap_or(false))
+                .count(),
+            Err(_) => 1,
         };
+        println!("batch index: {}", batch_index);
 
         let config = Config::new()
             .path("./storage/transaction_data/".to_string() + &batch_index.to_string());
@@ -67,24 +70,24 @@ impl MainStorage {
         let config = Config::new().path("./storage/funding_info".to_string());
         let funding_db = config.open().unwrap();
 
-        let config = Config::new().path("./storage/processed_deposits".to_string());
-        let processed_deposits_db = config.open().unwrap();
-
         let config = Config::new().path("./storage/registered_actions".to_string());
         let registerd_onchain_actions_db = config.open().unwrap();
 
         let config = Config::new().path("./storage/db_pending_updates".to_string());
         let db_pending_updates = config.open().unwrap();
 
+        let config = Config::new().path("./storage/batch_transition_info/".to_string());
+        let batch_transition_info_db = config.open().unwrap();
+
         MainStorage {
             tx_db,
             state_updates_db,
             price_db,
             funding_db,
-            processed_deposits_db,
             registerd_onchain_actions_db,
             latest_batch: batch_index as u32,
             db_pending_updates,
+            batch_transition_info_db,
         }
     }
 
@@ -495,6 +498,31 @@ impl MainStorage {
 
     // * BATCH TRANSITION ————————————————————————————————————————————————————————————————- //
 
+    pub fn store_batch_transition_info(&self, batch_transition_info: &BatchTransitionInfo) {
+        self.batch_transition_info_db
+            .insert(
+                &self.latest_batch.to_string(),
+                serde_json::to_vec(batch_transition_info).unwrap(),
+            )
+            .unwrap();
+    }
+
+    pub fn read_batch_transition_info(&self, batch_index: u32) -> Option<BatchTransitionInfo> {
+        let batch_transition_info = self
+            .batch_transition_info_db
+            .get(&batch_index.to_string())
+            .unwrap();
+
+        if let None = batch_transition_info {
+            return None;
+        }
+
+        let batch_transition_info: BatchTransitionInfo =
+            serde_json::from_slice(&batch_transition_info.unwrap().to_vec()).unwrap();
+
+        Some(batch_transition_info)
+    }
+
     /// Clears the storage to make room for the next batch.
     ///
     pub fn transition_to_new_batch(
@@ -502,13 +530,21 @@ impl MainStorage {
     ) -> Option<impl std::future::Future<Output = StorageResult>> {
         let new_batch_index = self.latest_batch + 1;
 
+        if new_batch_index >= 5 {
+            // ? delete the oldest batch
+            let oldest_batch_index = new_batch_index - 5;
+
+            let _ = fs::remove_dir_all(
+                "storage/transaction_data/".to_string() + &oldest_batch_index.to_string(),
+            );
+            let _ = self
+                .batch_transition_info_db
+                .remove(&oldest_batch_index.to_string());
+        }
+
         let config = Config::new()
             .path("./storage/transaction_data/".to_string() + &new_batch_index.to_string());
         let tx_db = config.open().unwrap();
-
-        // Todo: We could store funding and pricing info in the db
-        // let price_data = self.read_price_data();
-        // let funding_info = self.read_funding_info().ok();
 
         self.tx_db = tx_db;
         self.latest_batch = new_batch_index;

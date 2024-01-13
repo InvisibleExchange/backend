@@ -6,12 +6,6 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crate::{transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree};
 
-use super::super::helpers::{
-    perp_helpers::position_from_json,
-    spot_helpers::{close_tab, open_new_tab, order_tab_from_json},
-    state_helpers::restore_mm_action,
-};
-
 // * OPEN ORDER TAB RESTORE FUNCTIONS ================================================================================
 
 pub fn restore_open_order_tab(
@@ -161,7 +155,6 @@ pub fn restore_onchain_mm_action(
         .unwrap();
     let pos_hash = BigUint::from_str(pos_hash).unwrap();
 
-   
     state_tree_m.update_leaf_node(&pos_hash, idx);
     updated_state_hashes_m.insert(idx, (LeafNodeType::Position, pos_hash));
 

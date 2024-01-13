@@ -8,24 +8,15 @@ use crate::{
     transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree, utils::notes::Note,
 };
 
-use super::super::helpers::{
-    perp_helpers::{
-        open_pos_after_liquidations, position_from_json, refund_partial_fill,
-        return_collateral_on_close, update_liquidated_position, update_position_close,
-        update_position_modify, update_position_open,
-    },
-    perp_state_updates::{
-        restore_after_perp_swap_first_fill, restore_after_perp_swap_later_fills,
-        restore_perpetual_state, restore_return_collateral_note,
-    },
+use super::super::helpers::perp_state_updates::{
+    restore_after_perp_swap_first_fill, restore_after_perp_swap_later_fills,
+    restore_perpetual_state, restore_return_collateral_note,
 };
 
 pub fn restore_perp_order_execution(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     perpetual_partial_fill_tracker_m: &Arc<Mutex<HashMap<u64, (Option<Note>, u64, u64)>>>,
-    funding_rates: &HashMap<u32, Vec<i64>>,
-    funding_prices: &HashMap<u32, Vec<u64>>,
     transaction: &Map<String, Value>,
     is_a: bool,
 ) {
@@ -154,8 +145,6 @@ pub fn restore_perp_order_execution(
 pub fn restore_liquidation_order_execution(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    funding_rates: &HashMap<u32, Vec<i64>>,
-    funding_prices: &HashMap<u32, Vec<u64>>,
     transaction: &Map<String, Value>,
 ) {
     let liquidation_order = transaction.get("liquidation_order").unwrap();
@@ -218,7 +207,6 @@ pub fn restore_liquidation_order_execution(
         .as_str()
         .unwrap();
 
-   
     tree.update_leaf_node(
         &BigUint::from_str(new_position_hash).unwrap(),
         new_position_idx,

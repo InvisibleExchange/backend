@@ -7,8 +7,6 @@ use serde_json::{Map, Value};
 
 use crate::{transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree};
 
-use super::super::helpers::perp_helpers::position_from_json;
-
 pub fn restore_forced_note_escape(
     tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,

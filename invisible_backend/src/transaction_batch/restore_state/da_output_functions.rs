@@ -344,16 +344,20 @@ pub fn open_order_tab_da_output(
     let base_refund_note = transaction.get("base_refund_note").unwrap();
     let quote_refund_note = transaction.get("quote_refund_note").unwrap();
 
-    append_note_output(
-        updated_state_hashes,
-        note_outputs,
-        &note_from_json(base_refund_note),
-    );
-    append_note_output(
-        updated_state_hashes,
-        note_outputs,
-        &note_from_json(quote_refund_note),
-    );
+    if !base_refund_note.is_null() {
+        append_note_output(
+            updated_state_hashes,
+            note_outputs,
+            &note_from_json(base_refund_note),
+        );
+    }
+    if !quote_refund_note.is_null() {
+        append_note_output(
+            updated_state_hashes,
+            note_outputs,
+            &note_from_json(quote_refund_note),
+        );
+    }
 
     let new_order_tab = open_new_tab(transaction);
     append_tab_output(updated_state_hashes, tab_outputs, &new_order_tab);
@@ -508,6 +512,7 @@ fn append_tab_output(
     let (leaf_type, leaf_hash) = updated_state_hashes
         .get(&(order_tab.tab_idx as u64))
         .unwrap();
+
     if leaf_type != &LeafNodeType::OrderTab || leaf_hash != &order_tab.hash {
         return;
     }
