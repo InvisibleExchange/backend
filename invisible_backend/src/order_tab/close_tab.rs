@@ -191,10 +191,6 @@ pub fn verfiy_close_order_hash(
 
     let hash = hash_many(&hash_inputs);
 
-    println!("hash: {:?}", hash);
-    println!("signature: {:?}", signature);
-    println!("pub_key: {:?}", order_tab.tab_header.pub_key);
-
     let valid = verify(&order_tab.tab_header.pub_key, &hash, signature);
 
     return valid;

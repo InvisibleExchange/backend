@@ -198,6 +198,8 @@ pub fn restore_deposit_update(
         let idx = note.get("index").unwrap().as_u64().unwrap();
         let hash = BigUint::from_str(note.get("hash").unwrap().as_str().unwrap()).unwrap();
 
+        println!("deposit update: {} {}", idx, hash.to_string());
+
         tree.update_leaf_node(&hash, idx);
         updated_state_hashes.insert(idx, (LeafNodeType::Note, hash));
     }

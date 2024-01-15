@@ -53,7 +53,6 @@ impl MainStorage {
                 .count(),
             Err(_) => 1,
         };
-        println!("batch index: {}", batch_index);
 
         let config = Config::new()
             .path("./storage/transaction_data/".to_string() + &batch_index.to_string());

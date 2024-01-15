@@ -435,27 +435,27 @@ impl TransactionBatch {
     // * FINALIZE BATCH
 
     pub fn finalize_batch(&mut self) -> Result<(), BatchFinalizationError> {
-        // TODO: This can only be executed if the previous batch was already executed
+        // // TODO: This can only be executed if the previous batch was already executed
 
-        let batch_transition_info = _finalize_batch_inner(
-            &self.state_tree,
-            &self.updated_state_hashes,
-            &self.swap_output_json,
-            &self.main_storage,
-            &self.insurance_fund,
-            &mut self.funding_rates,
-            &mut self.funding_prices,
-            &mut self.min_funding_idxs,
-            &mut self.min_index_price_data,
-            &mut self.max_index_price_data,
-        );
+        // let batch_transition_info = _finalize_batch_inner(
+        //     &self.state_tree,
+        //     &self.updated_state_hashes,
+        //     &self.swap_output_json,
+        //     &self.main_storage,
+        //     &self.insurance_fund,
+        //     &mut self.funding_rates,
+        //     &mut self.funding_prices,
+        //     &mut self.min_funding_idxs,
+        //     &mut self.min_index_price_data,
+        //     &mut self.max_index_price_data,
+        // );
 
-        // * =================================================================
+        // // * =================================================================
 
-        // TODO: This requires spinning up a spot instances on aws to handle the load
-        _transition_state(&self.main_storage, batch_transition_info)?;
+        // // TODO: This requires spinning up a spot instances on aws to handle the load
+        // _transition_state(&self.main_storage, batch_transition_info)?;
 
-        // * =================================================================
+        // // * =================================================================
 
         let tx_batch_index = self.main_storage.lock().latest_batch - 1;
         _construct_da_output(

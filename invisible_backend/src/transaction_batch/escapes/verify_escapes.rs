@@ -47,22 +47,22 @@ pub fn _execute_forced_escape_inner(
         let sig = escape_message.signature.unwrap();
         let signature = Signature { r: sig.r, s: sig.s };
 
-        // ? Verify action has been registered
-        let data_commitment = get_note_escape_commitment(escape_id, &escape_notes, &signature);
-        let main_storage_m = main_storage.lock();
-        if main_storage_m.does_commitment_exists(
-            OnchainActionType::NoteEscape,
-            escape_id as u64 * 2_u64.pow(40),
-            &data_commitment,
-        ) {
-            return Err("Position Escape not registered".to_string());
-        }
-        main_storage_m.register_onchain_action(
-            OnchainActionType::NoteEscape,
-            escape_id as u64 * 2_u64.pow(40),
-            data_commitment,
-        );
-        drop(main_storage_m);
+        // // ? Verify action has been registered
+        // let data_commitment = get_note_escape_commitment(escape_id, &escape_notes, &signature);
+        // let main_storage_m = main_storage.lock();
+        // if main_storage_m.does_commitment_exists(
+        //     OnchainActionType::NoteEscape,
+        //     escape_id as u64 * 2_u64.pow(40),
+        //     &data_commitment,
+        // ) {
+        //     return Err("Position Escape not registered".to_string());
+        // }
+        // main_storage_m.register_onchain_action(
+        //     OnchainActionType::NoteEscape,
+        //     escape_id as u64 * 2_u64.pow(40),
+        //     data_commitment,
+        // );
+        // drop(main_storage_m);
 
         let note_escape = verify_note_escape(
             &state_tree,
@@ -97,22 +97,22 @@ pub fn _execute_forced_escape_inner(
         let sig = escape_message.signature.unwrap();
         let signature = Signature { r: sig.r, s: sig.s };
 
-        // ? Verify tab escape has been registered
-        let data_commitment = get_tab_escape_commitment(escape_id, &order_tab, &signature);
-        let main_storage_m = main_storage.lock();
-        if main_storage_m.does_commitment_exists(
-            OnchainActionType::TabEscape,
-            escape_id as u64 * 2_u64.pow(40),
-            &data_commitment,
-        ) {
-            return Err("Position Escape not registered".to_string());
-        }
-        main_storage_m.register_onchain_action(
-            OnchainActionType::TabEscape,
-            escape_id as u64 * 2_u64.pow(40),
-            data_commitment,
-        );
-        drop(main_storage_m);
+        // // ? Verify tab escape has been registered
+        // let data_commitment = get_tab_escape_commitment(escape_id, &order_tab, &signature);
+        // let main_storage_m = main_storage.lock();
+        // if main_storage_m.does_commitment_exists(
+        //     OnchainActionType::TabEscape,
+        //     escape_id as u64 * 2_u64.pow(40),
+        //     &data_commitment,
+        // ) {
+        //     return Err("Position Escape not registered".to_string());
+        // }
+        // main_storage_m.register_onchain_action(
+        //     OnchainActionType::TabEscape,
+        //     escape_id as u64 * 2_u64.pow(40),
+        //     data_commitment,
+        // );
+        // drop(main_storage_m);
 
         let tab_escape = verify_order_tab_escape(
             state_tree,

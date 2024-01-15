@@ -53,8 +53,6 @@ pub fn _restore_state_inner(
             .as_str()
             .unwrap();
 
-        println!("transaction_type: {:?}", transaction_type);
-
         match transaction_type {
             "deposit" => {
                 let deposit = transaction.get("deposit").unwrap();
@@ -245,16 +243,12 @@ pub fn _get_da_updates_inner(
                     &transaction,
                 );
             }
-            "close_order_tab" => {
-                println!("close_order_tab");
-
-                close_order_tab_da_ouput(
-                    updated_state_hashes,
-                    &mut note_outputs,
-                    &mut tab_outputs,
-                    &transaction,
-                )
-            }
+            "close_order_tab" => close_order_tab_da_ouput(
+                updated_state_hashes,
+                &mut note_outputs,
+                &mut tab_outputs,
+                &transaction,
+            ),
             "onchain_mm_action" => onchain_mm_action_da_output(
                 updated_state_hashes,
                 &mut position_outputs,
@@ -266,6 +260,7 @@ pub fn _get_da_updates_inner(
                 "position_escape" => {
                     forced_position_escape_da_output(
                         updated_state_hashes,
+                        &mut note_outputs,
                         &mut position_outputs,
                         &transaction,
                     );
@@ -296,8 +291,6 @@ pub fn _get_da_updates_inner(
     position_outputs.dedup();
     tab_outputs.dedup();
     zero_indexes.dedup();
-
-    println!("tab_outputs: {:?}", tab_outputs);
 
     // Join all the outputs into a single vector
     let mut data_output: Vec<BigUint> = Vec::new();

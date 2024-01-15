@@ -397,9 +397,23 @@ pub fn onchain_mm_action_da_output(
 // * FORCED ESCAPES DA FUNCTIONS =====================================================================================
 pub fn forced_position_escape_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
+    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
     position_outputs: &mut Vec<(u64, [BigUint; 3])>,
     transaction: &Map<String, Value>,
 ) {
+    let position_escape = transaction.get("position_escape").unwrap();
+    let open_order_fields_b = position_escape.get("open_order_fields_b").unwrap();
+    if !open_order_fields_b.is_null() {
+        let refund_note = open_order_fields_b.get("refund_note").unwrap();
+        if !refund_note.is_null() {
+            append_note_output(
+                updated_state_hashes,
+                note_outputs,
+                &note_from_json(refund_note),
+            );
+        }
+    }
+
     let new_position_b = transaction.get("new_position_b").unwrap();
     let new_position_b = position_from_json(new_position_b);
 
@@ -417,6 +431,7 @@ fn append_note_output(
     note: &Note,
 ) {
     let (leaf_type, leaf_hash) = updated_state_hashes.get(&note.index).unwrap();
+
     if leaf_type != &LeafNodeType::Note || leaf_hash != &note.hash {
         return;
     }
