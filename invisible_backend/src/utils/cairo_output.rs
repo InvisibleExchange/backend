@@ -596,7 +596,7 @@ fn parse_note_outputs(output: &[BigUint], num_notes: u32) -> (Vec<NoteOutput>, &
         let commitment = &output[(i * 3 + 1) as usize];
         let address = &output[(i * 3 + 2) as usize];
 
-        let hash = hash_note(token, &commitment, &address).to_string();
+        let hash = hash_note_output(token, &commitment, &address).to_string();
 
         let note = NoteOutput {
             index,
@@ -615,7 +615,7 @@ fn parse_note_outputs(output: &[BigUint], num_notes: u32) -> (Vec<NoteOutput>, &
     return (notes, shifted_output);
 }
 
-fn hash_note(token: u32, commitment: &BigUint, address_x: &BigUint) -> BigUint {
+pub fn hash_note_output(token: u32, commitment: &BigUint, address_x: &BigUint) -> BigUint {
     let token = BigUint::from_u32(token).unwrap();
     let hash_input: Vec<&BigUint> = vec![&address_x, &token, &commitment];
 
@@ -673,7 +673,7 @@ fn parse_position_outputs(
 
         let public_key = &output[(i * 3 + 2) as usize];
 
-        let hash = _hash_position(
+        let hash = hash_position_output(
             synthetic_token,
             public_key,
             allow_partial_liquidations,
@@ -707,7 +707,7 @@ fn parse_position_outputs(
     return (positions, shifted_output);
 }
 
-fn _hash_position(
+pub fn hash_position_output(
     synthetic_token: u32,
     position_address: &BigUint,
     allow_partial_liquidations: bool,
@@ -782,7 +782,7 @@ fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOu
         let quote_commitment = &output[(i * 4 + 2) as usize];
         let public_key = &output[(i * 4 + 3) as usize];
 
-        let hash = hash_order_tab(
+        let hash = hash_order_tab_output(
             base_token,
             quote_token,
             &public_key,
@@ -811,7 +811,7 @@ fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOu
     return (order_tabs, shifted_output);
 }
 
-fn hash_order_tab(
+pub fn hash_order_tab_output(
     base_token: u32,
     quote_token: u32,
     pub_key: &BigUint,
@@ -894,7 +894,7 @@ pub fn preprocess_cairo_output(program_output: Vec<&str>) -> Vec<BigUint> {
     return arr;
 }
 
-fn split_by_bytes(num: &BigUint, bit_lenghts: Vec<u8>) -> Vec<BigUint> {
+pub fn split_by_bytes(num: &BigUint, bit_lenghts: Vec<u8>) -> Vec<BigUint> {
     // & returns a vector of values split by the bit_lenghts
 
     let mut peaces: Vec<BigUint> = Vec::new();

@@ -21,6 +21,7 @@ pub struct FirebaseNoteObject {
     pub hidden_amount: String,
     pub index: String,
     pub token: String,
+    pub hash: String,
 }
 
 impl FirebaseNoteObject {
@@ -43,6 +44,7 @@ impl FirebaseNoteObject {
             hidden_amount: hidden_amount.to_string(),
             index: note.index.to_string(),
             token: note.token.to_string(),
+            hash: note.hash.to_string(),
         };
     }
 }
