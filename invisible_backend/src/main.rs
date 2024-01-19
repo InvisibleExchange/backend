@@ -1,4 +1,14 @@
-use invisible_backend::utils::cairo_output::{format_cairo_ouput, preprocess_cairo_output};
+use invisible_backend::{
+    transaction_batch::{batch_functions::batch_transition::TREE_DEPTH, TransactionBatch},
+    utils::{
+        cairo_output::{format_cairo_ouput, preprocess_cairo_output},
+        storage::{get_state_at_index, StateValue},
+    },
+};
+use num_bigint::BigUint;
+use num_traits::Zero;
+use serde_json::to_vec;
+use sled::Config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,9 +21,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // }
     // println!("]");
 
+    let mut tx_batch = TransactionBatch::new(TREE_DEPTH);
+    tx_batch.init();
 
-    
+    let state_tree = tx_batch.state_tree.lock();
 
+    for i in 0..state_tree.leaf_nodes.len() {
+        let state_value = get_state_at_index(i as u64);
+
+        if state_value.is_none() {
+            assert!(
+                state_tree.leaf_nodes[i] == BigUint::zero(),
+                "state value at index {} is not zero",
+                i
+            );
+
+            continue;
+        }
+
+        match state_value.unwrap().1 {
+            StateValue::Note(note) => {
+                println!("note hash: {}", note.hash);
+
+                assert!(
+                    state_tree.leaf_nodes[i].to_string() == note.hash,
+                    "state value at index {} is not equal to note hash",
+                    i
+                );
+            }
+            StateValue::OrderTab(order_tab) => {
+                println!("order_tab hash: {}", order_tab.hash);
+
+                assert!(
+                    state_tree.leaf_nodes[i].to_string() == order_tab.hash,
+                    "state value at index {} is not equal to order tab hash",
+                    i
+                );
+            }
+            StateValue::Position(perp_position) => {
+                assert!(
+                    state_tree.leaf_nodes[i].to_string() == perp_position.hash,
+                    "state value at index {} is not equal to perp position hash",
+                    i
+                );
+            }
+        }
+    }
 
     Ok(())
 }

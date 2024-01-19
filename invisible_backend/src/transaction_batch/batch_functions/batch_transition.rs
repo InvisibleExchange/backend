@@ -218,7 +218,7 @@ pub fn _construct_da_output(
         .unwrap();
     drop(main_storage);
 
-    let (da_commitment, da_output_data, counts) = _get_da_updates_inner(
+    let (da_commitment, da_output_data) = _get_da_updates_inner(
         &batch_transition_info.updated_state_hashes,
         &funding_rates,
         &funding_prices,

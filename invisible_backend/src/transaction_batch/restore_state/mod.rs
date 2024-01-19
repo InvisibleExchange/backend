@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     trees::superficial_tree::SuperficialTree,
-    utils::{crypto_utils::hash_many, notes::Note},
+    utils::{crypto_utils::hash_many, notes::Note, storage::store_new_state_updates},
 };
 
 use self::{
@@ -156,7 +156,7 @@ pub fn _get_da_updates_inner(
     funding_rates: &HashMap<u32, Vec<i64>>,
     funding_prices: &HashMap<u32, Vec<u64>>,
     transactions: &Vec<Map<String, Value>>,
-) -> (BigUint, Vec<String>, [usize; 4]) {
+) -> (BigUint, Vec<String>) {
     let mut note_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
     let mut position_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
     let mut tab_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
@@ -286,20 +286,20 @@ pub fn _get_da_updates_inner(
     tab_outputs.sort_unstable();
     zero_indexes.sort_unstable();
 
-    // TODO: UPDATE THESE VALUES IN STORAGE
-
     // Remove duplicates
     note_outputs.dedup();
     position_outputs.dedup();
     tab_outputs.dedup();
     zero_indexes.dedup();
 
-    let counts: [usize; 4] = [
-        note_outputs.len(),
-        position_outputs.len(),
-        tab_outputs.len(),
-        zero_indexes.len(),
-    ];
+    // ? Store the new state updates localy on disk
+
+    store_new_state_updates(
+        &note_outputs,
+        &position_outputs,
+        &tab_outputs,
+        &zero_indexes,
+    );
 
     // Join all the outputs into a single vector
     let mut data_output: Vec<BigUint> = Vec::new();
@@ -334,5 +334,5 @@ pub fn _get_da_updates_inner(
 
     let data_output: Vec<String> = data_output.into_iter().map(|el| el.to_string()).collect();
 
-    return (data_commitment, data_output, counts);
+    return (data_commitment, data_output);
 }

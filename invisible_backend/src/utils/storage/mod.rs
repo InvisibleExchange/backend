@@ -3,13 +3,16 @@ pub mod firestore;
 mod firestore_helpers;
 pub mod local_storage;
 
+use std::time::Instant;
+
+use bincode::serialize;
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
-use serde_json::{to_vec, Error};
+use serde_json::to_vec;
 
 use sled::Config;
 
-use crate::{order_tab::OrderTab, perpetual::OrderSide, transaction_batch::LeafNodeType};
+use crate::{perpetual::OrderSide, transaction_batch::LeafNodeType};
 
 use super::cairo_output::{
     hash_note_output, hash_order_tab_output, hash_position_output, split_by_bytes, NoteOutput,
@@ -31,53 +34,62 @@ impl StateStorage {
 }
 
 pub fn store_new_state_updates(
-    note_outputs: Vec<(u64, [BigUint; 3])>,
-    position_outputs: Vec<(u64, [BigUint; 3])>,
-    tab_outputs: Vec<(u64, [BigUint; 4])>,
-    zero_indexes: Vec<u64>,
+    note_outputs: &Vec<(u64, [BigUint; 3])>,
+    position_outputs: &Vec<(u64, [BigUint; 3])>,
+    tab_outputs: &Vec<(u64, [BigUint; 4])>,
+    zero_indexes: &Vec<u64>,
 ) {
-    let config = Config::new().path("./storage/state".to_string());
-    let state_db = config.open().unwrap();
+    let mut batch = sled::Batch::default();
+
+    println!("Storing {} new notes", note_outputs.len());
+    println!("Storing {} new positions", position_outputs.len());
+    println!("Storing {} new tabs", tab_outputs.len());
+    println!("Storing {} zero indexes", zero_indexes.len());
+
+    let now = Instant::now();
 
     for (index, note_val) in note_outputs {
-        state_db
-            .insert(index.to_string(), to_vec(&note_val).unwrap())
-            .unwrap();
-        state_db
-            .insert(
-                "leaf_type".to_string() + &index.to_string(),
-                to_vec(&LeafNodeType::Note).unwrap(),
-            )
-            .unwrap();
+        batch.insert(to_vec(index).unwrap(), serialize(&note_val).unwrap());
+
+        batch.insert(
+            to_vec(&("leaf_type".to_string() + &index.to_string())).unwrap(),
+            serialize(&LeafNodeType::Note).unwrap(),
+        );
     }
 
     for (index, position_val) in position_outputs {
-        state_db
-            .insert(index.to_string(), to_vec(&position_val).unwrap())
-            .unwrap();
-        state_db
-            .insert(
-                "leaf_type".to_string() + &index.to_string(),
-                to_vec(&LeafNodeType::Position).unwrap(),
-            )
-            .unwrap();
+        batch.insert(to_vec(index).unwrap(), serialize(&position_val).unwrap());
+
+        batch.insert(
+            to_vec(&("leaf_type".to_string() + &index.to_string())).unwrap(),
+            serialize(&LeafNodeType::Position).unwrap(),
+        );
     }
 
     for (index, tab_val) in tab_outputs {
-        state_db
-            .insert(index.to_string(), to_vec(&tab_val).unwrap())
-            .unwrap();
-        state_db
-            .insert(
-                "leaf_type".to_string() + &index.to_string(),
-                to_vec(&LeafNodeType::OrderTab).unwrap(),
-            )
-            .unwrap();
+        batch.insert(to_vec(index).unwrap(), serialize(&tab_val).unwrap());
+
+        batch.insert(
+            to_vec(&("leaf_type".to_string() + &index.to_string())).unwrap(),
+            serialize(&LeafNodeType::OrderTab).unwrap(),
+        );
     }
 
     for index in zero_indexes {
-        let _ = state_db.remove(index.to_string());
+        batch.remove(to_vec(index).unwrap());
+        batch.remove(to_vec(&("leaf_type".to_string() + &index.to_string())).unwrap());
     }
+
+    let config = Config::new().path("./storage/state".to_string());
+    let state_db = config.open().unwrap();
+
+    if let Err(err) = state_db.apply_batch(batch) {
+        println!("Error storing state updates: {:?}", err.to_string())
+    } else {
+        println!("All state updates stored!");
+    }
+
+    println!("Time to store state updates: {:?}", now.elapsed());
 }
 
 pub enum StateValue {
@@ -91,13 +103,17 @@ pub fn get_state_at_index(index: u64) -> Option<(LeafNodeType, StateValue)> {
     let state_db = config.open().unwrap();
 
     let state_data = state_db
-        .get("leaf_type".to_string() + &index.to_string())
+        .get(to_vec(&("leaf_type".to_string() + &index.to_string())).unwrap())
         .unwrap();
+
+    if state_data.is_none() {
+        return None;
+    }
 
     let val: Result<LeafNodeType, Box<bincode::ErrorKind>> =
         bincode::deserialize(&state_data.unwrap());
 
-    if let Err(x) = val {
+    if let Err(_x) = val {
         return None;
     }
 
@@ -114,6 +130,11 @@ pub fn get_state_at_index(index: u64) -> Option<(LeafNodeType, StateValue)> {
         }
         LeafNodeType::Position => {
             let position_data = state_db.get(index.to_string()).unwrap();
+
+            let x: Result<[BigUint; 3], Box<bincode::ErrorKind>> =
+                bincode::deserialize(&position_data.clone().unwrap());
+            println!("x: {:?}", x);
+
             let position_data: [BigUint; 3] =
                 bincode::deserialize(&position_data.unwrap()).unwrap();
 
