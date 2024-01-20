@@ -51,10 +51,9 @@ pub fn verify_position_validity(
 pub fn verfiy_register_mm_sig(
     position: &PerpPosition,
     vlp_token: u32,
-    max_vlp_supply: u64,
     signature: &Signature,
 ) -> bool {
-    // & header_hash = H({position.hash, vlp_token, max_vlp_supply})
+    // & header_hash = H({position.hash, vlp_token})
 
     let mut hash_inputs: Vec<&BigUint> = Vec::new();
 
@@ -62,9 +61,6 @@ pub fn verfiy_register_mm_sig(
 
     let vlp_token = BigUint::from(vlp_token);
     hash_inputs.push(&vlp_token);
-
-    let max_vlp_supply = BigUint::from(max_vlp_supply);
-    hash_inputs.push(&max_vlp_supply);
 
     let hash = hash_many(&hash_inputs);
 

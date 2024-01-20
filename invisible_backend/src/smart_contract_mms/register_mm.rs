@@ -48,12 +48,7 @@ pub fn onchain_register_mm(
     let signature = Signature::try_from(register_mm_req.signature.as_ref().unwrap().clone())
         .map_err(|err| err.to_string())?;
 
-    let valid = verfiy_register_mm_sig(
-        &position,
-        register_mm_req.vlp_token,
-        register_mm_req.max_vlp_supply,
-        &signature,
-    );
+    let valid = verfiy_register_mm_sig(&position, register_mm_req.vlp_token, &signature);
     if !valid {
         return Err("Invalid Signature".to_string());
     }
@@ -81,7 +76,6 @@ pub fn onchain_register_mm(
     // ? Update the position -----------------
 
     position.position_header.vlp_token = register_mm_req.vlp_token;
-    position.position_header.max_vlp_supply = register_mm_req.max_vlp_supply;
 
     position.vlp_supply = vlp_amount;
 
@@ -94,7 +88,6 @@ pub fn onchain_register_mm(
         &prev_position,
         &position,
         register_mm_req.vlp_token,
-        register_mm_req.max_vlp_supply,
         &signature,
     );
 

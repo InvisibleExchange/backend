@@ -12,7 +12,6 @@ pub fn onchain_register_json_output(
     prev_position: &PerpPosition,
     new_position: &PerpPosition,
     vlp_token: u32,
-    max_vlp_supply: u64,
     signature: &Signature,
 ) {
     let mut json_map = serde_json::map::Map::new();
@@ -35,10 +34,6 @@ pub fn onchain_register_json_output(
     json_map.insert(
         String::from("vlp_token"),
         serde_json::to_value(&vlp_token).unwrap(),
-    );
-    json_map.insert(
-        String::from("max_vlp_supply"),
-        serde_json::to_value(&max_vlp_supply).unwrap(),
     );
     json_map.insert(
         String::from("signature"),

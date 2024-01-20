@@ -522,7 +522,7 @@ fn hash_position_escape_message(
 }
 
 pub fn hash_position_keccak(position: &PerpPosition) -> BigUint {
-    // & hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token, max_vlp_supply, order_side, position_size, entry_price, liquidation_price, last_funding_idx, vlp_supply})
+    // & hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token, order_side, position_size, entry_price, liquidation_price, last_funding_idx, vlp_supply})
 
     let mut input_arr = Vec::new();
 
@@ -540,9 +540,6 @@ pub fn hash_position_keccak(position: &PerpPosition) -> BigUint {
 
     let vlp_token = BigUint::from_u32(position.position_header.vlp_token).unwrap();
     input_arr.push(vlp_token);
-
-    let max_vlp_supply = BigUint::from_u64(position.position_header.max_vlp_supply).unwrap();
-    input_arr.push(max_vlp_supply);
 
     let order_side = if position.order_side == OrderSide::Long {
         BigUint::one()

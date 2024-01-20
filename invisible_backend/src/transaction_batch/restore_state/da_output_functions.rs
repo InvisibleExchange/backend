@@ -480,11 +480,10 @@ fn append_position_output(
 }
 
 fn _get_position_output(position: &PerpPosition) -> (u64, [BigUint; 3]) {
-    // & | index (59 bits) | synthetic_token (32 bits) | position_size (64 bits) | max_vlp_supply (64 bits) | vlp_token (32 bits) |
-    let batched_position_info_slot1 = BigUint::from_u32(position.index).unwrap() << 192
-        | BigUint::from_u32(position.position_header.synthetic_token).unwrap() << 160
-        | BigUint::from_u64(position.position_size).unwrap() << 96
-        | BigUint::from_u64(position.position_header.max_vlp_supply).unwrap() << 32
+    // & | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+    let batched_position_info_slot1 = BigUint::from_u32(position.index).unwrap() << 128
+        | BigUint::from_u32(position.position_header.synthetic_token).unwrap() << 96
+        | BigUint::from_u64(position.position_size).unwrap() << 32
         | BigUint::from_u32(position.position_header.vlp_token).unwrap();
 
     // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |

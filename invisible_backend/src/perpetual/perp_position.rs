@@ -75,7 +75,6 @@ impl PerpPosition {
             allow_partial_liquidations,
             position_address,
             0,
-            0,
         );
 
         let hash: BigUint = _hash_position(
@@ -889,7 +888,6 @@ pub struct PositionHeader {
     pub position_address: BigUint,        // address of the position (for signatures)
     pub allow_partial_liquidations: bool, // if true, allow partial liquidations
     pub vlp_token: u32,                   // token used for the vlp
-    pub max_vlp_supply: u64,              // max supply of vlp tokens
     pub hash: BigUint,                    // hash of the position
 }
 
@@ -899,14 +897,12 @@ impl PositionHeader {
         allow_partial_liquidations: bool,
         position_address: BigUint,
         vlp_token: u32,
-        max_vlp_supply: u64,
     ) -> Self {
         let header_hash = _hash_position_header(
             synthetic_token,
             allow_partial_liquidations,
             &position_address,
             vlp_token,
-            max_vlp_supply,
         );
 
         PositionHeader {
@@ -915,7 +911,6 @@ impl PositionHeader {
             position_address,
             hash: header_hash,
             vlp_token,
-            max_vlp_supply,
         }
     }
 
@@ -925,7 +920,6 @@ impl PositionHeader {
             self.allow_partial_liquidations,
             &self.position_address,
             self.vlp_token,
-            self.max_vlp_supply,
         );
 
         self.hash = header_hash;
@@ -976,7 +970,6 @@ impl Serialize for PositionHeader {
         )?;
         header.serialize_field("position_address", &self.position_address.to_string())?;
         header.serialize_field("vlp_token", &self.vlp_token)?;
-        header.serialize_field("max_vlp_supply", &self.max_vlp_supply)?;
         header.serialize_field("hash", &self.hash.to_string())?;
 
         return header.end();
@@ -1043,7 +1036,6 @@ impl<'de> Deserialize<'de> for PositionHeader {
             position_address: String,
             allow_partial_liquidations: bool,
             vlp_token: u32,
-            max_vlp_supply: u64,
             hash: String,
         }
 
@@ -1055,7 +1047,6 @@ impl<'de> Deserialize<'de> for PositionHeader {
             position_address: BigUint::from_str(&helper.position_address).unwrap(),
             allow_partial_liquidations: helper.allow_partial_liquidations,
             vlp_token: helper.vlp_token,
-            max_vlp_supply: helper.max_vlp_supply,
             hash: BigUint::from_str(&helper.hash).unwrap(),
         })
     }
@@ -1103,11 +1094,10 @@ fn _hash_position_header(
     allow_partial_liquidations: bool,
     position_address: &BigUint,
     vlp_token: u32,
-    max_vlp_supply: u64,
 ) -> BigUint {
     let mut hash_inputs: Vec<&BigUint> = Vec::new();
 
-    // & hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token, max_vlp_supply})
+    // & hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token})
     let allow_partial_liquidations =
         BigUint::from_u8(if allow_partial_liquidations { 1 } else { 0 }).unwrap();
     hash_inputs.push(&allow_partial_liquidations);
@@ -1119,9 +1109,6 @@ fn _hash_position_header(
 
     let vlp_token = BigUint::from_u32(vlp_token).unwrap();
     hash_inputs.push(&vlp_token);
-
-    let max_vlp_supply = BigUint::from_u64(max_vlp_supply).unwrap();
-    hash_inputs.push(&max_vlp_supply);
 
     let position_hash = hash_many(&hash_inputs);
 

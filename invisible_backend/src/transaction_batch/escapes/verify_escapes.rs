@@ -2,7 +2,6 @@ use firestore_db_and_auth::ServiceSession;
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use parking_lot::Mutex;
-use rustc_serialize::json;
 use serde_json::Value;
 use std::str::FromStr;
 use std::{collections::HashMap, sync::Arc};

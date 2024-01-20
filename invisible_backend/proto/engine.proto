@@ -232,7 +232,6 @@ message GrcpPositionHeader {
     string position_address = 2;
     bool allow_partial_liquidations = 3;
     uint32 vlp_token = 4;
-    uint64 max_vlp_supply = 5;
 }
 
 
@@ -303,7 +302,6 @@ message CloseOrderTabRes {
 message OnChainRegisterMMReq {
     GrpcPerpPosition position = 1;
     uint32 vlp_token = 2;
-    uint64 max_vlp_supply = 3;
     Signature signature = 4;
     uint32 market_id = 5;
     uint32 synthetic_token = 6;

@@ -133,7 +133,6 @@ pub fn get_state_at_index(index: u64) -> Option<(LeafNodeType, StateValue)> {
 
             let x: Result<[BigUint; 3], Box<bincode::ErrorKind>> =
                 bincode::deserialize(&position_data.clone().unwrap());
-            println!("x: {:?}", x);
 
             let position_data: [BigUint; 3] =
                 bincode::deserialize(&position_data.unwrap()).unwrap();
@@ -182,36 +181,42 @@ pub fn parse_position_data(position_data: [BigUint; 3]) -> PerpPositionOutput {
     let batched_position_info_slot1 = position_data[0].clone();
     let batched_position_info_slot2 = position_data[1].clone();
 
-    // & | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | order_side (8 bits) | allow_partial_liquidations (8 bit)
-    let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 8, 8]);
-    let split_vec_slot2 = split_by_bytes(&batched_position_info_slot2, vec![64, 64, 32]);
+    // & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+    let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 32]);
+    // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+    let split_vec_slot2 = split_by_bytes(&batched_position_info_slot2, vec![64, 64, 64, 32, 1, 1]);
 
     let index = split_vec_slot1[0].to_u64().unwrap();
     let synthetic_token = split_vec_slot1[1].to_u32().unwrap();
     let position_size = split_vec_slot1[2].to_u64().unwrap();
-    let order_side = if split_vec_slot1[3] != BigUint::zero() {
+    let vlp_token = split_vec_slot1[3].to_u32().unwrap();
+
+    let entry_price = split_vec_slot2[0].to_u64().unwrap();
+    let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
+    let vlp_supply = split_vec_slot2[2].to_u64().unwrap();
+    let last_funding_idx = split_vec_slot2[3].to_u32().unwrap();
+    let order_side = if split_vec_slot2[4] != BigUint::zero() {
         OrderSide::Long
     } else {
         OrderSide::Short
     };
-    let allow_partial_liquidations = split_vec_slot1[4] != BigUint::zero();
+    let allow_partial_liquidations = split_vec_slot2[5] != BigUint::zero();
 
-    let entry_price = split_vec_slot2[0].to_u64().unwrap();
-    let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
-    let last_funding_idx = split_vec_slot2[2].to_u32().unwrap();
-
+    // & format: | public key <-> position_address (251 bits) |
     let public_key = &position_data[2];
 
     let hash = hash_position_output(
         synthetic_token,
         public_key,
         allow_partial_liquidations,
+        vlp_token,
         //
         &order_side,
         position_size,
         entry_price,
         liquidation_price,
         last_funding_idx,
+        vlp_supply,
     )
     .to_string();
 
@@ -223,6 +228,8 @@ pub fn parse_position_data(position_data: [BigUint; 3]) -> PerpPositionOutput {
         liquidation_price,
         last_funding_idx,
         allow_partial_liquidations,
+        vlp_token,
+        vlp_supply,
         index,
         public_key: public_key.to_string(),
         hash,

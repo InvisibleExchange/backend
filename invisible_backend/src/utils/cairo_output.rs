@@ -165,8 +165,6 @@ fn parse_dex_state(output: &[BigUint]) -> (GlobalDexState, &[BigUint]) {
         n_tab_escapes,
     };
 
-    println!("program_input_counts: {:?}", program_input_counts);
-
     return (
         GlobalDexState::new(
             config_code,
@@ -634,13 +632,15 @@ pub struct PerpPositionOutput {
     pub liquidation_price: u64,
     pub last_funding_idx: u32,
     pub allow_partial_liquidations: bool,
+    pub vlp_token: u32,
+    pub vlp_supply: u64,
     pub index: u64,
     pub public_key: String,
     pub hash: String,
 }
 
-// & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | order_side (8 bits) | allow_partial_liquidations (8 bits) |
-// & format: | entry_price (64 bits) | liquidation_price (64 bits) | last_funding_idx (32 bits) |
+// & format: | index (59 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+// & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
 // & format: | public key <-> position_address (251 bits) |
 
 fn parse_position_outputs(
@@ -653,36 +653,43 @@ fn parse_position_outputs(
         let batched_position_info_slot1 = output[(i * 3) as usize].clone();
         let batched_position_info_slot2 = output[(i * 3 + 1) as usize].clone();
 
-        // & | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | order_side (8 bits) | allow_partial_liquidations (8 bit)
-        let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 8, 8]);
-        let split_vec_slot2 = split_by_bytes(&batched_position_info_slot2, vec![64, 64, 32]);
+        // & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+        let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 32]);
+        // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+        let split_vec_slot2 =
+            split_by_bytes(&batched_position_info_slot2, vec![64, 64, 64, 32, 1, 1]);
 
         let index = split_vec_slot1[0].to_u64().unwrap();
         let synthetic_token = split_vec_slot1[1].to_u32().unwrap();
         let position_size = split_vec_slot1[2].to_u64().unwrap();
-        let order_side = if split_vec_slot1[3] != BigUint::zero() {
+        let vlp_token = split_vec_slot1[3].to_u32().unwrap();
+
+        let entry_price = split_vec_slot2[0].to_u64().unwrap();
+        let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
+        let vlp_supply = split_vec_slot2[2].to_u64().unwrap();
+        let last_funding_idx = split_vec_slot2[3].to_u32().unwrap();
+        let order_side = if split_vec_slot2[4] != BigUint::zero() {
             OrderSide::Long
         } else {
             OrderSide::Short
         };
-        let allow_partial_liquidations = split_vec_slot1[4] != BigUint::zero();
+        let allow_partial_liquidations = split_vec_slot2[5] != BigUint::zero();
 
-        let entry_price = split_vec_slot2[0].to_u64().unwrap();
-        let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
-        let last_funding_idx = split_vec_slot2[2].to_u32().unwrap();
-
+        // & format: | public key <-> position_address (251 bits) |
         let public_key = &output[(i * 3 + 2) as usize];
 
         let hash = hash_position_output(
             synthetic_token,
             public_key,
             allow_partial_liquidations,
+            vlp_token,
             //
             &order_side,
             position_size,
             entry_price,
             liquidation_price,
             last_funding_idx,
+            vlp_supply,
         )
         .to_string();
 
@@ -694,6 +701,8 @@ fn parse_position_outputs(
             liquidation_price,
             last_funding_idx,
             allow_partial_liquidations,
+            vlp_supply,
+            vlp_token,
             index,
             public_key: public_key.to_string(),
             hash,
@@ -711,31 +720,35 @@ pub fn hash_position_output(
     synthetic_token: u32,
     position_address: &BigUint,
     allow_partial_liquidations: bool,
+    vlp_token: u32,
     //
     order_side: &OrderSide,
     position_size: u64,
     entry_price: u64,
     liquidation_price: u64,
     current_funding_idx: u32,
+    vlp_supply: u64,
 ) -> BigUint {
-    // & header_hash = H({allow_partial_liquidations, synthetic_token, position_address })
+    // & header_hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token})
     let allow_partial_liquidations =
         BigUint::from_u8(if allow_partial_liquidations { 1 } else { 0 }).unwrap();
     let synthetic_token = BigUint::from_u32(synthetic_token).unwrap();
+    let vlp_token = BigUint::from_u32(vlp_token).unwrap();
     let hash_inputs = vec![
         &allow_partial_liquidations,
         &synthetic_token,
         position_address,
+        &vlp_token,
     ];
     let header_hash = hash_many(&hash_inputs);
 
-    // & hash = H({header_hash, order_side, position_size, entry_price, liquidation_price, current_funding_idx})
-
+    // & hash = H({header_hash, order_side, position_size, entry_price, liquidation_price, current_funding_idx, vlp_supply})
     let order_side = BigUint::from_u8(if *order_side == OrderSide::Long { 1 } else { 0 }).unwrap();
     let position_size = BigUint::from_u64(position_size).unwrap();
     let entry_price = BigUint::from_u64(entry_price).unwrap();
     let liquidation_price = BigUint::from_u64(liquidation_price).unwrap();
     let current_funding_idx = BigUint::from_u32(current_funding_idx).unwrap();
+    let vlp_supply = BigUint::from_u64(vlp_supply).unwrap();
     let hash_inputs = vec![
         &header_hash,
         &order_side,
@@ -743,6 +756,7 @@ pub fn hash_position_output(
         &entry_price,
         &liquidation_price,
         &current_funding_idx,
+        &vlp_supply,
     ];
 
     let position_hash = hash_many(&hash_inputs);

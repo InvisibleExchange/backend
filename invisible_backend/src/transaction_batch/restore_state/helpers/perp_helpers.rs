@@ -443,7 +443,6 @@ pub fn position_from_json(position_json: &Value) -> PerpPosition {
         )
         .unwrap(),
         pos_header.get("vlp_token").unwrap().as_u64().unwrap() as u32,
-        pos_header.get("max_vlp_supply").unwrap().as_u64().unwrap(),
     );
 
     let order_side = if position_json.get("order_side").unwrap().as_str().unwrap() == "Long" {

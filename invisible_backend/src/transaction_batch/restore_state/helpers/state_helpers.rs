@@ -229,13 +229,11 @@ pub fn restore_mm_action(
         "register_mm" => {
             // ? Registering a new position
             let vlp_token = transaction.get("vlp_token").unwrap().as_u64().unwrap() as u32;
-            let max_vlp_supply = transaction.get("max_vlp_supply").unwrap().as_u64().unwrap();
 
             let vlp_amount = position.margin;
 
             // ? register mm position
             position.position_header.vlp_token = vlp_token;
-            position.position_header.max_vlp_supply = max_vlp_supply;
 
             position.vlp_supply = vlp_amount;
 

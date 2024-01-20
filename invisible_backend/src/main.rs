@@ -1,3 +1,5 @@
+use std::{collections::HashMap, os::linux::raw::stat};
+
 use invisible_backend::{
     transaction_batch::{batch_functions::batch_transition::TREE_DEPTH, TransactionBatch},
     utils::{
@@ -26,6 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state_tree = tx_batch.state_tree.lock();
 
+    let mut state_map: HashMap<u64, String> = HashMap::new();
+
     for i in 0..state_tree.leaf_nodes.len() {
         let state_value = get_state_at_index(i as u64);
 
@@ -36,27 +40,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 i
             );
 
+            state_map.insert(i as u64, "0".to_string());
+
             continue;
         }
 
         match state_value.unwrap().1 {
             StateValue::Note(note) => {
-                println!("note hash: {}", note.hash);
-
                 assert!(
                     state_tree.leaf_nodes[i].to_string() == note.hash,
                     "state value at index {} is not equal to note hash",
                     i
                 );
+
+                state_map.insert(i as u64, note.hash);
             }
             StateValue::OrderTab(order_tab) => {
-                println!("order_tab hash: {}", order_tab.hash);
-
                 assert!(
                     state_tree.leaf_nodes[i].to_string() == order_tab.hash,
                     "state value at index {} is not equal to order tab hash",
                     i
                 );
+
+                state_map.insert(i as u64, order_tab.hash);
             }
             StateValue::Position(perp_position) => {
                 assert!(
@@ -64,9 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "state value at index {} is not equal to perp position hash",
                     i
                 );
+
+                state_map.insert(i as u64, perp_position.hash);
             }
         }
     }
+
+    println!("state_map: {:#?}", state_map);
 
     Ok(())
 }
