@@ -3,7 +3,7 @@ use num_integer::Integer;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 use crate::{
-    perpetual::OrderSide,
+    perpetual::{perp_position::get_liquidation_price, OrderSide},
     transaction_batch::{
         tx_batch_structs::{GlobalConfig, GlobalDexState, ProgramInputCounts},
         CHAIN_IDS,
@@ -629,7 +629,7 @@ pub struct PerpPositionOutput {
     pub position_size: u64,
     pub order_side: OrderSide,
     pub entry_price: u64,
-    pub liquidation_price: u64,
+    pub margin: u64,
     pub last_funding_idx: u32,
     pub allow_partial_liquidations: bool,
     pub vlp_token: u32,
@@ -639,8 +639,8 @@ pub struct PerpPositionOutput {
     pub hash: String,
 }
 
-// & format: | index (59 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
-// & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+// & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+// & format: | entry_price (64 bits) | margin (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
 // & format: | public key <-> position_address (251 bits) |
 
 fn parse_position_outputs(
@@ -655,7 +655,7 @@ fn parse_position_outputs(
 
         // & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
         let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 32]);
-        // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+        // & format: | entry_price (64 bits) | margin (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
         let split_vec_slot2 =
             split_by_bytes(&batched_position_info_slot2, vec![64, 64, 64, 32, 1, 1]);
 
@@ -665,7 +665,7 @@ fn parse_position_outputs(
         let vlp_token = split_vec_slot1[3].to_u32().unwrap();
 
         let entry_price = split_vec_slot2[0].to_u64().unwrap();
-        let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
+        let margin = split_vec_slot2[1].to_u64().unwrap();
         let vlp_supply = split_vec_slot2[2].to_u64().unwrap();
         let last_funding_idx = split_vec_slot2[3].to_u32().unwrap();
         let order_side = if split_vec_slot2[4] != BigUint::zero() {
@@ -687,7 +687,7 @@ fn parse_position_outputs(
             &order_side,
             position_size,
             entry_price,
-            liquidation_price,
+            margin,
             last_funding_idx,
             vlp_supply,
         )
@@ -698,7 +698,7 @@ fn parse_position_outputs(
             position_size,
             order_side,
             entry_price,
-            liquidation_price,
+            margin,
             last_funding_idx,
             allow_partial_liquidations,
             vlp_supply,
@@ -725,10 +725,19 @@ pub fn hash_position_output(
     order_side: &OrderSide,
     position_size: u64,
     entry_price: u64,
-    liquidation_price: u64,
+    margin: u64,
     current_funding_idx: u32,
     vlp_supply: u64,
 ) -> BigUint {
+    let liquidation_price = get_liquidation_price(
+        entry_price,
+        margin,
+        position_size,
+        &order_side,
+        synthetic_token,
+        allow_partial_liquidations,
+    );
+
     // & header_hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token})
     let allow_partial_liquidations =
         BigUint::from_u8(if allow_partial_liquidations { 1 } else { 0 }).unwrap();

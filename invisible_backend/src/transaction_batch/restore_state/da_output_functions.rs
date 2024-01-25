@@ -486,9 +486,9 @@ fn _get_position_output(position: &PerpPosition) -> (u64, [BigUint; 3]) {
         | BigUint::from_u64(position.position_size).unwrap() << 32
         | BigUint::from_u32(position.position_header.vlp_token).unwrap();
 
-    // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+    // & format: | entry_price (64 bits) | margin (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
     let batched_position_info_slot2 = BigUint::from_u64(position.entry_price).unwrap() << 162
-        | BigUint::from_u64(position.liquidation_price).unwrap() << 98
+        | BigUint::from_u64(position.margin).unwrap() << 98
         | BigUint::from_u64(position.vlp_supply).unwrap() << 34
         | BigUint::from_u32(position.last_funding_idx).unwrap() << 2
         | if position.order_side == OrderSide::Long {

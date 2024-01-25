@@ -2,6 +2,7 @@ pub mod backup_storage;
 pub mod firestore;
 mod firestore_helpers;
 pub mod local_storage;
+pub mod update_invalid;
 
 use std::time::Instant;
 
@@ -183,7 +184,7 @@ pub fn parse_position_data(position_data: [BigUint; 3]) -> PerpPositionOutput {
 
     // & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
     let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 32]);
-    // & format: | entry_price (64 bits) | liquidation_price (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+    // & format: | entry_price (64 bits) | margin (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
     let split_vec_slot2 = split_by_bytes(&batched_position_info_slot2, vec![64, 64, 64, 32, 1, 1]);
 
     let index = split_vec_slot1[0].to_u64().unwrap();
@@ -192,7 +193,7 @@ pub fn parse_position_data(position_data: [BigUint; 3]) -> PerpPositionOutput {
     let vlp_token = split_vec_slot1[3].to_u32().unwrap();
 
     let entry_price = split_vec_slot2[0].to_u64().unwrap();
-    let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
+    let margin = split_vec_slot2[1].to_u64().unwrap();
     let vlp_supply = split_vec_slot2[2].to_u64().unwrap();
     let last_funding_idx = split_vec_slot2[3].to_u32().unwrap();
     let order_side = if split_vec_slot2[4] != BigUint::zero() {
@@ -214,7 +215,7 @@ pub fn parse_position_data(position_data: [BigUint; 3]) -> PerpPositionOutput {
         &order_side,
         position_size,
         entry_price,
-        liquidation_price,
+        margin,
         last_funding_idx,
         vlp_supply,
     )
@@ -225,7 +226,7 @@ pub fn parse_position_data(position_data: [BigUint; 3]) -> PerpPositionOutput {
         position_size,
         order_side,
         entry_price,
-        liquidation_price,
+        margin,
         last_funding_idx,
         allow_partial_liquidations,
         vlp_token,

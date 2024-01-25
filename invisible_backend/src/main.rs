@@ -1,82 +1,21 @@
-use std::{collections::HashMap, os::linux::raw::stat};
-
 use invisible_backend::{
     transaction_batch::{batch_functions::batch_transition::TREE_DEPTH, TransactionBatch},
-    utils::{
-        cairo_output::{format_cairo_ouput, preprocess_cairo_output},
-        storage::{get_state_at_index, StateValue},
-    },
+    utils::storage::update_invalid::update_invalid_state,
 };
-use num_bigint::BigUint;
-use num_traits::Zero;
-use serde_json::to_vec;
-use sled::Config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // let prog_output = format_cairo_ouput(test_program_output());
-    // let prog_output = preprocess_cairo_output(prog_output);
-
-    // println!("[");
-    // for val in prog_output {
-    //     println!("{}n,", val);
-    // }
-    // println!("]");
-
     let mut tx_batch = TransactionBatch::new(TREE_DEPTH);
     tx_batch.init();
 
-    let state_tree = tx_batch.state_tree.lock();
+    let indexes = vec![15];
 
-    let mut state_map: HashMap<u64, String> = HashMap::new();
-
-    for i in 0..state_tree.leaf_nodes.len() {
-        let state_value = get_state_at_index(i as u64);
-
-        if state_value.is_none() {
-            assert!(
-                state_tree.leaf_nodes[i] == BigUint::zero(),
-                "state value at index {} is not zero",
-                i
-            );
-
-            state_map.insert(i as u64, "0".to_string());
-
-            continue;
-        }
-
-        match state_value.unwrap().1 {
-            StateValue::Note(note) => {
-                assert!(
-                    state_tree.leaf_nodes[i].to_string() == note.hash,
-                    "state value at index {} is not equal to note hash",
-                    i
-                );
-
-                state_map.insert(i as u64, note.hash);
-            }
-            StateValue::OrderTab(order_tab) => {
-                assert!(
-                    state_tree.leaf_nodes[i].to_string() == order_tab.hash,
-                    "state value at index {} is not equal to order tab hash",
-                    i
-                );
-
-                state_map.insert(i as u64, order_tab.hash);
-            }
-            StateValue::Position(perp_position) => {
-                assert!(
-                    state_tree.leaf_nodes[i].to_string() == perp_position.hash,
-                    "state value at index {} is not equal to perp position hash",
-                    i
-                );
-
-                state_map.insert(i as u64, perp_position.hash);
-            }
-        }
-    }
-
-    println!("state_map: {:#?}", state_map);
+    update_invalid_state(
+        &tx_batch.state_tree,
+        &tx_batch.firebase_session,
+        &tx_batch.backup_storage,
+        indexes,
+    );
 
     Ok(())
 }

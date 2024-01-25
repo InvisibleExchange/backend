@@ -61,7 +61,7 @@ impl PerpPosition {
             synthetic_token,
         );
 
-        let liquidation_price: u64 = _get_liquidation_price(
+        let liquidation_price: u64 = get_liquidation_price(
             entry_price,
             margin,
             position_size,
@@ -217,35 +217,6 @@ impl PerpPosition {
 
         let updated_margin = (self.margin as i128 + realized_pnl - fee_taken as i128) as u64;
 
-        // // & bankruptcy_price = entry_price +/- margin/(amount+new_amount)
-        // // & liquidation_price = bankruptcy_price -/+ maintenance_margin/(amount+new_amount)
-        // let new_bankruptcy_price: u64 = _get_bankruptcy_price(
-        //     self.entry_price,
-        //     updated_margin,
-        //     new_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        // );
-
-        // let new_liquidation_price: u64 = _get_liquidation_price(
-        //     self.entry_price,
-        //     updated_margin,
-        //     new_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        //     self.position_header.allow_partial_liquidations,
-        // );
-
-        // let new_hash: BigUint = _hash_position(
-        //     &self.position_header.hash,
-        //     &self.order_side,
-        //     new_size,
-        //     self.entry_price,
-        //     new_liquidation_price,
-        //     funding_idx,
-        //     self.vlp_supply,
-        // );
-
         // ? Make updates to the position
         self.position_size = new_size;
         self.margin = updated_margin as u64;
@@ -301,31 +272,6 @@ impl PerpPosition {
             OrderSide::Short => OrderSide::Long,
         };
 
-        // let new_bankruptcy_price: u64 = _get_bankruptcy_price(
-        //     price,
-        //     updated_margin,
-        //     new_size,
-        //     &new_order_side,
-        //     self.position_header.synthetic_token,
-        // );
-        // let new_liquidation_price: u64 = _get_liquidation_price(
-        //     price,
-        //     updated_margin,
-        //     new_size,
-        //     &new_order_side,
-        //     self.position_header.synthetic_token,
-        //     self.position_header.allow_partial_liquidations,
-        // );
-
-        // let new_hash: BigUint = _hash_position(
-        //     &self.position_header.hash,
-        //     &new_order_side,
-        //     new_size,
-        //     price,
-        //     new_liquidation_price,
-        //     funding_idx,
-        //     self.vlp_supply,
-        // );
 
         // ? Make updates to the position
         self.order_side = new_order_side;
@@ -585,32 +531,7 @@ impl PerpPosition {
         let liquidator_fee = (liquidated_size as u128 * market_price as u128 * liquidator_fee_rate
             / (multiplier1 as u128 * 1000)) as u64;
 
-        // let new_bankruptcy_price: u64 = _get_bankruptcy_price(
-        //     self.entry_price,
-        //     self.margin - liquidator_fee,
-        //     new_size as u64,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        // );
-
-        // let new_liquidation_price: u64 = _get_liquidation_price(
-        //     self.entry_price,
-        //     self.margin - liquidator_fee,
-        //     new_size as u64,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        //     self.position_header.allow_partial_liquidations,
-        // );
-
-        // let new_hash: BigUint = _hash_position(
-        //     &self.position_header.hash,
-        //     &self.order_side,
-        //     new_size as u64,
-        //     self.entry_price,
-        //     new_liquidation_price,
-        //     self.last_funding_idx,
-        //     self.vlp_supply,
-        // );
+      
 
         self.position_size = new_size as u64;
         self.margin -= liquidator_fee;
@@ -680,32 +601,7 @@ impl PerpPosition {
 
         let margin = (self.margin as i64 + margin_change) as u64;
 
-        // let new_bankruptcy_price: u64 = _get_bankruptcy_price(
-        //     self.entry_price,
-        //     margin,
-        //     self.position_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        // );
-
-        // let new_liquidation_price: u64 = _get_liquidation_price(
-        //     self.entry_price,
-        //     margin,
-        //     self.position_size,
-        //     &self.order_side,
-        //     self.position_header.synthetic_token,
-        //     self.position_header.allow_partial_liquidations,
-        // );
-
-        // let new_hash: BigUint = _hash_position(
-        //     &self.position_header.hash,
-        //     &self.order_side,
-        //     self.position_size,
-        //     self.entry_price,
-        //     new_liquidation_price,
-        //     self.last_funding_idx,
-        //     self.vlp_supply,
-        // );
+  
 
         // ? Make updates to the position
         self.margin = margin;
@@ -841,7 +737,7 @@ impl PerpPosition {
             self.position_header.synthetic_token,
         );
 
-        let new_liquidation_price: u64 = _get_liquidation_price(
+        let new_liquidation_price: u64 = get_liquidation_price(
             self.entry_price,
             self.margin,
             self.position_size,
@@ -1140,7 +1036,7 @@ fn _get_entry_price(initial_margin: u64, leverage: u64, size: u64, synthetic_tok
     return price;
 }
 
-fn _get_liquidation_price(
+pub fn get_liquidation_price(
     entry_price: u64,
     margin: u64,
     position_size: u64,
@@ -1199,7 +1095,7 @@ fn _get_liquidation_price(
     }
 }
 
-fn _get_bankruptcy_price(
+pub fn _get_bankruptcy_price(
     entry_price: u64,
     margin: u64,
     size: u64,

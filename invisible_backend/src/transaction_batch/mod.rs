@@ -455,7 +455,7 @@ impl TransactionBatch {
         // TODO: This requires spinning up a spot instances on aws to handle the load
         _transition_state(&self.main_storage, batch_transition_info)?;
 
-        // // * =================================================================
+        // * =================================================================
 
         let tx_batch_index = self.main_storage.lock().latest_batch - 1;
         _construct_da_output(
