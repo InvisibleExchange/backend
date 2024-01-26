@@ -27,7 +27,7 @@ use super::helpers::{
 // * SPOT SWAP DA FUNCTIONS ==========================================================================================
 pub fn spot_order_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     tab_outputs: &mut Vec<(u64, [BigUint; 4])>,
     transaction: &Map<String, Value>,
     is_a: bool,
@@ -86,7 +86,7 @@ pub fn spot_order_da_output(
 // * Deposits/Witdrawals * //
 pub fn deposit_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     transaction: &Map<String, Value>,
 ) {
     let deposit = transaction.get("deposit").unwrap();
@@ -100,7 +100,7 @@ pub fn deposit_da_output(
 
 pub fn withdrawal_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     transaction: &Map<String, Value>,
 ) {
     let refund_note = transaction
@@ -121,7 +121,7 @@ pub fn withdrawal_da_output(
 // * PERP SWAP DA FUNCTIONS ==========================================================================================
 pub fn perp_swap_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     position_outputs: &mut Vec<(u64, [BigUint; 3])>,
     funding_rates: &HashMap<u32, Vec<i64>>,
     funding_prices: &HashMap<u32, Vec<u64>>,
@@ -232,7 +232,7 @@ pub fn perp_swap_da_output(
 // * Liquidations * //
 pub fn liquidations_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     position_outputs: &mut Vec<(u64, [BigUint; 3])>,
     funding_rates: &HashMap<u32, Vec<i64>>,
     funding_prices: &HashMap<u32, Vec<u64>>,
@@ -271,7 +271,7 @@ pub fn liquidations_da_output(
 // * STATE UPDATE DA FUNCTIONS =======================================================================================
 pub fn margin_update_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     position_outputs: &mut Vec<(u64, [BigUint; 3])>,
     transaction: &Map<String, Value>,
 ) {
@@ -306,7 +306,7 @@ pub fn margin_update_da_output(
 
 pub fn note_split_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     transaction: &Map<String, Value>,
 ) {
     let new_note = transaction
@@ -337,7 +337,7 @@ pub fn note_split_da_output(
 // * ORDER TABS DA FUNCTIONS ==========================================================================================
 pub fn open_order_tab_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     tab_outputs: &mut Vec<(u64, [BigUint; 4])>,
     transaction: &Map<String, Value>,
 ) {
@@ -365,7 +365,7 @@ pub fn open_order_tab_da_output(
 
 pub fn close_order_tab_da_ouput(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     tab_outputs: &mut Vec<(u64, [BigUint; 4])>,
     transaction: &Map<String, Value>,
 ) {
@@ -397,7 +397,7 @@ pub fn onchain_mm_action_da_output(
 // * FORCED ESCAPES DA FUNCTIONS =====================================================================================
 pub fn forced_position_escape_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     position_outputs: &mut Vec<(u64, [BigUint; 3])>,
     transaction: &Map<String, Value>,
 ) {
@@ -427,7 +427,7 @@ pub fn forced_position_escape_da_output(
 /// it is, then parse and append it to note_outputs.
 fn append_note_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
-    note_outputs: &mut Vec<(u64, [BigUint; 3])>,
+    note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     note: &Note,
 ) {
     let (leaf_type, leaf_hash) = updated_state_hashes.get(&note.index).unwrap();
@@ -440,7 +440,7 @@ fn append_note_output(
     note_outputs.push((index, output));
 }
 
-fn _get_note_output(note: &Note) -> (u64, [BigUint; 3]) {
+fn _get_note_output(note: &Note) -> (u64, [BigUint; 4]) {
     let hidden_amount = BigUint::from_u64(note.amount).unwrap()
         ^ &note.blinding % BigUint::from_u64(2).unwrap().pow(64);
 
@@ -457,6 +457,7 @@ fn _get_note_output(note: &Note) -> (u64, [BigUint; 3]) {
             batched_note_info,
             commitment,
             note.address.x.to_biguint().unwrap(),
+            note.address.y.to_biguint().unwrap(),
         ],
     );
 }
@@ -481,7 +482,7 @@ fn append_position_output(
 
 fn _get_position_output(position: &PerpPosition) -> (u64, [BigUint; 3]) {
     // & | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
-    let batched_position_info_slot1 = BigUint::from_u32(position.index).unwrap() << 128
+    let batched_position_info_slot1 = BigUint::from_u64(position.index).unwrap() << 128
         | BigUint::from_u32(position.position_header.synthetic_token).unwrap() << 96
         | BigUint::from_u64(position.position_size).unwrap() << 32
         | BigUint::from_u32(position.position_header.vlp_token).unwrap();
@@ -542,7 +543,7 @@ fn _get_tab_output(order_tab: &OrderTab) -> (u64, [BigUint; 4]) {
         ^ &order_tab.tab_header.quote_blinding % BigUint::from_u64(2).unwrap().pow(64);
 
     // & batched_tab_info_slot format: | index (59 bits) | base_token (32 bits) | quote_token (32 bits) | base_hidden_amount (64 bits) | quote_hidden_amount (64 bits)
-    let batched_tab_info = BigUint::from_u32(order_tab.tab_idx).unwrap() << 192
+    let batched_tab_info = BigUint::from_u64(order_tab.tab_idx).unwrap() << 192
         | BigUint::from_u32(order_tab.tab_header.base_token).unwrap() << 160
         | BigUint::from_u32(order_tab.tab_header.quote_token).unwrap() << 128
         | base_hidden_amount << 64

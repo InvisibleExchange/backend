@@ -572,7 +572,8 @@ pub struct NoteOutput {
     pub token: u32,
     pub hidden_amount: u64,
     pub commitment: String,
-    pub address: String,
+    pub address_x: String,
+    pub address_y: String,
     pub hash: String,
 }
 
@@ -592,16 +593,18 @@ fn parse_note_outputs(output: &[BigUint], num_notes: u32) -> (Vec<NoteOutput>, &
         let index = split_vec[2].to_u64().unwrap();
 
         let commitment = &output[(i * 3 + 1) as usize];
-        let address = &output[(i * 3 + 2) as usize];
+        let address_x = &output[(i * 3 + 2) as usize];
+        let address_y = &output[(i * 3 + 3) as usize];
 
-        let hash = hash_note_output(token, &commitment, &address).to_string();
+        let hash = hash_note_output(token, &commitment, &address_y).to_string();
 
         let note = NoteOutput {
             index,
             token,
             hidden_amount,
             commitment: commitment.to_string(),
-            address: address.to_string(),
+            address_x: address_x.to_string(),
+            address_y: address_y.to_string(),
             hash,
         };
 

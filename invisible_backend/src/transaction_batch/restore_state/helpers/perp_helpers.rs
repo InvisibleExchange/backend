@@ -468,7 +468,7 @@ pub fn position_from_json(position_json: &Value) -> PerpPosition {
         .unwrap() as u32;
     let vlp_supply = position_json.get("vlp_supply").unwrap().as_u64().unwrap();
     let margin = position_json.get("margin").unwrap().as_u64().unwrap();
-    let index = position_json.get("index").unwrap().as_u64().unwrap() as u32;
+    let index = position_json.get("index").unwrap().as_u64().unwrap();
     let bankruptcy_price = position_json
         .get("bankruptcy_price")
         .unwrap()
@@ -525,7 +525,7 @@ pub fn get_init_margin(order_json: &Value, spent_synthetic: u64) -> (u64, u64) {
 pub fn parse_order_info(
     transaction: &Map<String, Value>,
     is_a: bool,
-) -> (&serde_json::Value, OrderSide, u64, u64, u32, u32, u32, u64) {
+) -> (&serde_json::Value, OrderSide, u64, u64, u32, u32, u64, u64) {
     let order = transaction
         .get(if is_a { "order_a" } else { "order_b" })
         .unwrap();
@@ -548,7 +548,7 @@ pub fn parse_order_info(
         .get(if is_a { "order_a" } else { "order_b" })
         .unwrap();
     let current_funding_idx = indexes.get("new_funding_idx").unwrap().as_u64().unwrap() as u32;
-    let index = indexes.get("position_idx").unwrap().as_u64().unwrap() as u32;
+    let index = indexes.get("position_idx").unwrap().as_u64().unwrap();
 
     let fee_taken = swap_data
         .get(if is_a { "fee_taken_a" } else { "fee_taken_b" })
@@ -570,7 +570,7 @@ pub fn parse_order_info(
 
 pub fn parse_liquidation_order_info(
     transaction: &Map<String, Value>,
-) -> (&serde_json::Value, OrderSide, u64, u64, u32, u32, u32) {
+) -> (&serde_json::Value, OrderSide, u64, u64, u32, u32, u64) {
     let order = transaction.get("liquidation_order").unwrap();
 
     let order_side = if order.get("order_side").unwrap().as_str().unwrap() == "Long" {
@@ -586,7 +586,7 @@ pub fn parse_liquidation_order_info(
 
     let indexes = transaction.get("indexes").unwrap();
     let current_funding_idx = indexes.get("new_funding_idx").unwrap().as_u64().unwrap() as u32;
-    let index = indexes.get("new_position_index").unwrap().as_u64().unwrap() as u32;
+    let index = indexes.get("new_position_index").unwrap().as_u64().unwrap() as u64;
 
     return (
         order,

@@ -179,10 +179,13 @@ pub fn _change_position_margin_inner(
 
     verify_margin_change_signature(&margin_change)?;
 
+
+
     let mut position = margin_change.position.clone();
     verify_position_existence(&position, &state_tree)?;
 
     position.modify_margin(margin_change.margin_change)?;
+ 
 
     let leverage = position
         .get_current_leverage(current_index_price)

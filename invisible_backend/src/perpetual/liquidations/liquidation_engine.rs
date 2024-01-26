@@ -103,8 +103,7 @@ impl LiquidationSwap {
             println!("leftover_collateral: {}", leftover_collateral);
             println!("is_partial_liquidation: {}", is_partial_liquidation);
 
-            let new_idx = state_tree.lock().first_zero_idx() as u32;
-
+            let new_idx = state_tree.lock().first_zero_idx();
 
             let new_position = open_new_position_after_liquidation(
                 &self.liquidation_order,

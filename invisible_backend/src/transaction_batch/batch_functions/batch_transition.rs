@@ -225,9 +225,11 @@ pub fn _construct_da_output(
         &swap_output_json,
     );
 
-    // for (i, val) in da_output_data.iter().enumerate() {
-    //     println!("{},", val);
-    // }
+    for (i, val) in da_output_data.iter().enumerate() {
+        println!("{},", val);
+    }
+
+    println!("DA output: {}", da_output_data.len());
 
     println!("DA Commitment: {}", da_commitment);
 

@@ -35,17 +35,17 @@ impl StateStorage {
 }
 
 pub fn store_new_state_updates(
-    note_outputs: &Vec<(u64, [BigUint; 3])>,
+    note_outputs: &Vec<(u64, [BigUint; 4])>,
     position_outputs: &Vec<(u64, [BigUint; 3])>,
     tab_outputs: &Vec<(u64, [BigUint; 4])>,
     zero_indexes: &Vec<u64>,
 ) {
     let mut batch = sled::Batch::default();
 
-    println!("Storing {} new notes", note_outputs.len());
-    println!("Storing {} new positions", position_outputs.len());
-    println!("Storing {} new tabs", tab_outputs.len());
-    println!("Storing {} zero indexes", zero_indexes.len());
+    // println!("Storing {} new notes", note_outputs.len());
+    // println!("Storing {} new positions", position_outputs.len());
+    // println!("Storing {} new tabs", tab_outputs.len());
+    // println!("Storing {} zero indexes", zero_indexes.len());
 
     let now = Instant::now();
 
@@ -123,7 +123,7 @@ pub fn get_state_at_index(index: u64) -> Option<(LeafNodeType, StateValue)> {
     match leaf_type {
         LeafNodeType::Note => {
             let note_data = state_db.get(index.to_string()).unwrap();
-            let note_data: [BigUint; 3] = bincode::deserialize(&note_data.unwrap()).unwrap();
+            let note_data: [BigUint; 4] = bincode::deserialize(&note_data.unwrap()).unwrap();
 
             let note = parse_note_data(note_data);
 
@@ -131,9 +131,6 @@ pub fn get_state_at_index(index: u64) -> Option<(LeafNodeType, StateValue)> {
         }
         LeafNodeType::Position => {
             let position_data = state_db.get(index.to_string()).unwrap();
-
-            let x: Result<[BigUint; 3], Box<bincode::ErrorKind>> =
-                bincode::deserialize(&position_data.clone().unwrap());
 
             let position_data: [BigUint; 3] =
                 bincode::deserialize(&position_data.unwrap()).unwrap();
@@ -153,7 +150,7 @@ pub fn get_state_at_index(index: u64) -> Option<(LeafNodeType, StateValue)> {
     }
 }
 
-pub fn parse_note_data(note_data: [BigUint; 3]) -> NoteOutput {
+pub fn parse_note_data(note_data: [BigUint; 4]) -> NoteOutput {
     let batched_note_info = note_data[0].clone();
 
     let split_vec = split_by_bytes(&batched_note_info, vec![32, 64, 64]);
@@ -162,16 +159,18 @@ pub fn parse_note_data(note_data: [BigUint; 3]) -> NoteOutput {
     let index = split_vec[2].to_u64().unwrap();
 
     let commitment = &note_data[1];
-    let address = &note_data[2];
+    let address_x = &note_data[2];
+    let address_y = &note_data[3];
 
-    let hash = hash_note_output(token, &commitment, &address).to_string();
+    let hash = hash_note_output(token, &commitment, &address_x).to_string();
 
     let note = NoteOutput {
         index,
         token,
         hidden_amount,
         commitment: commitment.to_string(),
-        address: address.to_string(),
+        address_x: address_x.to_string(),
+        address_y: address_y.to_string(),
         hash,
     };
 

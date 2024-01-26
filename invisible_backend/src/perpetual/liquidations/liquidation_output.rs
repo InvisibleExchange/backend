@@ -10,7 +10,7 @@ pub fn wrap_liquidation_output(
     signature: &Signature,
     new_liquidated_position_hash: &Option<String>,
     new_position_hash: &String,
-    new_position_index: u32,
+    new_position_index: u64,
     prev_funding_idx: u32,
     new_funding_idx: u32,
     market_price: u64,
@@ -62,7 +62,7 @@ pub fn wrap_liquidation_output(
 #[derive(Clone)]
 pub struct LiquidationResponse {
     pub liquidated_position_address: BigUint,
-    pub liquidated_position_index: u32,
+    pub liquidated_position_index: u64,
     pub liquidated_position: Option<PerpPosition>,
     pub new_position: PerpPosition,
 }

@@ -49,6 +49,8 @@ service Engine {
 
     rpc register_onchain_action (RegisterOnchainActionRequest) returns (SuccessResponse);
 
+    rpc update_invalid_state_indexes (UpdateDbIndexesReq) returns (SuccessResponse);
+
     // queries --------------- ----------------- ----------------
     rpc get_orders (OrdersReq) returns (OrdersRes);
 
@@ -223,7 +225,7 @@ message GrpcPerpPosition {
     uint32 last_funding_idx = 8;
     uint64 vlp_supply = 9;
     string hash = 10;
-    uint32 index = 11 ;
+    uint64 index = 11 ;
 }
 
 
@@ -353,7 +355,7 @@ message OnChainCloseMmReq {
 
 
 message GrpcOrderTab {
-    uint32 tab_idx = 1;
+    uint64 tab_idx = 1;
     GrpcTabHeader tab_header = 2;
     uint64 base_amount = 3;
     uint64 quote_amount = 4;
@@ -598,6 +600,14 @@ message EmptyReq {
 
 
 message FinalizeBatchResponse {}
+
+
+
+// * UPDATE INVALID INDEXES ---------------------------------------------------
+message UpdateDbIndexesReq {
+    repeated uint64 invalid_indexes = 1;
+} 
+
 
 
 // * ORACLE PRICE UPDATE ---------------------------------------------------

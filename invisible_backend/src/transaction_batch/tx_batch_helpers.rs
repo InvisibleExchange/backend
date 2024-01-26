@@ -294,7 +294,7 @@ pub fn add_margin_state_updates(
     tree.update_leaf_node(&new_position_hash, position_index);
     updated_state_hashes.insert(
         position_index,
-        (LeafNodeType::Note, new_position_hash.clone()),
+        (LeafNodeType::Position, new_position_hash.clone()),
     );
 
     drop(tree);

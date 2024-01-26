@@ -27,7 +27,8 @@ use super::grpc::engine_proto::{
     MarginChangeRes, OnChainAddLiqReq, OnChainCloseMmReq, OnChainRegisterMmReq,
     OnChainRemoveLiqReq, OnChainScmmRes, OpenOrderTabReq, OracleUpdateReq, OrderResponse,
     OrdersReq, OrdersRes, PerpOrderMessage, RegisterOnchainActionRequest, RestoreOrderBookMessage,
-    SplitNotesReq, SplitNotesRes, StateInfoReq, StateInfoRes, SuccessResponse, WithdrawalMessage,
+    SplitNotesReq, SplitNotesRes, StateInfoReq, StateInfoRes, SuccessResponse, UpdateDbIndexesReq,
+    WithdrawalMessage,
 };
 use super::{
     grpc::engine_proto::{engine_server::Engine, CloseOrderTabRes, OpenOrderTabRes},
@@ -35,7 +36,10 @@ use super::{
 };
 use crate::{
     matching_engine::orderbook::OrderBook,
-    utils::{errors::send_deposit_error_reply, storage::local_storage::OnchainActionType},
+    utils::{
+        errors::send_deposit_error_reply,
+        storage::{local_storage::OnchainActionType, update_invalid::update_invalid_state},
+    },
 };
 use crate::{transaction_batch::TransactionBatch, utils::errors::send_oracle_update_error_reply};
 
@@ -480,6 +484,38 @@ impl Engine for EngineService {
         );
         drop(main_storage);
         drop(tx_batch);
+
+        return Ok(Response::new(SuccessResponse {
+            successful: true,
+            error_message: "".to_string(),
+        }));
+    }
+
+    async fn update_invalid_state_indexes(
+        &self,
+        request: Request<UpdateDbIndexesReq>,
+    ) -> Result<Response<SuccessResponse>, Status> {
+        // ? Only call the server from the same network (onyl as fallback)
+        if !is_local_address(&request) {
+            let reply = SuccessResponse {
+                successful: false,
+                error_message: "register_onchain_action can only be called from the same network"
+                    .to_string(),
+            };
+
+            return Ok(Response::new(reply));
+        }
+
+        let indexes = request.into_inner().invalid_indexes;
+
+        let tx_batch = self.transaction_batch.lock().await;
+
+        update_invalid_state(
+            &tx_batch.state_tree,
+            &tx_batch.firebase_session,
+            &tx_batch.backup_storage,
+            indexes,
+        );
 
         return Ok(Response::new(SuccessResponse {
             successful: true,

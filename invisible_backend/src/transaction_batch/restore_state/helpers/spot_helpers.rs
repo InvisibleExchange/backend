@@ -362,7 +362,7 @@ pub fn order_tab_from_json(tab_json: &Value) -> OrderTab {
         tab_json.get("quote_amount").unwrap().as_u64().unwrap(),
     );
 
-    order_tab.tab_idx = tab_json.get("tab_idx").unwrap().as_u64().unwrap() as u32;
+    order_tab.tab_idx = tab_json.get("tab_idx").unwrap().as_u64().unwrap();
 
     return order_tab;
 }

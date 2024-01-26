@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    matching_engine::get_quote_qty,
     perpetual::{
         get_price, perp_helpers::perp_swap_helpers::get_max_leverage, perp_position::PerpPosition,
-        scale_down_price, OrderSide, COLLATERAL_TOKEN, COLLATERAL_TOKEN_DECIMALS,
-        DECIMALS_PER_ASSET, LEVERAGE_DECIMALS, PRICE_DECIMALS_PER_ASSET, SYNTHETIC_ASSETS,
+        OrderSide, COLLATERAL_TOKEN_DECIMALS, DECIMALS_PER_ASSET, LEVERAGE_DECIMALS,
+        PRICE_DECIMALS_PER_ASSET, SYNTHETIC_ASSETS,
     },
     transaction_batch::tx_batch_structs::SwapFundingInfo,
     trees::superficial_tree::SuperficialTree,
@@ -57,7 +56,7 @@ pub fn open_new_position_after_liquidation(
     liquidator_fee: u64,
     market_price: u64,
     current_funding_index: u32,
-    new_idx: u32,
+    new_idx: u64,
 ) -> Result<PerpPosition, PerpSwapExecutionError> {
     //
 
@@ -97,7 +96,7 @@ pub fn open_new_position_after_liquidation(
             .allow_partial_liquidations,
         liquidation_order.open_order_fields.position_address.clone(),
         current_funding_index,
-        new_idx as u32,
+        new_idx,
         0,
     );
 

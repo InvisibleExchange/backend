@@ -157,7 +157,7 @@ pub fn _get_da_updates_inner(
     funding_prices: &HashMap<u32, Vec<u64>>,
     transactions: &Vec<Map<String, Value>>,
 ) -> (BigUint, Vec<String>) {
-    let mut note_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
+    let mut note_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
     let mut position_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
     let mut tab_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
     let mut zero_indexes: Vec<u64> = Vec::new();
@@ -291,6 +291,11 @@ pub fn _get_da_updates_inner(
     position_outputs.dedup();
     tab_outputs.dedup();
     zero_indexes.dedup();
+
+    println!("note_outputs: {:?}", note_outputs.len());
+    println!("position_outputs: {:?}", position_outputs.len());
+    println!("tab_outputs: {:?}", tab_outputs.len());
+    println!("zero_indexes: {:?}", zero_indexes.len());
 
     // ? Store the new state updates localy on disk
 

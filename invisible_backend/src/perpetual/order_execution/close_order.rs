@@ -27,7 +27,7 @@ pub fn execute_close_order(
     partial_fill_info: Option<(Option<Note>, u64, u64)>,
 ) -> Result<
     (
-        u32,
+        u64,
         Option<PerpPosition>,
         (Option<Note>, u64, u64),
         u64,
@@ -84,7 +84,7 @@ fn close_position(
     fee_taken: u64,
     spent_collateral: u64,
     spent_synthetic: u64,
-) -> Result<(u64, u64, u32, Option<PerpPosition>), PerpSwapExecutionError> {
+) -> Result<(u64, u64, u64, Option<PerpPosition>), PerpSwapExecutionError> {
     let mut position: PerpPosition = prev_position.clone();
     let mut prev_spent_synthetic: u64 = 0;
 

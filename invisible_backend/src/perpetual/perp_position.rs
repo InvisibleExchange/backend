@@ -18,7 +18,7 @@ use crate::utils::crypto_utils::hash_many;
 // position should have address or something
 #[derive(Debug, Clone)]
 pub struct PerpPosition {
-    pub index: u32, // index of the position in the state (merkle tree)
+    pub index: u64, // index of the position in the state (merkle tree)
     pub position_header: PositionHeader,
     // ? Mutable fields
     pub order_side: OrderSide, // Long or Short
@@ -46,7 +46,7 @@ impl PerpPosition {
         allow_partial_liquidations: bool,
         position_address: BigUint,
         current_funding_idx: u32,
-        index: u32,
+        index: u64,
         fee_taken: u64,
     ) -> PerpPosition {
         let entry_price = _get_entry_price(margin, leverage, position_size, synthetic_token);
@@ -271,7 +271,6 @@ impl PerpPosition {
             OrderSide::Long => OrderSide::Short,
             OrderSide::Short => OrderSide::Long,
         };
-
 
         // ? Make updates to the position
         self.order_side = new_order_side;
@@ -531,8 +530,6 @@ impl PerpPosition {
         let liquidator_fee = (liquidated_size as u128 * market_price as u128 * liquidator_fee_rate
             / (multiplier1 as u128 * 1000)) as u64;
 
-      
-
         self.position_size = new_size as u64;
         self.margin -= liquidator_fee;
         self.update_position_info();
@@ -600,8 +597,6 @@ impl PerpPosition {
         // Todo: Maybe have a constant fee here (like 5 cents or something)
 
         let margin = (self.margin as i64 + margin_change) as u64;
-
-  
 
         // ? Make updates to the position
         self.margin = margin;
@@ -895,7 +890,7 @@ impl<'de> Deserialize<'de> for PerpPosition {
             last_funding_idx: u32,
             vlp_supply: u64,
             hash: String,
-            index: u32,
+            index: u64,
         }
 
         let helper = Helper::deserialize(deserializer)?;

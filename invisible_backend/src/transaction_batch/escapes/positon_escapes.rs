@@ -252,7 +252,7 @@ fn handle_counter_party_open_order(
         open_order_fields_b.allow_partial_liquidations,
         open_order_fields_b.position_address,
         latest_funding_idx,
-        perp_zero_idx as u32,
+        perp_zero_idx,
         0,
     );
 

@@ -89,7 +89,7 @@ pub fn update_perpetual_state(
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     position_effect_type: &PositionEffectType,
-    position_idx: u32,
+    position_idx: u64,
     position: Option<&PerpPosition>,
 ) {
     //

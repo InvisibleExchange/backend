@@ -232,7 +232,7 @@ fn open_new_position(
             .position_address
             .clone(),
         funding_idx,
-        zero_idx as u32,
+        zero_idx,
         fee_taken,
     );
 

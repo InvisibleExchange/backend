@@ -53,8 +53,15 @@ impl FirebaseNoteObject {
     }
 
     pub fn from_note_object(note_output: NoteOutput) -> FirebaseNoteObject {
-        let adddress_point =
-            AffinePoint::from_x(FieldElement::from_str(&note_output.address).unwrap()).unwrap();
+        let adddress_point = if note_output.address_x == "0".to_string() {
+            AffinePoint::identity()
+        } else {
+            AffinePoint {
+                x: FieldElement::from_dec_str(&note_output.address_x).unwrap(),
+                y: FieldElement::from_dec_str(&note_output.address_y).unwrap(),
+                infinity: false,
+            }
+        };
 
         return FirebaseNoteObject {
             address: [adddress_point.x.to_string(), adddress_point.y.to_string()],
@@ -240,7 +247,7 @@ pub fn store_position_output(
         bankruptcy_price,
         last_funding_idx: position_output.last_funding_idx,
         vlp_supply: position_output.vlp_supply,
-        index: position_output.index as u32,
+        index: position_output.index,
         hash,
     };
 
@@ -318,7 +325,7 @@ pub fn store_new_position(
 // ? Order Tab
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OrderTabObject {
-    pub index: u32,
+    pub index: u64,
     // header
     pub base_token: u32,
     pub quote_token: u32,
@@ -374,7 +381,7 @@ impl OrderTabObject {
 
     pub fn from_order_tab_output(order_tab_output: OrderTabOutput) -> Self {
         return OrderTabObject {
-            index: order_tab_output.index as u32,
+            index: order_tab_output.index,
             base_token: order_tab_output.base_token,
             quote_token: order_tab_output.quote_token,
             pub_key: order_tab_output.public_key,
