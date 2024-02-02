@@ -225,13 +225,11 @@ pub fn _construct_da_output(
         &swap_output_json,
     );
 
-    for (i, val) in da_output_data.iter().enumerate() {
-        println!("{},", val);
-    }
+    // for (i, val) in da_output_data.iter().enumerate() {
+    //     println!("{},", val);
+    // }
 
-    println!("DA output: {}", da_output_data.len());
-
-    println!("DA Commitment: {}", da_commitment);
+    println!("DA Commitment: {}\n", da_commitment);
 
     store_da_data_output(da_output_data, batch_transition_info.current_batch_index);
 }

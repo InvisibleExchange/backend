@@ -206,7 +206,7 @@ pub fn store_position_output(
     let position_header = PositionHeader::new(
         position_output.synthetic_token,
         position_output.allow_partial_liquidations,
-        BigUint::from_str("position_output").unwrap(),
+        BigUint::from_str(&position_output.public_key).unwrap(),
         position_output.vlp_token,
     );
 

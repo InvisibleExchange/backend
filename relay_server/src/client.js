@@ -95,6 +95,7 @@ function updateFundingInfo(rates, prices) {
 initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo);
 initFundingInfo(client, updateFundingInfo);
 
+
 /// =============================================================================
 
 // * EXECUTE DEPOSIT -----------------------------------------------------------------

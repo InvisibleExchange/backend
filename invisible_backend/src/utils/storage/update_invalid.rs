@@ -37,6 +37,9 @@ pub fn update_invalid_state(
                 i
             );
 
+            // TODO: Remove the state value from the database
+            // TODO: Figure out if its a note, order tab or position
+
             continue;
         }
 

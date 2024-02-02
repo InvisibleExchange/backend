@@ -1,6 +1,6 @@
 use invisible_backend::{
     transaction_batch::{batch_functions::batch_transition::TREE_DEPTH, TransactionBatch},
-    utils::storage::update_invalid::update_invalid_state,
+    utils::storage::update_invalid::{update_invalid_state, verify_state_storage},
 };
 
 #[tokio::main]
@@ -8,14 +8,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut tx_batch = TransactionBatch::new(TREE_DEPTH);
     tx_batch.init();
 
-    let indexes = vec![15];
+    verify_state_storage(&tx_batch.state_tree)?;
 
-    update_invalid_state(
-        &tx_batch.state_tree,
-        &tx_batch.firebase_session,
-        &tx_batch.backup_storage,
-        indexes,
-    );
+    // let indexes = vec![15];
+    // update_invalid_state(
+    //     &tx_batch.state_tree,
+    //     &tx_batch.firebase_session,
+    //     &tx_batch.backup_storage,
+    //     indexes,
+    // );
 
     Ok(())
 }

@@ -292,10 +292,10 @@ pub fn _get_da_updates_inner(
     tab_outputs.dedup();
     zero_indexes.dedup();
 
-    println!("note_outputs: {:?}", note_outputs.len());
+    println!("\nnote_outputs: {:?}", note_outputs.len());
     println!("position_outputs: {:?}", position_outputs.len());
     println!("tab_outputs: {:?}", tab_outputs.len());
-    println!("zero_indexes: {:?}", zero_indexes.len());
+    println!("zero_indexes: {:?}\n", zero_indexes.len());
 
     // ? Store the new state updates localy on disk
 

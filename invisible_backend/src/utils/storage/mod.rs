@@ -42,11 +42,6 @@ pub fn store_new_state_updates(
 ) {
     let mut batch = sled::Batch::default();
 
-    // println!("Storing {} new notes", note_outputs.len());
-    // println!("Storing {} new positions", position_outputs.len());
-    // println!("Storing {} new tabs", tab_outputs.len());
-    // println!("Storing {} zero indexes", zero_indexes.len());
-
     let now = Instant::now();
 
     for (index, note_val) in note_outputs {
@@ -86,8 +81,6 @@ pub fn store_new_state_updates(
 
     if let Err(err) = state_db.apply_batch(batch) {
         println!("Error storing state updates: {:?}", err.to_string())
-    } else {
-        println!("All state updates stored!");
     }
 
     println!("Time to store state updates: {:?}", now.elapsed());
