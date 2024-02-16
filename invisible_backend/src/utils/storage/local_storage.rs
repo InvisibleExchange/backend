@@ -459,6 +459,57 @@ impl MainStorage {
         Some(batch_transition_info)
     }
 
+    // *
+
+    pub fn store_accumulated_hashes(
+        &self,
+        accumulated_deposit_hashes: &HashMap<u32, BigUint>,
+        accumulated_withdrawal_hashes: &HashMap<u32, BigUint>,
+    ) {
+        self.batch_transition_info_db
+            .insert(
+                self.latest_batch.to_string() + "-accumulated_deposit_hashes",
+                serde_json::to_vec(accumulated_deposit_hashes).unwrap(),
+            )
+            .unwrap();
+
+        self.batch_transition_info_db
+            .insert(
+                self.latest_batch.to_string() + "-accumulated_withdrawal_hashes",
+                serde_json::to_vec(accumulated_withdrawal_hashes).unwrap(),
+            )
+            .unwrap();
+    }
+
+    pub fn read_accumulated_hashes(
+        &self,
+        batch_index: u32,
+    ) -> (HashMap<u32, BigUint>, HashMap<u32, BigUint>) {
+        let accumulated_deposit_hashes_info = self
+            .batch_transition_info_db
+            .get(batch_index.to_string() + "-accumulated_deposit_hashes")
+            .unwrap();
+
+        let accumulated_withdrawal_hashes_info = self
+            .batch_transition_info_db
+            .get(batch_index.to_string() + "-accumulated_withdrawal_hashes")
+            .unwrap();
+
+        let mut accumulated_deposit_hashes: HashMap<u32, BigUint> = HashMap::new();
+        if let Some(acc_hashes) = accumulated_deposit_hashes_info {
+            accumulated_deposit_hashes = serde_json::from_slice(&acc_hashes.to_vec()).unwrap();
+        }
+
+        let mut accumulated_withdrawal_hashes: HashMap<u32, BigUint> = HashMap::new();
+        if let Some(acc_hashes) = accumulated_withdrawal_hashes_info {
+            accumulated_withdrawal_hashes = serde_json::from_slice(&acc_hashes.to_vec()).unwrap();
+        }
+
+        (accumulated_deposit_hashes, accumulated_withdrawal_hashes)
+    }
+
+    // *
+
     /// Clears the storage to make room for the next batch.
     ///
     pub fn transition_to_new_batch(

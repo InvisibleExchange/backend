@@ -12,7 +12,7 @@ use crate::utils::errors::{
 
 use crate::utils::crypto_utils::{hash_many, verify, Signature};
 use crate::utils::storage::backup_storage::BackupStorage;
-use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
+use crate::utils::storage::local_storage::MainStorage;
 use num_bigint::BigUint;
 use serde_json::Value;
 

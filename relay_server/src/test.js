@@ -53,7 +53,18 @@ async function getFundingInfo() {
 
 // ===========================
 async function updateInconsistentState() {
-  let invalid_indexes = ["0", "151"];
+  let invalid_indexes = [
+    "157",
+    "157",
+    "158",
+    "158",
+    "159",
+    "159",
+    "160",
+    "160",
+    "168",
+    "168",
+  ];
 
   client.update_invalid_state_indexes(
     {
@@ -71,8 +82,8 @@ async function updateInconsistentState() {
 
 // ===========================
 
-// finalizeBatch();
+finalizeBatch();
 
-updateInconsistentState();
+// updateInconsistentState();
 
 // getStateInfo();

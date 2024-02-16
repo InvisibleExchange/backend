@@ -397,42 +397,10 @@ impl PerpPosition {
             return (false, 0);
         }
 
-        if self.position_header.allow_partial_liquidations
-            && self.position_size
-                > MIN_PARTIAL_LIQUIDATION_SIZE
-                    [self.position_header.synthetic_token.to_string().as_str()]
-        {
-            let synthetic_price_decimals: &u8 = PRICE_DECIMALS_PER_ASSET
-                .get(self.position_header.synthetic_token.to_string().as_str())
-                .unwrap();
+        let should_partially_liquidate = self.should_partially_liquidate(market_price);
 
-            let synthetic_decimals: &u8 = DECIMALS_PER_ASSET
-                .get(self.position_header.synthetic_token.to_string().as_str())
-                .unwrap();
-
-            // & price_delta = entry_price - market_price for long and market_price - entry_price for short
-            // & new_size = (margin - position.size * price_delta) / ((entry_price +/- price_delta) * (im_fraction + lf_rate))  ; - if long, + if short
-
-            let decimal_conversion1 =
-                *synthetic_price_decimals + *synthetic_decimals - COLLATERAL_TOKEN_DECIMALS;
-            let multiplier1 = 10_u128.pow(decimal_conversion1 as u32);
-
-            let price_delta = if self.order_side == OrderSide::Long {
-                self.entry_price as u64 - market_price as u64
-            } else {
-                market_price as u64 - self.entry_price as u64
-            };
-
-            let im_rate = 67; // 6.7 %
-            let liquidator_fee_rate = 5; // 0.5 %
-
-            let s1 = self.margin as u128 * multiplier1;
-            let s2 = self.position_size as u128 * price_delta as u128;
-
-            let new_size =
-                (s1 - s2) * 1000 / (market_price as u128 * (im_rate + liquidator_fee_rate) as u128);
-
-            let liquidatable_size = self.position_size - new_size as u64;
+        if should_partially_liquidate {
+            let (liquidatable_size, _) = self.get_liquidatable_amount(market_price);
 
             return (true, liquidatable_size);
         } else {
@@ -467,11 +435,9 @@ impl PerpPosition {
         // & apply funding
         self.apply_funding(funding_rates, prices, funding_idx);
 
-        if self.position_header.allow_partial_liquidations
-            && self.position_size
-                >= MIN_PARTIAL_LIQUIDATION_SIZE
-                    [self.position_header.synthetic_token.to_string().as_str()]
-        {
+        let should_partially_liquidate = self.should_partially_liquidate(market_price);
+
+        if should_partially_liquidate {
             let (liquidator_fee, liquidated_size) =
                 self.partially_liquidate_position(market_price)?;
 
@@ -499,38 +465,20 @@ impl PerpPosition {
             .get(self.position_header.synthetic_token.to_string().as_str())
             .unwrap();
 
-        // & price_delta = entry_price - market_price for long and market_price - entry_price for short
-        // & new_size = (margin - position.size * price_delta) / ((entry_price +/- price_delta) * (im_fraction + lf_rate))  ; - if long, + if short
-
         let decimal_conversion1 =
             *synthetic_price_decimals + *synthetic_decimals - COLLATERAL_TOKEN_DECIMALS;
         let multiplier1 = 10_u128.pow(decimal_conversion1 as u32);
 
-        let price_delta = if self.order_side == OrderSide::Long {
-            self.entry_price as u64 - market_price as u64
-        } else {
-            market_price as u64 - self.entry_price as u64
-        };
-
-        let im_rate = 67; // 6.7 %
         let liquidator_fee_rate = 5; // 0.5 %
 
-        let s1 = self.margin as u128 * multiplier1;
-        let s2 = self.position_size as u128 * price_delta as u128;
-
-        let numerator = s1 - s2;
-        let denominator = market_price as u128 * (im_rate + liquidator_fee_rate) as u128 / 1000;
-
-        let new_size = numerator / denominator;
-
-        let liquidated_size = self.position_size - new_size as u64;
+        let (liquidated_size, new_size) = self.get_liquidatable_amount(market_price);
 
         //& Leftover value: (market_price - bankruptcy_price) * position_size   (denominated in collateral - USD)
 
         let liquidator_fee = (liquidated_size as u128 * market_price as u128 * liquidator_fee_rate
             / (multiplier1 as u128 * 1000)) as u64;
 
-        self.position_size = new_size as u64;
+        self.position_size = new_size;
         self.margin -= liquidator_fee;
         self.update_position_info();
 
@@ -581,6 +529,59 @@ impl PerpPosition {
 
         // if leftover_value > 0 add to insurance_fund else subtract
         return Ok((leftover_value as i64, liquidator_fee as u64));
+    }
+
+    /// Checks if the price is better than the market price and returns true if position
+    /// should be partially liquidated.
+    fn should_partially_liquidate(&self, market_price: u64) -> bool {
+        let is_partially_liquidatable = self.position_header.allow_partial_liquidations
+            && self.position_size
+                > MIN_PARTIAL_LIQUIDATION_SIZE
+                    [self.position_header.synthetic_token.to_string().as_str()];
+
+        let is_bankrupt = if self.order_side == OrderSide::Long {
+            market_price <= self.bankruptcy_price
+        } else {
+            market_price >= self.bankruptcy_price
+        };
+
+        return is_partially_liquidatable && !is_bankrupt;
+    }
+
+    fn get_liquidatable_amount(&self, market_price: u64) -> (u64, u64) {
+        let synthetic_price_decimals: &u8 = PRICE_DECIMALS_PER_ASSET
+            .get(self.position_header.synthetic_token.to_string().as_str())
+            .unwrap();
+
+        let synthetic_decimals: &u8 = DECIMALS_PER_ASSET
+            .get(self.position_header.synthetic_token.to_string().as_str())
+            .unwrap();
+
+        // & price_delta = entry_price - market_price for long and market_price - entry_price for short
+        // & new_size = (margin - position.size * price_delta) / ((entry_price +/- price_delta) * (im_fraction + lf_rate))  ; - if long, + if short
+
+        let decimal_conversion1 =
+            *synthetic_price_decimals + *synthetic_decimals - COLLATERAL_TOKEN_DECIMALS;
+        let multiplier1 = 10_u128.pow(decimal_conversion1 as u32);
+
+        let price_delta = if self.order_side == OrderSide::Long {
+            self.entry_price as u64 - market_price as u64
+        } else {
+            market_price as u64 - self.entry_price as u64
+        };
+
+        let im_rate = 67; // 6.7 %
+        let liquidator_fee_rate = 5; // 0.5 %
+
+        let s1 = self.margin as u128 * multiplier1;
+        let s2 = self.position_size as u128 * price_delta as u128;
+
+        let new_size =
+            (s1 - s2) * 1000 / (market_price as u128 * (im_rate + liquidator_fee_rate) as u128);
+
+        let liquidatable_size = self.position_size - new_size as u64;
+
+        return (liquidatable_size, new_size as u64);
     }
 
     // -----------------------------------------------------------------------

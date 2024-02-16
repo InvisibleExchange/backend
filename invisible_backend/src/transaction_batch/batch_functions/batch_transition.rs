@@ -218,18 +218,32 @@ pub fn _construct_da_output(
         .unwrap();
     drop(main_storage);
 
-    let (da_commitment, da_output_data) = _get_da_updates_inner(
-        &batch_transition_info.updated_state_hashes,
-        &funding_rates,
-        &funding_prices,
-        &swap_output_json,
-    );
+    let (da_commitment, da_output_data, accumulated_deposit_hashes, accumulated_withdrawal_hashes) =
+        _get_da_updates_inner(
+            &batch_transition_info.updated_state_hashes,
+            &funding_rates,
+            &funding_prices,
+            &swap_output_json,
+        );
 
     // for (i, val) in da_output_data.iter().enumerate() {
     //     println!("{},", val);
     // }
 
     println!("DA Commitment: {}\n", da_commitment);
+    println!(
+        "Accumulated Deposit Hashes: {:?}",
+        accumulated_deposit_hashes
+    );
+    println!(
+        "Accumulated Withdrawal Hashes: {:?}\n",
+        accumulated_withdrawal_hashes
+    );
+
+    let main_storage = main_storage_m.lock();
+    main_storage
+        .store_accumulated_hashes(&accumulated_deposit_hashes, &accumulated_withdrawal_hashes);
+    drop(main_storage);
 
     store_da_data_output(da_output_data, batch_transition_info.current_batch_index);
 }

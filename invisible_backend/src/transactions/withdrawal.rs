@@ -33,7 +33,7 @@ pub struct Withdrawal {
     pub withdrawal_chain_id: u32,
     pub withdrawal_token: u32,
     pub withdrawal_amount: u64,
-    pub stark_key: BigUint,
+    pub recipient: BigUint,
     pub notes_in: Vec<Note>,
     pub refund_note: Option<Note>,
     pub signature: Signature,
@@ -173,7 +173,7 @@ impl Withdrawal {
         };
 
         note_hashes.push(&refund_note_hash);
-        note_hashes.push(&self.stark_key);
+        note_hashes.push(&self.recipient);
         let chain_id = BigUint::from_u32(self.withdrawal_chain_id).unwrap();
         note_hashes.push(&chain_id);
 
@@ -235,7 +235,7 @@ impl Serialize for Withdrawal {
         withdrawal.serialize_field("withdrawal_chain", &self.withdrawal_chain_id)?;
         withdrawal.serialize_field("withdrawal_token", &self.withdrawal_token)?;
         withdrawal.serialize_field("withdrawal_amount", &self.withdrawal_amount)?;
-        withdrawal.serialize_field("stark_key", &self.stark_key.to_string())?;
+        withdrawal.serialize_field("recipient", &self.recipient.to_string())?;
         withdrawal.serialize_field("notes_in", &self.notes_in)?;
         withdrawal.serialize_field("refund_note", &self.refund_note)?;
         withdrawal.serialize_field("signature", &self.signature)?;

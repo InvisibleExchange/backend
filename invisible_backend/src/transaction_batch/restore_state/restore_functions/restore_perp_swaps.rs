@@ -188,8 +188,8 @@ pub fn restore_liquidation_order_execution(
         .unwrap()
         .as_u64()
         .unwrap();
-    let new_liquidated_position_idx = transaction
-        .get("prev_liquidated_position")
+    let liquidated_position_idx = liquidation_order
+        .get("position")
         .unwrap()
         .get("index")
         .unwrap()
@@ -201,11 +201,12 @@ pub fn restore_liquidation_order_execution(
         .unwrap()
         .as_str()
         .unwrap();
-    let new_liquidated_position_hash = transaction
-        .get("new_liquidated_position_hash")
-        .unwrap()
-        .as_str()
-        .unwrap();
+    let new_liquidated_position_hash = transaction.get("new_liquidated_position_hash").unwrap();
+    let new_liquidated_position_hash = if new_liquidated_position_hash.is_null() {
+        "0"
+    } else {
+        new_liquidated_position_hash.as_str().unwrap()
+    };
 
     tree.update_leaf_node(
         &BigUint::from_str(new_position_hash).unwrap(),
@@ -221,8 +222,8 @@ pub fn restore_liquidation_order_execution(
 
     let hash = BigUint::from_str(new_liquidated_position_hash).unwrap();
     if hash != BigUint::zero() {
-        tree.update_leaf_node(&hash, new_liquidated_position_idx);
-        updated_state_hashes.insert(new_liquidated_position_idx, (LeafNodeType::Position, hash));
+        tree.update_leaf_node(&hash, liquidated_position_idx);
+        updated_state_hashes.insert(liquidated_position_idx, (LeafNodeType::Position, hash));
     }
 }
 

@@ -132,8 +132,7 @@ pub fn liquidation_consistency_checks(
         ));
     }
 
-    // ? Check that the orders are the opposite sides
-    // ? for simplicity, we require order_a to be the "buyer" and order_b to be the "seller"
+    // ? Check that the order side matches the position order side
     if liquidation_order.position.order_side != liquidation_order.order_side {
         return Err(send_perp_swap_error(
             "order and position order side mismatch".to_string(),

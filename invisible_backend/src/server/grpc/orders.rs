@@ -210,7 +210,7 @@ impl TryFrom<WithdrawalMessage> for Withdrawal {
             notes_in,
             refund_note,
             signature: Signature::try_from(req.signature.ok_or(GrpcMessageError {})?)?,
-            stark_key: BigUint::from_str(&req.stark_key).or_else(|e| {
+            recipient: BigUint::from_str(&req.recipient).or_else(|e| {
                 return Err(Report::new(GrpcMessageError {}).attach_printable(e));
             })?,
         };

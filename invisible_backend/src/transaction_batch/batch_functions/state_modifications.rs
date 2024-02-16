@@ -179,33 +179,33 @@ pub fn _change_position_margin_inner(
 
     verify_margin_change_signature(&margin_change)?;
 
-
-
     let mut position = margin_change.position.clone();
     verify_position_existence(&position, &state_tree)?;
 
     position.modify_margin(margin_change.margin_change)?;
- 
 
-    let leverage = position
-        .get_current_leverage(current_index_price)
-        .map_err(|e| e.to_string())?;
+    if margin_change.margin_change < 0 {
+        let leverage = position
+            .get_current_leverage(current_index_price)
+            .map_err(|e| e.to_string())?;
 
-    // ? Check that leverage is valid relative to the notional position size after increasing size
-    if get_max_leverage(
-        position.position_header.synthetic_token,
-        position.position_size,
-    ) < leverage
-    {
-        println!(
-            "Leverage would be too high {} > {}",
-            leverage,
-            get_max_leverage(
+        // ? Check that leverage is valid relative to the notional position size after increasing size
+        if margin_change.margin_change < 0
+            && get_max_leverage(
                 position.position_header.synthetic_token,
-                position.position_size
-            ),
-        );
-        return Err("Leverage would be too high".to_string());
+                position.position_size,
+            ) < leverage
+        {
+            println!(
+                "Leverage would be too high {} > {}",
+                leverage,
+                get_max_leverage(
+                    position.position_header.synthetic_token,
+                    position.position_size
+                ),
+            );
+            return Err("Leverage would be too high".to_string());
+        }
     }
 
     let mut z_index: u64 = 0;

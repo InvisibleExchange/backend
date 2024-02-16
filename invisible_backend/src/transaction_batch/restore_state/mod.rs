@@ -6,17 +6,21 @@ use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
 use crate::{
+    transaction_batch::restore_state::da_output::{
+        state_updates_da::{
+            close_order_tab_da_ouput, forced_position_escape_da_output, margin_update_da_output,
+            note_split_da_output, onchain_mm_action_da_output, open_order_tab_da_output,
+        },
+        transactions_da::{
+            deposit_da_output, liquidations_da_output, perp_swap_da_output, spot_order_da_output,
+            withdrawal_da_output,
+        },
+    },
     trees::superficial_tree::SuperficialTree,
     utils::{crypto_utils::hash_many, notes::Note, storage::store_new_state_updates},
 };
 
 use self::{
-    da_output_functions::{
-        close_order_tab_da_ouput, deposit_da_output, forced_position_escape_da_output,
-        liquidations_da_output, margin_update_da_output, note_split_da_output,
-        onchain_mm_action_da_output, open_order_tab_da_output, perp_swap_da_output,
-        spot_order_da_output, withdrawal_da_output,
-    },
     helpers::state_helpers::{restore_margin_update, restore_note_split},
     restore_functions::restore_forced_escapes::{
         restore_forced_note_escape, restore_forced_position_escape, restore_forced_tab_escape,
@@ -34,7 +38,7 @@ use self::{
 
 use super::LeafNodeType;
 
-mod da_output_functions;
+mod da_output;
 mod helpers;
 mod restore_functions;
 
@@ -156,11 +160,19 @@ pub fn _get_da_updates_inner(
     funding_rates: &HashMap<u32, Vec<i64>>,
     funding_prices: &HashMap<u32, Vec<u64>>,
     transactions: &Vec<Map<String, Value>>,
-) -> (BigUint, Vec<String>) {
+) -> (
+    BigUint,
+    Vec<String>,
+    HashMap<u32, BigUint>,
+    HashMap<u32, BigUint>,
+) {
     let mut note_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
     let mut position_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
     let mut tab_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
     let mut zero_indexes: Vec<u64> = Vec::new();
+
+    let mut accumulated_deposit_hashes: HashMap<u32, BigUint> = HashMap::new();
+    let mut accumulated_withdrawal_hashes: HashMap<u32, BigUint> = HashMap::new();
 
     for transaction in transactions {
         let transaction_type = transaction
@@ -171,11 +183,19 @@ pub fn _get_da_updates_inner(
 
         match transaction_type {
             "deposit" => {
-                deposit_da_output(updated_state_hashes, &mut note_outputs, &transaction);
+                deposit_da_output(
+                    updated_state_hashes,
+                    &mut note_outputs,
+                    &mut accumulated_deposit_hashes,
+                    &transaction,
+                );
             }
-            "withdrawal" => {
-                withdrawal_da_output(updated_state_hashes, &mut note_outputs, &transaction)
-            }
+            "withdrawal" => withdrawal_da_output(
+                updated_state_hashes,
+                &mut note_outputs,
+                &mut accumulated_withdrawal_hashes,
+                &transaction,
+            ),
             "swap" => {
                 // * Order a ------------------------
                 spot_order_da_output(
@@ -292,11 +312,6 @@ pub fn _get_da_updates_inner(
     tab_outputs.dedup();
     zero_indexes.dedup();
 
-    println!("\nnote_outputs: {:?}", note_outputs.len());
-    println!("position_outputs: {:?}", position_outputs.len());
-    println!("tab_outputs: {:?}", tab_outputs.len());
-    println!("zero_indexes: {:?}\n", zero_indexes.len());
-
     // ? Store the new state updates localy on disk
 
     store_new_state_updates(
@@ -339,5 +354,10 @@ pub fn _get_da_updates_inner(
 
     let data_output: Vec<String> = data_output.into_iter().map(|el| el.to_string()).collect();
 
-    return (data_commitment, data_output);
+    return (
+        data_commitment,
+        data_output,
+        accumulated_deposit_hashes,
+        accumulated_withdrawal_hashes,
+    );
 }
