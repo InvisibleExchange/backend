@@ -115,11 +115,5 @@ fn hash_tab_keccak(order_tab: &OrderTab) -> BigUint {
 
     let tab_hash = keccak256(&input_arr);
 
-    let p = BigUint::from_str(
-        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
-    )
-    .unwrap();
-    let hash_on_curve = tab_hash % &p;
-
-    return hash_on_curve;
+    return tab_hash;
 }

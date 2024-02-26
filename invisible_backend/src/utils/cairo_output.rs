@@ -6,7 +6,7 @@ use crate::{
     perpetual::{perp_position::get_liquidation_price, OrderSide},
     transaction_batch::{
         tx_batch_structs::{GlobalConfig, GlobalDexState, ProgramInputCounts},
-        CHAIN_IDS,
+        tx_batch_helpers::CHAIN_IDS
     },
 };
 

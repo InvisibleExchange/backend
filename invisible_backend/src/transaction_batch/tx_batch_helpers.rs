@@ -24,6 +24,9 @@ use super::{
     LeafNodeType,
 };
 
+// { ETH Mainnet: 40161, Arbitrum: 40231 }
+pub const CHAIN_IDS: [u32; 2] = [40161, 40231];
+
 // * HELPERS * //
 
 /// Initialize a map with the default values for all tokens
@@ -84,10 +87,31 @@ pub fn get_final_updated_counts(
 
         match transaction_type {
             "deposit" => {
-                n_deposits += 1;
+                let deposit_id = transaction
+                    .get("deposit")
+                    .unwrap()
+                    .get("deposit_id")
+                    .unwrap()
+                    .as_u64()
+                    .unwrap();
+                let chain_id = (deposit_id / 2u64.pow(32)) as u32;
+
+                if chain_id == CHAIN_IDS[0] {
+                    n_deposits += 1;
+                }
             }
             "withdrawal" => {
-                n_withdrawals += 1;
+                let chain_id = transaction
+                    .get("withdrawal")
+                    .unwrap()
+                    .get("withdrawal_chain")
+                    .unwrap()
+                    .as_u64()
+                    .unwrap();
+
+                if chain_id == CHAIN_IDS[0] as u64 {
+                    n_withdrawals += 1;
+                }
             }
             "onchain_mm_action" => {
                 n_onchain_mm_actions += 1;

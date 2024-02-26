@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::transaction_batch::{LeafNodeType, CHAIN_IDS};
+use crate::transaction_batch::{LeafNodeType};
+use crate::transaction_batch::tx_batch_helpers::CHAIN_IDS;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::errors::{
     send_deposit_error, DepositThreadExecutionError, TransactionExecutionError,

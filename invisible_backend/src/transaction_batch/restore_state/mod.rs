@@ -21,24 +21,25 @@ use crate::{
 };
 
 use self::{
+    da_output::helpers::{DepositRequest, WithdrawalRequest},
     helpers::state_helpers::{restore_margin_update, restore_note_split},
-    restore_functions::restore_forced_escapes::{
-        restore_forced_note_escape, restore_forced_position_escape, restore_forced_tab_escape,
-    },
-    restore_functions::restore_order_tabs::{
-        restore_close_order_tab, restore_onchain_mm_action, restore_open_order_tab,
-    },
-    restore_functions::restore_perp_swaps::{
-        restore_liquidation_order_execution, restore_perp_order_execution,
-    },
-    restore_functions::restore_spot_swap::{
-        restore_deposit_update, restore_spot_order_execution, restore_withdrawal_update,
+    restore_functions::{
+        restore_forced_escapes::{
+            restore_forced_note_escape, restore_forced_position_escape, restore_forced_tab_escape,
+        },
+        restore_order_tabs::{
+            restore_close_order_tab, restore_onchain_mm_action, restore_open_order_tab,
+        },
+        restore_perp_swaps::{restore_liquidation_order_execution, restore_perp_order_execution},
+        restore_spot_swap::{
+            restore_deposit_update, restore_spot_order_execution, restore_withdrawal_update,
+        },
     },
 };
 
 use super::LeafNodeType;
 
-mod da_output;
+pub mod da_output;
 mod helpers;
 mod restore_functions;
 
@@ -165,6 +166,8 @@ pub fn _get_da_updates_inner(
     Vec<String>,
     HashMap<u32, BigUint>,
     HashMap<u32, BigUint>,
+    HashMap<u32, Vec<DepositRequest>>,
+    HashMap<u32, Vec<WithdrawalRequest>>,
 ) {
     let mut note_outputs: Vec<(u64, [BigUint; 4])> = Vec::new();
     let mut position_outputs: Vec<(u64, [BigUint; 3])> = Vec::new();
@@ -173,6 +176,9 @@ pub fn _get_da_updates_inner(
 
     let mut accumulated_deposit_hashes: HashMap<u32, BigUint> = HashMap::new();
     let mut accumulated_withdrawal_hashes: HashMap<u32, BigUint> = HashMap::new();
+
+    let mut deposit_outputs: HashMap<u32, Vec<DepositRequest>> = HashMap::new();
+    let mut withdrawal_outputs: HashMap<u32, Vec<WithdrawalRequest>> = HashMap::new();
 
     for transaction in transactions {
         let transaction_type = transaction
@@ -183,17 +189,24 @@ pub fn _get_da_updates_inner(
 
         match transaction_type {
             "deposit" => {
+                
+                
+              
+
                 deposit_da_output(
                     updated_state_hashes,
                     &mut note_outputs,
                     &mut accumulated_deposit_hashes,
+                    &mut deposit_outputs,
                     &transaction,
                 );
             }
+
             "withdrawal" => withdrawal_da_output(
                 updated_state_hashes,
                 &mut note_outputs,
                 &mut accumulated_withdrawal_hashes,
+                &mut withdrawal_outputs,
                 &transaction,
             ),
             "swap" => {
@@ -359,5 +372,7 @@ pub fn _get_da_updates_inner(
         data_output,
         accumulated_deposit_hashes,
         accumulated_withdrawal_hashes,
+        deposit_outputs,
+        withdrawal_outputs,
     );
 }

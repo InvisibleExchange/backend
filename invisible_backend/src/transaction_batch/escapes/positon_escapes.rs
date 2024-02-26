@@ -512,13 +512,7 @@ fn hash_position_escape_message(
 
     let order_hash = keccak256(&hash_inputs);
 
-    let p = BigUint::from_str(
-        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
-    )
-    .unwrap();
-    let hash_on_curve = order_hash % &p;
-
-    return hash_on_curve;
+    return order_hash;
 }
 
 pub fn hash_position_keccak(position: &PerpPosition) -> BigUint {
@@ -565,13 +559,7 @@ pub fn hash_position_keccak(position: &PerpPosition) -> BigUint {
 
     let position_hash = keccak256(&input_arr);
 
-    let p = BigUint::from_str(
-        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
-    )
-    .unwrap();
-    let hash_on_curve = position_hash % &p;
-
-    return hash_on_curve;
+    return position_hash;
 }
 
 pub fn hash_open_order_fields_keccak(open_order_fields_b: &OpenOrderFields) -> BigUint {
@@ -605,11 +593,5 @@ pub fn hash_open_order_fields_keccak(open_order_fields_b: &OpenOrderFields) -> B
 
     let fields_hash = keccak256(&input_arr);
 
-    let p = BigUint::from_str(
-        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
-    )
-    .unwrap();
-    let hash_on_curve = fields_hash % &p;
-
-    return hash_on_curve;
+    return fields_hash;
 }

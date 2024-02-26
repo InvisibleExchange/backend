@@ -20,8 +20,8 @@ use super::{
         spot_helpers::{get_updated_order_tab, note_from_json, rebuild_swap_note},
     },
     helpers::{
-        _update_accumulated_deposit_hash, _update_accumulated_withdrawal_hash, append_note_output,
-        append_position_output, append_tab_output,
+        append_note_output, append_position_output, append_tab_output, DepositRequest,
+        WithdrawalRequest, _update_output_deposits, _update_output_withdrawals,
     },
 };
 
@@ -90,6 +90,7 @@ pub fn deposit_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
     note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     accumulated_deposit_hashes: &mut HashMap<u32, BigUint>,
+    deposit_outputs: &mut HashMap<u32, Vec<DepositRequest>>,
     transaction: &Map<String, Value>,
 ) {
     let deposit = transaction.get("deposit").unwrap();
@@ -103,15 +104,15 @@ pub fn deposit_da_output(
         note_hashes.push(note.hash);
     }
 
-    // * Update accumulated deposit hashes * //
-
-    _update_accumulated_deposit_hash(deposit, accumulated_deposit_hashes)
+    // * Update accumulated deposits * //
+    _update_output_deposits(deposit, deposit_outputs, accumulated_deposit_hashes);
 }
 
 pub fn withdrawal_da_output(
     updated_state_hashes: &HashMap<u64, (LeafNodeType, BigUint)>,
     note_outputs: &mut Vec<(u64, [BigUint; 4])>,
     accumulated_withdrawal_hashes: &mut HashMap<u32, BigUint>,
+    withdrawal_outputs: &mut HashMap<u32, Vec<WithdrawalRequest>>,
     transaction: &Map<String, Value>,
 ) {
     let withdrawal = transaction.get("withdrawal").unwrap();
@@ -122,8 +123,12 @@ pub fn withdrawal_da_output(
         append_note_output(updated_state_hashes, note_outputs, &refund_note);
     }
 
-    // * Update accumulated withdrawal hashes * //
-    _update_accumulated_withdrawal_hash(withdrawal, accumulated_withdrawal_hashes);
+    // * Update accumulated withdrawals * //
+    _update_output_withdrawals(
+        withdrawal,
+        withdrawal_outputs,
+        accumulated_withdrawal_hashes,
+    );
 }
 
 // * PERP SWAP DA FUNCTIONS ==========================================================================================

@@ -7,6 +7,9 @@ use std::{collections::HashMap, path::Path, sync::Arc, time::SystemTime};
 use error_stack::Result;
 
 use crate::transaction_batch::restore_state::_get_da_updates_inner;
+use crate::transaction_batch::restore_state::da_output::helpers::{
+    DepositRequest, WithdrawalRequest,
+};
 use crate::trees::{superficial_tree::SuperficialTree, Tree};
 use crate::utils::storage::local_storage::MainStorage;
 use crate::{
@@ -218,13 +221,19 @@ pub fn _construct_da_output(
         .unwrap();
     drop(main_storage);
 
-    let (da_commitment, da_output_data, accumulated_deposit_hashes, accumulated_withdrawal_hashes) =
-        _get_da_updates_inner(
-            &batch_transition_info.updated_state_hashes,
-            &funding_rates,
-            &funding_prices,
-            &swap_output_json,
-        );
+    let (
+        da_commitment,
+        da_output_data,
+        accumulated_deposit_hashes,
+        accumulated_withdrawal_hashes,
+        deposit_outputs,
+        withdrawal_outputs,
+    ) = _get_da_updates_inner(
+        &batch_transition_info.updated_state_hashes,
+        &funding_rates,
+        &funding_prices,
+        &swap_output_json,
+    );
 
     // for (i, val) in da_output_data.iter().enumerate() {
     //     println!("{},", val);
@@ -240,12 +249,21 @@ pub fn _construct_da_output(
         accumulated_withdrawal_hashes
     );
 
+    println!("Deposit Outputs: {:?}\n", deposit_outputs);
+    println!("Withdrawal Outputs: {:?}\n", withdrawal_outputs);
+
     let main_storage = main_storage_m.lock();
     main_storage
         .store_accumulated_hashes(&accumulated_deposit_hashes, &accumulated_withdrawal_hashes);
+    main_storage.store_interaction_outputs(&deposit_outputs, &withdrawal_outputs);
     drop(main_storage);
 
-    store_da_data_output(da_output_data, batch_transition_info.current_batch_index);
+    store_da_data_output(
+        da_output_data,
+        deposit_outputs,
+        withdrawal_outputs,
+        batch_transition_info.current_batch_index,
+    );
 }
 
 // * ======================================================================================
@@ -304,12 +322,39 @@ fn store_transactions_data(
 }
 
 /// Stores The DA output data in the database
-fn store_da_data_output(da_output: Vec<String>, current_batch_index: u32) {
+fn store_da_data_output(
+    da_output: Vec<String>,
+    deposit_outputs: HashMap<u32, Vec<DepositRequest>>,
+    withdrawal_outputs: HashMap<u32, Vec<WithdrawalRequest>>,
+    current_batch_index: u32,
+) {
     let _handle = tokio::spawn(async move {
         // ? Store the transactions
         let serialized_data = to_vec(&da_output).expect("Serialization failed");
         if let Err(e) = upload_file_to_storage(
             "da_output/".to_string() + &current_batch_index.to_string(),
+            serialized_data,
+        )
+        .await
+        {
+            println!("Error uploading file to storage: {:?}", e);
+        }
+
+        // ? Store the deposit outputs
+        let serialized_data = to_vec(&deposit_outputs).expect("Serialization failed");
+        if let Err(e) = upload_file_to_storage(
+            "da_output/".to_string() + &current_batch_index.to_string() + "_deposit_outputs",
+            serialized_data,
+        )
+        .await
+        {
+            println!("Error uploading file to storage: {:?}", e);
+        }
+
+        // ? Store the withdrawal outputs
+        let serialized_data = to_vec(&withdrawal_outputs).expect("Serialization failed");
+        if let Err(e) = upload_file_to_storage(
+            "da_output/".to_string() + &current_batch_index.to_string() + "_withdrawal_outputs",
             serialized_data,
         )
         .await

@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     transaction_batch::LeafNodeType,
@@ -134,13 +134,7 @@ fn hash_note_escape_message(escape_notes: &Vec<Note>) -> BigUint {
 
     let escape_hash = keccak256(&hash_inputs);
 
-    let p = BigUint::from_str(
-        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
-    )
-    .unwrap();
-    let hash_on_curve = escape_hash % &p;
-
-    return hash_on_curve;
+    return escape_hash;
 }
 
 pub fn hash_note_keccak(note: &Note) -> BigUint {
@@ -161,11 +155,5 @@ pub fn hash_note_keccak(note: &Note) -> BigUint {
 
     let note_hash = keccak256(&input_arr);
 
-    let p = BigUint::from_str(
-        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
-    )
-    .unwrap();
-    let hash_on_curve = note_hash % &p;
-
-    return hash_on_curve;
+    return note_hash;
 }

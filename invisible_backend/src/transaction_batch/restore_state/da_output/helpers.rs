@@ -2,6 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One, Zero};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
@@ -167,22 +168,49 @@ pub fn _get_tab_output(order_tab: &OrderTab) -> (u64, [BigUint; 4]) {
 
 // * ———————————————————————————————————————————————————————————————————————————————————— * //
 
-pub fn _update_accumulated_deposit_hash(
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DepositRequest {
+    pub deposit_id: u64,
+    pub token_id: u32,
+    pub amount: u64,
+    pub stark_key: String,
+}
+pub fn _update_output_deposits(
     deposit: &Value,
+    deposit_outputs: &mut HashMap<u32, Vec<DepositRequest>>,
     accumulated_deposit_hashes: &mut HashMap<u32, BigUint>,
 ) {
     let deposit_id = deposit.get("deposit_id").unwrap().as_u64().unwrap();
     let token_id = deposit.get("deposit_token").unwrap().as_u64().unwrap() as u32;
     let amount = deposit.get("deposit_amount").unwrap().as_u64().unwrap();
-    let stark_key = BigUint::from_str(deposit.get("stark_key").unwrap().as_str().unwrap()).unwrap();
+    let stark_key = deposit.get("stark_key").unwrap().as_str().unwrap();
+
+    let deposit_output = DepositRequest {
+        deposit_id,
+        token_id,
+        amount,
+        stark_key: stark_key.to_string(),
+    };
 
     let chain_id = (deposit_id / 2u64.pow(32)) as u32;
 
+    // * Update deposit outputs ==================================== * //
+    let dep_outputs = deposit_outputs.get_mut(&chain_id);
+    if let Some(dep_outputs) = dep_outputs {
+        dep_outputs.push(deposit_output);
+    } else {
+        deposit_outputs.insert(chain_id, vec![deposit_output]);
+    }
+
+    // * Update accumulated deposit hashes ========================== * //
     let batched_deposit_info = BigUint::from_u64(deposit_id).unwrap() << 96
-        | BigUint::from_u32(token_id).unwrap() << 32
+        | BigUint::from_u32(token_id).unwrap() << 64
         | BigUint::from_u64(amount).unwrap();
 
-    let deposit_hash = keccak256(&vec![batched_deposit_info, stark_key]);
+    let deposit_hash = keccak256(&vec![
+        batched_deposit_info,
+        BigUint::from_str(stark_key).unwrap(),
+    ]);
 
     let z = BigUint::zero();
     let prev_deposit_hash = accumulated_deposit_hashes.get(&chain_id).unwrap_or(&z);
@@ -191,8 +219,16 @@ pub fn _update_accumulated_deposit_hash(
     accumulated_deposit_hashes.insert(chain_id, new_deposit_hash);
 }
 
-pub fn _update_accumulated_withdrawal_hash(
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WithdrawalRequest {
+    pub chain_id: u32,
+    pub token_id: u32,
+    pub amount: u64,
+    pub recipient: String,
+}
+pub fn _update_output_withdrawals(
     withdrawal: &Value,
+    withdrawal_outputs: &mut HashMap<u32, Vec<WithdrawalRequest>>,
     accumulated_withdrawal_hashes: &mut HashMap<u32, BigUint>,
 ) {
     let chain_id = withdrawal
@@ -200,17 +236,43 @@ pub fn _update_accumulated_withdrawal_hash(
         .unwrap()
         .as_u64()
         .unwrap() as u32;
-    let token_id = withdrawal.get("withdrawal_token").unwrap().as_u64().unwrap() as u32;
-    let amount = withdrawal.get("withdrawal_amount").unwrap().as_u64().unwrap();
+    let token_id = withdrawal
+        .get("withdrawal_token")
+        .unwrap()
+        .as_u64()
+        .unwrap() as u32;
+    let amount = withdrawal
+        .get("withdrawal_amount")
+        .unwrap()
+        .as_u64()
+        .unwrap();
 
     let recipient = withdrawal.get("recipient").unwrap().as_str().unwrap();
-    let recipient = BigUint::from_str(recipient).unwrap();
 
+    // * Update withdrawal outputs ==================================== * //
+    let withdrawal_output = WithdrawalRequest {
+        chain_id,
+        token_id,
+        amount,
+        recipient: recipient.to_string(),
+    };
+
+    let with_outputs = withdrawal_outputs.get_mut(&chain_id);
+    if let Some(with_outputs) = with_outputs {
+        with_outputs.push(withdrawal_output);
+    } else {
+        withdrawal_outputs.insert(chain_id, vec![withdrawal_output]);
+    }
+
+    // * Update accumulated withdrawal hashes ========================== * //
     let batched_withdrawal_info = BigUint::from_u32(chain_id).unwrap() << 64
-        | BigUint::from_u32(token_id).unwrap() << 32
+        | BigUint::from_u32(token_id).unwrap() << 64
         | BigUint::from_u64(amount).unwrap();
 
-    let withdrawal_hash = keccak256(&vec![batched_withdrawal_info, recipient]);
+    let withdrawal_hash = keccak256(&vec![
+        batched_withdrawal_info,
+        BigUint::from_str(recipient).unwrap(),
+    ]);
 
     let z: BigUint = BigUint::zero();
     let prev_withdrawal_hash = accumulated_withdrawal_hashes.get(&chain_id).unwrap_or(&z);

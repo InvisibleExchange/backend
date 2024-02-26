@@ -7,7 +7,9 @@ use serde_json::{json, Map, Value};
 use sled::Config;
 
 use crate::transaction_batch::{
-    batch_functions::batch_transition::BatchTransitionInfo, tx_batch_structs::OracleUpdate,
+    batch_functions::batch_transition::BatchTransitionInfo,
+    restore_state::da_output::helpers::{DepositRequest, WithdrawalRequest},
+    tx_batch_structs::OracleUpdate,
 };
 
 use super::firestore::upload_file_to_storage;
@@ -481,6 +483,26 @@ impl MainStorage {
             .unwrap();
     }
 
+    pub fn store_interaction_outputs(
+        &self,
+        deposit_outputs: &HashMap<u32, Vec<DepositRequest>>,
+        withdrawal_outputs: &HashMap<u32, Vec<WithdrawalRequest>>,
+    ) {
+        self.batch_transition_info_db
+            .insert(
+                self.latest_batch.to_string() + "-deposit_outputs",
+                serde_json::to_vec(deposit_outputs).unwrap(),
+            )
+            .unwrap();
+
+        self.batch_transition_info_db
+            .insert(
+                self.latest_batch.to_string() + "-withdrawal_outputs",
+                serde_json::to_vec(withdrawal_outputs).unwrap(),
+            )
+            .unwrap();
+    }
+
     pub fn read_accumulated_hashes(
         &self,
         batch_index: u32,
@@ -508,7 +530,37 @@ impl MainStorage {
         (accumulated_deposit_hashes, accumulated_withdrawal_hashes)
     }
 
-    // *
+    pub fn read_interaction_outputs(
+        &self,
+        batch_index: u32,
+    ) -> (
+        HashMap<u32, Vec<DepositRequest>>,
+        HashMap<u32, Vec<WithdrawalRequest>>,
+    ) {
+        let accumulated_deposit_outputs_info = self
+            .batch_transition_info_db
+            .get(batch_index.to_string() + "-deposit_outputs")
+            .unwrap();
+
+        let accumulated_withdrawal_outputs_info = self
+            .batch_transition_info_db
+            .get(batch_index.to_string() + "-withdrawal_outputs")
+            .unwrap();
+
+        let mut deposit_outputs: HashMap<u32, Vec<DepositRequest>> = HashMap::new();
+        if let Some(acc_hashes) = accumulated_deposit_outputs_info {
+            deposit_outputs = serde_json::from_slice(&acc_hashes.to_vec()).unwrap();
+        }
+
+        let mut withdrawal_outputs: HashMap<u32, Vec<WithdrawalRequest>> = HashMap::new();
+        if let Some(acc_hashes) = accumulated_withdrawal_outputs_info {
+            withdrawal_outputs = serde_json::from_slice(&acc_hashes.to_vec()).unwrap();
+        }
+
+        (deposit_outputs, withdrawal_outputs)
+    }
+
+    // * ------------------------------------------------------------------------------------------
 
     /// Clears the storage to make room for the next batch.
     ///

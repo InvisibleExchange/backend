@@ -5,6 +5,7 @@ use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
 use std::sync::Arc;
 
+use crate::transaction_batch::tx_batch_helpers::CHAIN_IDS;
 use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
@@ -49,6 +50,13 @@ impl Withdrawal {
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(), WithdrawalThreadExecutionError> {
         let withdrawal_handle = thread::scope(move |_s| {
+            if !CHAIN_IDS.contains(&self.withdrawal_chain_id) {
+                return Err(send_withdrawal_error(
+                    "Invalid withdrawal chain id".to_string(),
+                    None,
+                ));
+            }
+
             let mut valid: bool = true;
             let amount_sum = self.notes_in.iter().fold(0u64, |acc, note| {
                 if note.token != self.withdrawal_token {

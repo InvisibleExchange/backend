@@ -72,9 +72,6 @@ pub mod restore_state;
 pub mod tx_batch_helpers;
 pub mod tx_batch_structs;
 
-// { ETH Mainnet: 9090909, Starknet: 7878787, ZkSync: 5656565 }
-pub const CHAIN_IDS: [u32; 3] = [9090909, 7878787, 5656565];
-
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum LeafNodeType {
     Note,

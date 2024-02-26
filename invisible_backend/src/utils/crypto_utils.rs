@@ -92,7 +92,15 @@ pub fn keccak256(hash_inputs: &Vec<BigUint>) -> BigUint {
     hasher.update(bytes.as_ref());
     hasher.finalize(&mut output);
 
-    BigUint::from_bytes_be(&output[..])
+    let hash = BigUint::from_bytes_be(&output[..]);
+
+    let p = BigUint::from_str(
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481",
+    )
+    .unwrap();
+    let hash_on_curve = hash % &p;
+
+    return hash_on_curve;
 }
 
 fn biguint_to_bytes_padded(num: &BigUint) -> Vec<u8> {
