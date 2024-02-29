@@ -265,7 +265,7 @@ pub fn _update_output_withdrawals(
     }
 
     // * Update accumulated withdrawal hashes ========================== * //
-    let batched_withdrawal_info = BigUint::from_u32(chain_id).unwrap() << 64
+    let batched_withdrawal_info = BigUint::from_u32(chain_id).unwrap() << 96
         | BigUint::from_u32(token_id).unwrap() << 64
         | BigUint::from_u64(amount).unwrap();
 
