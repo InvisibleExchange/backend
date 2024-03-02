@@ -242,15 +242,12 @@ pub fn _construct_da_output(
     println!("DA Commitment: {}\n", da_commitment);
     println!(
         "Accumulated Deposit Hashes: {:?}",
-        accumulated_deposit_hashes
+        accumulated_deposit_hashes.get(&40231)
     );
     println!(
         "Accumulated Withdrawal Hashes: {:?}\n",
-        accumulated_withdrawal_hashes
+        accumulated_withdrawal_hashes.get(&40231)
     );
-
-    println!("Deposit Outputs: {:?}\n", deposit_outputs);
-    println!("Withdrawal Outputs: {:?}\n", withdrawal_outputs);
 
     let main_storage = main_storage_m.lock();
     main_storage

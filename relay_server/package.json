@@ -76,7 +76,8 @@
   "devDependencies": {
     "customize-cra": "^1.0.0",
     "react-app-rewired": "^2.2.1",
-    "react-router-dom": "^6.4.1"
+    "react-router-dom": "^6.4.1",
+    "typescript": "^5.3.3"
   },
   "browser": {
     "fs": false,

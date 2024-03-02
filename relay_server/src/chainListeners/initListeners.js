@@ -6,7 +6,6 @@ const path = require("path");
 const { listenForDeposits } = require("./depositListener");
 const { listenForEscapes } = require("./escapesListener");
 const { listenForMMActions } = require("./mmRegistryListener");
-const { initDb } = require("../helpers/localStorage");
 const protoPath = path.join(
   __dirname,
   "../../../invisible_backend/proto",
@@ -31,14 +30,14 @@ const client = new engine.Engine(
 );
 
 // * Get a connection to the smart contract
-const provider = new ethers.providers.JsonRpcProvider(
-  "https://ethereum-sepolia.publicnode.com",
+const provider = new ethers.JsonRpcProvider(
+  process.env.SEPOLIA_RPC_URL ?? "",
   "sepolia"
 );
 
 const exchange_config = require("../../../exchange-config.json");
 const invisibleL1Address = exchange_config["INVISIBL1_ETH_ADDRESS"];
-const invisibleL1Abi = require("../abis/Invisible.json").abi;
+const invisibleL1Abi = require("../abis/InvisibleL1.json").abi;
 
 const invisibleL1Contract = new ethers.Contract(
   invisibleL1Address,
@@ -68,14 +67,7 @@ async function initListeners(db) {
   await listenForMMActions(db, client, invisibleL1Contract);
 }
 
-// TODO: FOR TESTING
-async function main() {
-  const db = await initDb();
-
-  await initListeners(db);
-}
-
-main();
+// TODO: ADD LISTENERS FOR L2 DEPOSITS
 
 module.exports = {
   initListeners,
