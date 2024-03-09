@@ -11,7 +11,7 @@ const {
   getCloseMMCommitment,
 } = require("./dataCommitment");
 
-async function listenForMMActions(db, client, invisibleL1Contract) {
+function listenForMMActions(db, client, invisibleL1Contract) {
   // * new PerpMM Registration * //
   invisibleL1Contract.on(
     "newPerpMMRegistration",
@@ -23,7 +23,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
       vlp_token,
       mmActionId
     ) => {
-      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
+      mmActionId = mmActionId.toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -65,7 +65,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
   invisibleL1Contract.on(
     "AddLiquidity",
     async (depositor, position_address, usdc_amount, mmActionId) => {
-      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
+      mmActionId = mmActionId.toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -111,7 +111,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
       vlp_amount,
       mmActionId
     ) => {
-      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
+      mmActionId = mmActionId.toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -159,7 +159,7 @@ async function listenForMMActions(db, client, invisibleL1Contract) {
       vlp_amount_sum,
       mmActionId
     ) => {
-      mmActionId = (2n ** 20n + BigInt(mmActionId)).toString();
+      mmActionId = mmActionId.toString();
 
       let storedCommitment = await getStoredCommitment(db, mmActionId);
       if (storedCommitment) return;
@@ -245,10 +245,7 @@ async function isCloseMMValid(db, closeMMReq) {
 }
 
 async function isMMActionCommitmentValid(db, mmActionId, commitment) {
-  let storedCommitment = await getStoredCommitment(
-    db,
-    BigInt(mmActionId) * 2n ** 20n
-  );
+  let storedCommitment = await getStoredCommitment(db, BigInt(mmActionId));
   if (!storedCommitment) return false;
 
   if (storedCommitment.action_type != commitment.action_type) return false;
@@ -257,7 +254,7 @@ async function isMMActionCommitmentValid(db, mmActionId, commitment) {
 }
 
 async function mmActionProcessedCallback(db, mmActionId) {
-  return updateStoredCommitment(db, BigInt(mmActionId) * 2n ** 20n);
+  return updateStoredCommitment(db, BigInt(mmActionId));
 }
 
 module.exports = {

@@ -24,7 +24,7 @@ function getDepositCommitment(deposit) {
 
   let depositCommitment = {
     action_type: GrpcOnchainActionType["DEPOSIT"],
-    data_id: (BigInt(deposit.deposit_id) % 2n ** 32n).toString(),
+    data_id: deposit.deposit_id.toString(),
     data_commitment: commitment.toString(),
   };
 

@@ -11,14 +11,11 @@ const {
 
 const { getDepositCommitment } = require("./dataCommitment");
 
-async function listenForDeposits(db, client, invisibleL1Contract) {
-  invisibleL1Contract.on(
+function listenForDeposits(db, client, invisibleContract) {
+  invisibleContract.on(
     "DepositEvent",
     async (depositId, pubKey, tokenId, depositAmountScaled, timestamp) => {
-      let storedCommitment = await getStoredCommitment(
-        db,
-        BigInt(depositId) % 2n ** 32n
-      );
+      let storedCommitment = await getStoredCommitment(db, BigInt(depositId));
       if (storedCommitment) return;
 
       let deposit = {

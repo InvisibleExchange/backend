@@ -4,14 +4,14 @@ const {
   updateStoredCommitment,
 } = require("../helpers/localStorage");
 
-async function listenForEscapes(db, client, escapeVerifierContract) {
+function listenForEscapes(db, client, escapeVerifierContract) {
   // * Note Escapes * //
   escapeVerifierContract.on(
     "NoteEscapeEvent",
     async (escapeId, timestamp, escape_notes, signature) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      let storedCommitment = await getStoredCommitment(db, 2n ** 20n + BigInt(escapeId));
       if (storedCommitment) return;
 
       escape_notes = escape_notes.map((note) => {
@@ -38,7 +38,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
           console.log(err);
         } else {
           let commitment = {
-            data_id: 2n ** 40n + BigInt(escapeId),
+            data_id: 2n ** 20n + BigInt(escapeId),
             action_type: GrpcOnchainActionType["NOTE_ESCAPE"],
             data_commitment: escapeId,
           };
@@ -55,7 +55,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     async (escapeId, timestamp, orderTab, signature) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      let storedCommitment = await getStoredCommitment(db, 2n ** 20n + BigInt(escapeId));
       if (storedCommitment) return;
 
       orderTab = {
@@ -88,7 +88,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
           console.log(err);
         } else {
           let commitment = {
-            data_id: 2n ** 40n + BigInt(escapeId),
+            data_id: 2n ** 20n + BigInt(escapeId),
             action_type: GrpcOnchainActionType["TAB_ESCAPE"],
             data_commitment: escapeId,
           };
@@ -113,7 +113,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     ) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      let storedCommitment = await getStoredCommitment(db, 2n ** 20n + BigInt(escapeId));
       if (storedCommitment) return;
 
       position_a = {
@@ -194,7 +194,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
           console.log(err);
         } else {
           let commitment = {
-            data_id: 2n ** 40n + BigInt(escapeId),
+            data_id: 2n ** 20n + BigInt(escapeId),
             action_type: GrpcOnchainActionType["POSITION_ESCAPE"],
             data_commitment: escapeId,
           };
@@ -219,7 +219,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
     ) => {
       escapeId = Number(escapeId);
 
-      let storedCommitment = await getStoredCommitment(db, 2n ** 40n + BigInt(escapeId));
+      let storedCommitment = await getStoredCommitment(db, 2n ** 20n + BigInt(escapeId));
       if (storedCommitment) return;
 
       position_a = {
@@ -286,7 +286,7 @@ async function listenForEscapes(db, client, escapeVerifierContract) {
           console.log(err);
         } else {
           let commitment = {
-            data_id: 2n ** 40n + BigInt(escapeId),
+            data_id: 2n ** 20n + BigInt(escapeId),
             action_type: GrpcOnchainActionType["POSITION_ESCAPE"],
             data_commitment: escapeId,
           };

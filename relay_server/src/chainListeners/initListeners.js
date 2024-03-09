@@ -35,8 +35,12 @@ const provider = new ethers.JsonRpcProvider(
   "sepolia"
 );
 
-const exchange_config = require("../../../exchange-config.json");
-const invisibleL1Address = exchange_config["INVISIBL1_ETH_ADDRESS"];
+const arbProvider = new ethers.JsonRpcProvider(
+  process.env.ARB_SEPOLIA_RPC_URL ?? ""
+);
+
+const addressConfig = require("../../address-config.json");
+const invisibleL1Address = addressConfig["L1"]["Invisible"];
 const invisibleL1Abi = require("../abis/InvisibleL1.json").abi;
 
 const invisibleL1Contract = new ethers.Contract(
@@ -45,7 +49,16 @@ const invisibleL1Contract = new ethers.Contract(
   provider
 );
 
-const escapeVerifierAddress = exchange_config["ESCAPE_VERIFIER_ETH_ADDRESS"];
+const invisibleL2Address = addressConfig["Arbitrum"]["Invisible"];
+const invisibleL2Abi = require("../abis/InvisibleL2.json").abi;
+
+const invisibleL2Contract = new ethers.Contract(
+  invisibleL2Address,
+  invisibleL2Abi,
+  arbProvider
+);
+
+const escapeVerifierAddress = addressConfig["L1"]["EscapeVerifier"];
 const escapeVerifierAbi = require("../abis/EscapeVerifier.json").abi;
 
 const escapeVerifierContract = new ethers.Contract(
@@ -56,18 +69,19 @@ const escapeVerifierContract = new ethers.Contract(
 
 // * * //
 
-async function initListeners(db) {
+function initListeners(db) {
   // ? Listen and handle onchain deposits
-  await listenForDeposits(db, client, invisibleL1Contract);
+  listenForDeposits(db, client, invisibleL1Contract);
+
+  // ? Listen and handle L2 onchain deposits
+  listenForDeposits(db, client, invisibleL2Contract);
 
   // ? Listen and handle onchain escapes
-  await listenForEscapes(db, client, escapeVerifierContract);
+  listenForEscapes(db, client, escapeVerifierContract);
 
   // ? Listen and handle onchain MM actions
-  await listenForMMActions(db, client, invisibleL1Contract);
+  listenForMMActions(db, client, invisibleL1Contract);
 }
-
-// TODO: ADD LISTENERS FOR L2 DEPOSITS
 
 module.exports = {
   initListeners,

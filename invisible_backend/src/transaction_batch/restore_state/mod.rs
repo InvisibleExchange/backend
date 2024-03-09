@@ -189,10 +189,6 @@ pub fn _get_da_updates_inner(
 
         match transaction_type {
             "deposit" => {
-                
-                
-              
-
                 deposit_da_output(
                     updated_state_hashes,
                     &mut note_outputs,

@@ -1,17 +1,17 @@
 {
     "L1": {
-        "Invisible": "0x582DAF4368f88281b6FE7a315Ef50323693C39AF",
+        "Invisible": "0x38a059b0EB6c42234AAAa872424500f3e1E4253F",
         "StructHasher": "0x8824B3D2099C8B26dd9Eb5cf8e57D4B2F5f42EA8",
         "EscapeVerifier": "0x3eAa88623F737950E46c820776A8925CC585B63E",
         "TestUsdc": "0xFa255d4aa3Aa5d3a26DF650a158835b77877767a",
         "TestWbtc": "0x09Cbeb94e37b5132ad934bc0b55746349B90fEb3",
-        "MessageRelay": "0x5ed7BEBabf1B54824953F4045f0a6D67545e3e82"
+        "MessageRelay": "0x3846c7Cf4718E080Bd023C58d9EEe640c26ffe56"
     },
     "Arbitrum": {
-        "Invisible": "0xf077225097090fB566BC5d32995a29808035E156",
+        "Invisible": "0xb9775eCBce69555fBEE3C5cFB0c0D7c59a6b82e3",
         "TestUsdc": "0x2864e0B08dDF0e64FF7c7E8376A5170a8E325651",
         "TestWbtc": "0x27D6834e8D35CdAB5991b66ef1550326f1018F62",
-        "MessageRelay": "0x6308a5F167ddf199b16E0569582325D4f33962aB"
+        "MessageRelay": "0xF22b70448469950EfDFc44126382897CC7877A29"
     },
     "chains": [
         "L1",
