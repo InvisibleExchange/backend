@@ -22,7 +22,7 @@ use crate::{
 
 use crate::utils::crypto_utils::Signature;
 
-use super::CHAIN_IDS;
+use crate::transaction_batch::tx_batch_helpers::CHAIN_IDS;
 
 // * ORACLE PRICE UPDATES ================================================================================
 
@@ -325,26 +325,9 @@ impl GlobalDexState {
         state_tree_depth: u32,
         global_expiration_timestamp: u32,
         program_input_counts: ProgramInputCounts,
-        // n_output_notes: u32,
-        // n_output_positions: u32,
-        // n_output_tabs: u32,
-        // n_zero_indexes: u32,
-        // n_deposits: u32,
-        // n_withdrawals: u32,
-        // n_mm_registrations: u32,
     ) -> GlobalDexState {
         let init_state_root = init_state_root.to_string();
         let final_state_root = final_state_root.to_string();
-
-        // let program_input_counts = ProgramInputCounts {
-        //     n_output_notes,
-        //     n_output_positions,
-        //     n_output_tabs,
-        //     n_zero_indexes,
-        //     n_deposits,
-        //     n_withdrawals,
-        //     n_mm_registrations,
-        // };
 
         GlobalDexState {
             tx_batch_id,

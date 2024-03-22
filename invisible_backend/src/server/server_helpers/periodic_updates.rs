@@ -36,6 +36,9 @@ pub async fn start_periodic_updates(
     let tx_batch_c = Arc::clone(&tx_batch);
     let mut interval = time::interval(time::Duration::from_secs(60));
     tokio::spawn(async move {
+        // ? Skip the first tick
+        interval.tick().await;
+
         'outer: loop {
             interval.tick().await;
 
@@ -181,6 +184,9 @@ pub async fn start_periodic_updates(
     // * STORE PENDING TXS EVERY 10 MINUTES
     let mut interval4 = time::interval(time::Duration::from_secs(600));
     tokio::spawn(async move {
+        // ? Skip the first tick
+        interval4.tick().await;
+
         loop {
             interval4.tick().await;
 

@@ -71,9 +71,9 @@ pub static IMPACT_NOTIONAL_PER_ASSET: phf::Map<&'static str, u64> = phf_map! {
 
 // Only allow partial liquidations on positions that are at least this size
 pub static MIN_PARTIAL_LIQUIDATION_SIZE: phf::Map<&'static str, u64> = phf_map! {
-"3592681469" => 50_000_000, // BTC
-"453755560" => 500_000_000, // ETH
-"277158171" => 350_000_000, // SOL
+"3592681469" => 5_000_000, // 0.05 BTC
+"453755560" => 50_000_000, // 0.5 ETH
+"277158171" => 350_000_000, // 3.5 SOL
 };
 
 pub const LEVERAGE_DECIMALS: u8 = 4; // 6 decimals for leverage

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    matching_engine::get_quote_qty,
     perpetual::{
         get_price, perp_helpers::perp_swap_helpers::get_max_leverage, perp_position::PerpPosition,
-        scale_down_price, OrderSide, COLLATERAL_TOKEN, LEVERAGE_DECIMALS, SYNTHETIC_ASSETS,
+        OrderSide, COLLATERAL_TOKEN_DECIMALS, DECIMALS_PER_ASSET, LEVERAGE_DECIMALS,
+        PRICE_DECIMALS_PER_ASSET, SYNTHETIC_ASSETS,
     },
     transaction_batch::tx_batch_structs::SwapFundingInfo,
     trees::superficial_tree::SuperficialTree,
@@ -56,23 +56,23 @@ pub fn open_new_position_after_liquidation(
     liquidator_fee: u64,
     market_price: u64,
     current_funding_index: u32,
-    new_idx: u32,
+    new_idx: u64,
 ) -> Result<PerpPosition, PerpSwapExecutionError> {
     //
 
     let init_margin = liquidation_order.open_order_fields.initial_margin + liquidator_fee;
 
-    let price = scale_down_price(market_price, liquidation_order.synthetic_token);
-    let collateral_amount = get_quote_qty(
-        liquidated_size,
-        price,
-        liquidation_order.synthetic_token,
-        COLLATERAL_TOKEN,
-        None,
-    );
+    let synthetic_token = liquidation_order.synthetic_token;
 
-    let leverage = (collateral_amount as u128 * 10_u128.pow(LEVERAGE_DECIMALS as u32)
-        / init_margin as u128) as u64;
+    let multiplier: u128 = 10_u128.pow(
+        (DECIMALS_PER_ASSET[&synthetic_token.to_string()]
+            + PRICE_DECIMALS_PER_ASSET[&synthetic_token.to_string()]
+            - COLLATERAL_TOKEN_DECIMALS) as u32,
+    );
+    let scaler = 10_u128.pow(LEVERAGE_DECIMALS as u32);
+
+    let leverage = (liquidated_size as u128 * market_price as u128 * scaler
+        / (init_margin as u128 * multiplier)) as u64;
 
     // ? Check that leverage is valid relative to the notional position size
     let max_leverage = get_max_leverage(liquidation_order.synthetic_token, liquidated_size);
@@ -96,7 +96,7 @@ pub fn open_new_position_after_liquidation(
             .allow_partial_liquidations,
         liquidation_order.open_order_fields.position_address.clone(),
         current_funding_index,
-        new_idx as u32,
+        new_idx,
         0,
     );
 
@@ -132,8 +132,7 @@ pub fn liquidation_consistency_checks(
         ));
     }
 
-    // ? Check that the orders are the opposite sides
-    // ? for simplicity, we require order_a to be the "buyer" and order_b to be the "seller"
+    // ? Check that the order side matches the position order side
     if liquidation_order.position.order_side != liquidation_order.order_side {
         return Err(send_perp_swap_error(
             "order and position order side mismatch".to_string(),

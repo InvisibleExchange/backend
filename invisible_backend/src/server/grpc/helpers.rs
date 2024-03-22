@@ -10,14 +10,17 @@ use crate::{
         OrderSide, COLLATERAL_TOKEN,
     },
     transaction_batch::tx_batch_structs::OracleUpdate,
-    utils::crypto_utils::{EcPoint, Signature},
+    utils::{
+        crypto_utils::{EcPoint, Signature},
+        storage::local_storage::OnchainActionType,
+    },
     utils::{errors::GrpcMessageError, notes::Note},
 };
 
 use super::{
     engine_proto::{
-        Address, GrcpPositionHeader, GrpcNote, GrpcOracleUpdate, GrpcPerpPosition, MarginChangeReq,
-        Signature as GrpcSignature,
+        Address, GrcpPositionHeader, GrpcNote, GrpcOnchainActionType, GrpcOracleUpdate,
+        GrpcPerpPosition, MarginChangeReq, Signature as GrpcSignature,
     },
     ChangeMarginMessage,
 };
@@ -29,7 +32,6 @@ impl From<PerpPosition> for GrpcPerpPosition {
             synthetic_token: req.position_header.synthetic_token,
             allow_partial_liquidations: req.position_header.allow_partial_liquidations,
             position_address: req.position_header.position_address.to_string(),
-            max_vlp_supply: req.position_header.max_vlp_supply,
             vlp_token: req.position_header.vlp_token,
         };
 
@@ -73,7 +75,6 @@ impl TryFrom<GrpcPerpPosition> for PerpPosition {
             pos_header.allow_partial_liquidations,
             position_address,
             pos_header.vlp_token,
-            pos_header.max_vlp_supply,
         );
 
         let position_hash = _hash_position(
@@ -280,5 +281,20 @@ impl TryFrom<GrpcOracleUpdate> for OracleUpdate {
         };
 
         Ok(point)
+    }
+}
+
+impl From<GrpcOnchainActionType> for OnchainActionType {
+    fn from(req: GrpcOnchainActionType) -> Self {
+        match req {
+            GrpcOnchainActionType::Deposit => OnchainActionType::Deposit,
+            GrpcOnchainActionType::MmRegistration => OnchainActionType::MMRegistration,
+            GrpcOnchainActionType::MmAddLiquidity => OnchainActionType::MMAddLiquidity,
+            GrpcOnchainActionType::MmRemoveLiquidity => OnchainActionType::MMRemoveLiquidity,
+            GrpcOnchainActionType::MmClosePosition => OnchainActionType::MMClosePosition,
+            GrpcOnchainActionType::NoteEscape => OnchainActionType::NoteEscape,
+            GrpcOnchainActionType::TabEscape => OnchainActionType::TabEscape,
+            GrpcOnchainActionType::PositionEscape => OnchainActionType::PositionEscape,
+        }
     }
 }

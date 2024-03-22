@@ -5,14 +5,16 @@ use parking_lot::Mutex;
 
 use crate::{
     order_tab::OrderTab,
-    transactions::limit_order::LimitOrder,
+    transactions::{limit_order::LimitOrder, withdrawal::Withdrawal},
     utils::{
         notes::Note,
-        storage::firestore::{
-            start_add_fill_thread, start_add_note_thread, start_add_order_tab_thread,
-            start_delete_deposit_thread, start_delete_note_thread,
+        storage::{
+            backup_storage::BackupStorage,
+            firestore::{
+                start_add_fill_thread, start_add_note_thread, start_add_order_tab_thread,
+                start_add_withdrawal_thread, start_delete_deposit_thread, start_delete_note_thread,
+            },
         },
-        storage::backup_storage::BackupStorage,
     },
 };
 
@@ -152,18 +154,18 @@ pub fn update_db_after_deposit(
 pub fn update_db_after_withdrawal(
     session: &Arc<Mutex<ServiceSession>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
-    notes_in: &Vec<Note>,
-    refund_note: Option<Note>,
+    withdrawal: &Withdrawal,
+    execution_fee: u64,
 ) {
     let mut delete_notes: Vec<(u64, String)> = Vec::new();
     let mut add_notes: Vec<&Note> = Vec::new();
 
-    if refund_note.is_some() {
+    if withdrawal.refund_note.is_some() {
         // ? Store the refund note in place of the first note
-        add_notes.push(&refund_note.as_ref().unwrap())
+        add_notes.push(&withdrawal.refund_note.as_ref().unwrap())
     }
 
-    for n in notes_in.into_iter() {
+    for n in withdrawal.notes_in.iter() {
         delete_notes.push((n.index, n.address.x.to_string()))
     }
 
@@ -175,6 +177,16 @@ pub fn update_db_after_withdrawal(
     };
 
     let _handles = updater.update_db();
+
+    let _h = start_add_withdrawal_thread(
+        withdrawal.withdrawal_id,
+        withdrawal.chain_id,
+        withdrawal.amount,
+        withdrawal.token,
+        withdrawal.recipient.clone(),
+        execution_fee > 0,
+        session,
+    );
 }
 
 // NOTE SPLITS -----------------------------------------------------
@@ -225,11 +237,11 @@ impl DbNoteUpdater<'_> {
         for note in self.add_notes.iter() {
             let handle = start_add_note_thread((*note).clone(), self.session, self.backup_storage);
             _handles.push(handle);
-            added_notes.insert((note.index, note.address.x.to_string()), false);
+            added_notes.insert(note.index, true);
         }
 
         for deletion in self.delete_notes.iter() {
-            if added_notes.contains_key(&deletion) {
+            if added_notes.contains_key(&deletion.0) {
                 continue;
             }
 

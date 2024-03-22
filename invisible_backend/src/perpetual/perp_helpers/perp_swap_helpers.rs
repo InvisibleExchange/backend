@@ -28,7 +28,7 @@ use super::super::perp_order::PerpOrder;
 pub fn refund_partial_fill(
     collateral_token: u32,
     blinding: &BigUint,
-    pub_key_sum: EcPoint,
+    notes_in0_address: EcPoint,
     unspent_margin: u64,
     idx: u64,
 ) -> Option<Note> {
@@ -36,9 +36,9 @@ pub fn refund_partial_fill(
 
     let new_partial_refund_note: Note = Note::new(
         idx,
-        pub_key_sum,
+        notes_in0_address,
         collateral_token,
-        unspent_margin as u64,
+        unspent_margin,
         blinding.clone(),
     );
 

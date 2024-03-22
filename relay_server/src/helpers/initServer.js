@@ -6,20 +6,26 @@ const {
 
 const { getLastDayTrades } = require("./firebase/firebaseConnection");
 const { priceUpdate } = require("../helpers/mmPriceFeeds");
-const { listenForDeposits } = require("./depositListener");
 const { runIndexPriceUpdator } = require("./indexPriceUpdator");
+
+const { initListeners } = require("../chainListeners/initListeners");
 
 const CONFIG_CODE = "1234567890";
 const RELAY_SERVER_ID = "43147634234";
 
-function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
+function initServer(
+  db,
+  PRICE_FEEDS,
+  updateSpot24hInfo,
+  updatePerp24hInfo,
+  update24HInfo
+) {
   // & Init order books ==================
   const orderBooks = initOrderBooks();
   let fillUpdates = [];
   let wsConnections = [];
 
   // & Price Feeds ====================
-  let PRICE_FEEDS = {};
   priceUpdate(PRICE_FEEDS);
   setInterval(() => {
     try {
@@ -28,7 +34,7 @@ function initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo) {
   }, 10_000);
 
   // & Deposits ====================
-  // TODO: listenForDeposits(db);
+  initListeners(db);
 
   // TODO: For testing only! ============================================
   runIndexPriceUpdator(PRICE_FEEDS);

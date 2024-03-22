@@ -22,7 +22,10 @@ use crate::{
     },
     transaction_batch::LeafNodeType,
     transactions::transaction_helpers::db_updates::{update_db_after_note_split, DbNoteUpdater},
-    utils::storage::firestore::{start_add_note_thread, start_add_position_thread},
+    utils::storage::{
+        firestore::{start_add_note_thread, start_add_position_thread},
+        local_storage::MainStorage,
+    },
 };
 use crate::{
     trees::superficial_tree::SuperficialTree, utils::storage::backup_storage::BackupStorage,
@@ -181,25 +184,28 @@ pub fn _change_position_margin_inner(
 
     position.modify_margin(margin_change.margin_change)?;
 
-    let leverage = position
-        .get_current_leverage(current_index_price)
-        .map_err(|e| e.to_string())?;
+    if margin_change.margin_change < 0 {
+        let leverage = position
+            .get_current_leverage(current_index_price)
+            .map_err(|e| e.to_string())?;
 
-    // ? Check that leverage is valid relative to the notional position size after increasing size
-    if get_max_leverage(
-        position.position_header.synthetic_token,
-        position.position_size,
-    ) < leverage
-    {
-        println!(
-            "Leverage would be too high {} > {}",
-            leverage,
-            get_max_leverage(
+        // ? Check that leverage is valid relative to the notional position size after increasing size
+        if margin_change.margin_change < 0
+            && get_max_leverage(
                 position.position_header.synthetic_token,
-                position.position_size
-            ),
-        );
-        return Err("Leverage would be too high".to_string());
+                position.position_size,
+            ) < leverage
+        {
+            println!(
+                "Leverage would be too high {} > {}",
+                leverage,
+                get_max_leverage(
+                    position.position_header.synthetic_token,
+                    position.position_size
+                ),
+            );
+            return Err("Leverage would be too high".to_string());
+        }
     }
 
     let mut z_index: u64 = 0;
@@ -244,10 +250,6 @@ pub fn _change_position_margin_inner(
             String::from("new_position_hash"),
             serde_json::to_value(position.hash.to_string()).unwrap(),
         );
-        json_map.insert(
-            String::from("zero_idx"),
-            serde_json::to_value(z_index).unwrap(),
-        );
 
         let mut swap_output_json = swap_output_json.lock();
         swap_output_json.push(json_map);
@@ -288,11 +290,11 @@ pub fn _change_position_margin_inner(
     } else {
         let mut tree = state_tree.lock();
 
-        let index = tree.first_zero_idx();
+        z_index = tree.first_zero_idx();
         drop(tree);
 
         let return_collateral_note = Note::new(
-            index,
+            z_index,
             margin_change
                 .close_order_fields
                 .as_ref()
@@ -346,8 +348,6 @@ pub fn _change_position_margin_inner(
 
         let _handle =
             start_add_note_thread(return_collateral_note, &firebase_session, &backup_storage);
-
-        z_index = index;
     }
 
     Ok((z_index, position))
@@ -414,6 +414,7 @@ pub fn _execute_sc_mm_modification_inner(
     state_tree: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
     firebase_session: &Arc<Mutex<ServiceSession>>,
+    main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     swap_output_json: &Arc<Mutex<Vec<serde_json::Map<String, Value>>>>,
     scmm_action_message: SCMMActionMessage,
@@ -421,6 +422,7 @@ pub fn _execute_sc_mm_modification_inner(
     let state_tree = state_tree.clone();
     let updated_state_hashes = updated_state_hashes.clone();
     let session = firebase_session.clone();
+    let main_storage = main_storage.clone();
     let backup_storage = backup_storage.clone();
     let swap_output_json = swap_output_json.clone();
 
@@ -430,6 +432,7 @@ pub fn _execute_sc_mm_modification_inner(
 
             return onchain_register_mm(
                 &session,
+                &main_storage,
                 &backup_storage,
                 register_mm_req,
                 &state_tree,
@@ -441,6 +444,7 @@ pub fn _execute_sc_mm_modification_inner(
 
             return add_liquidity_to_mm(
                 &session,
+                &main_storage,
                 &backup_storage,
                 add_liquidity_req,
                 &state_tree,
@@ -452,6 +456,7 @@ pub fn _execute_sc_mm_modification_inner(
 
             return remove_liquidity_from_order_tab(
                 &session,
+                &main_storage,
                 &backup_storage,
                 remove_liquidity_req,
                 &state_tree,
@@ -463,6 +468,7 @@ pub fn _execute_sc_mm_modification_inner(
 
             return close_onchain_mm(
                 &session,
+                &main_storage,
                 &backup_storage,
                 close_req,
                 &state_tree,

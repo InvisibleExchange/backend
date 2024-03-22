@@ -66,7 +66,7 @@ pub fn update_state_after_liquidation(
 pub fn update_perpetual_state_after_liquidation(
     state_tree_m: &Arc<Mutex<SuperficialTree>>,
     updated_state_hashes_m: &Arc<Mutex<HashMap<u64, (LeafNodeType, BigUint)>>>,
-    liquidated_position_index: u32,
+    liquidated_position_index: u64,
     liquidated_position: &Option<PerpPosition>,
     new_position: &PerpPosition,
 ) -> Result<(), PerpSwapExecutionError> {

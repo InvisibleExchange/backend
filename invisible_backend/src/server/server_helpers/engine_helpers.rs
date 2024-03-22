@@ -118,6 +118,7 @@ pub fn verify_margin_change_signature(margin_change: &ChangeMarginMessage) -> Re
         let notes_in = margin_change.notes_in.as_ref().unwrap();
         for i in 0..notes_in.len() {
             let ec_point = AffinePoint::from(&notes_in[i].address);
+
             pub_key_sum = &pub_key_sum + &ec_point;
         }
 

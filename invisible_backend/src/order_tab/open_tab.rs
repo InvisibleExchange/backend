@@ -178,7 +178,7 @@ pub fn open_order_tab(
 
         // ? Set the tab index
         let z_index = state_tree_m.first_zero_idx();
-        order_tab.tab_idx = z_index as u32;
+        order_tab.tab_idx = z_index;
 
         order_tab.update_hash();
     }

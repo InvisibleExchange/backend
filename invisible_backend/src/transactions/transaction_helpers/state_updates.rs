@@ -139,11 +139,10 @@ pub fn update_state_after_withdrawal(
 
     // ? Remove the notes_in from the tree and add the refund note
     let refund_idx = notes_in[0].index;
-    let z = BigUint::zero();
-    let refund_note_hash = if refund_note.is_some() {
-        &refund_note.as_ref().unwrap().hash
-    } else {
-        &z
+
+    let mut refund_note_hash = &BigUint::zero();
+    if let Some(refund_note) = refund_note {
+        refund_note_hash = &refund_note.hash
     };
     let leaf_hash = tree.get_leaf_by_index(refund_idx);
     if leaf_hash != notes_in[0].hash {

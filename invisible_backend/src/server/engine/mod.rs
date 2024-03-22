@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use self::{
     admin::{finalize_batch_inner, restore_orderbook_inner, update_index_price_inner},
@@ -26,16 +26,24 @@ use super::grpc::engine_proto::{
     LiquidationOrderMessage, LiquidationOrderResponse, LiquidityReq, LiquidityRes, MarginChangeReq,
     MarginChangeRes, OnChainAddLiqReq, OnChainCloseMmReq, OnChainRegisterMmReq,
     OnChainRemoveLiqReq, OnChainScmmRes, OpenOrderTabReq, OracleUpdateReq, OrderResponse,
-    OrdersReq, OrdersRes, PerpOrderMessage, RestoreOrderBookMessage, SplitNotesReq, SplitNotesRes,
-    StateInfoReq, StateInfoRes, SuccessResponse, WithdrawalMessage,
+    OrdersReq, OrdersRes, PerpOrderMessage, RegisterOnchainActionRequest, RestoreOrderBookMessage,
+    SplitNotesReq, SplitNotesRes, StateInfoReq, StateInfoRes, SuccessResponse, UpdateDbIndexesReq,
+    WithdrawalMessage,
 };
 use super::{
     grpc::engine_proto::{engine_server::Engine, CloseOrderTabRes, OpenOrderTabRes},
     server_helpers::WsConnectionsMap,
 };
-use crate::{matching_engine::orderbook::OrderBook, utils::errors::send_deposit_error_reply};
+use crate::{
+    matching_engine::orderbook::OrderBook,
+    utils::{
+        errors::send_deposit_error_reply,
+        storage::{local_storage::OnchainActionType, update_invalid::update_invalid_state},
+    },
+};
 use crate::{transaction_batch::TransactionBatch, utils::errors::send_oracle_update_error_reply};
 
+use num_bigint::BigUint;
 use tokio::sync::{Mutex as TokioMutex, Semaphore};
 use tonic::{Request, Response, Status};
 
@@ -432,6 +440,87 @@ impl Engine for EngineService {
         }
 
         return restore_orderbook_inner(&self.order_books, &self.perp_order_books, request).await;
+    }
+
+    //
+    // * ===================================================================================================================================
+    //
+
+    async fn register_onchain_action(
+        &self,
+        request: Request<RegisterOnchainActionRequest>,
+    ) -> Result<Response<SuccessResponse>, Status> {
+        // ? Only call the server from the same network (onyl as fallback)
+        if !is_local_address(&request) {
+            let reply = SuccessResponse {
+                successful: false,
+                error_message: "register_onchain_action can only be called from the same network"
+                    .to_string(),
+            };
+
+            return Ok(Response::new(reply));
+        }
+
+        let request = request.into_inner();
+
+        let action_type = OnchainActionType::from(request.action_type());
+        let data_commitment = BigUint::from_str(&request.data_commitment);
+        if let Err(_) = data_commitment {
+            return Ok(Response::new(SuccessResponse {
+                successful: false,
+                error_message: "data_commitment is not a valid BigUint".to_string(),
+            }));
+        }
+        let tx_batch = self.transaction_batch.lock().await;
+        let main_storage = tx_batch.main_storage.lock();
+        println!(
+            "Registered onchain action: {} - {:?} - {:?}",
+            request.data_id, action_type, data_commitment
+        );
+        main_storage.register_onchain_action(
+            action_type,
+            request.data_id,
+            data_commitment.unwrap(),
+        );
+        drop(main_storage);
+        drop(tx_batch);
+
+        return Ok(Response::new(SuccessResponse {
+            successful: true,
+            error_message: "".to_string(),
+        }));
+    }
+
+    async fn update_invalid_state_indexes(
+        &self,
+        request: Request<UpdateDbIndexesReq>,
+    ) -> Result<Response<SuccessResponse>, Status> {
+        // ? Only call the server from the same network (onyl as fallback)
+        if !is_local_address(&request) {
+            let reply = SuccessResponse {
+                successful: false,
+                error_message: "register_onchain_action can only be called from the same network"
+                    .to_string(),
+            };
+
+            return Ok(Response::new(reply));
+        }
+
+        let indexes = request.into_inner().invalid_indexes;
+
+        let tx_batch = self.transaction_batch.lock().await;
+
+        update_invalid_state(
+            &tx_batch.state_tree,
+            &tx_batch.firebase_session,
+            &tx_batch.backup_storage,
+            indexes,
+        );
+
+        return Ok(Response::new(SuccessResponse {
+            successful: true,
+            error_message: "".to_string(),
+        }));
     }
 
     //

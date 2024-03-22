@@ -3,10 +3,10 @@ use num_integer::Integer;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 use crate::{
-    perpetual::OrderSide,
+    perpetual::{perp_position::get_liquidation_price, OrderSide},
     transaction_batch::{
         tx_batch_structs::{GlobalConfig, GlobalDexState, ProgramInputCounts},
-        CHAIN_IDS,
+        tx_batch_helpers::CHAIN_IDS
     },
 };
 
@@ -164,8 +164,6 @@ fn parse_dex_state(output: &[BigUint]) -> (GlobalDexState, &[BigUint]) {
         n_position_escapes,
         n_tab_escapes,
     };
-
-    println!("program_input_counts: {:?}", program_input_counts);
 
     return (
         GlobalDexState::new(
@@ -421,9 +419,9 @@ fn parse_withdrawal_outputs(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OnChainMMActionOutput {
-    pub mm_position_address: BigUint,
-    pub depositor: BigUint,
-    pub batched_action_info: BigUint,
+    pub mm_position_address: String,
+    pub depositor: String,
+    pub batched_action_info: String,
 }
 
 fn parse_onchain_mm_actions(
@@ -438,10 +436,10 @@ fn parse_onchain_mm_actions(
     let mut mm_actions: Vec<OnChainMMActionOutput> = Vec::new();
 
     for i in 0..num_actions {
-        let mm_position_address = output[(i * 2) as usize].clone();
-        let depositor = output[(i * 2 + 1) as usize].clone();
+        let mm_position_address = output[(i * 2) as usize].to_string();
+        let depositor = output[(i * 2 + 1) as usize].to_string();
 
-        let batched_action_info = output[(i * 3 + 2) as usize].clone();
+        let batched_action_info = output[(i * 3 + 2) as usize].to_string();
 
         // let split_vec = split_by_bytes(&batch_registrations_info, vec![1, 32, 64]);
         // let is_perp = split_vec[0].to_u8().unwrap() == 1;
@@ -474,9 +472,9 @@ pub struct EscapeOutput {
     pub escape_id: u32,
     pub is_valid: bool,
     pub escape_type: EscapeType,
-    pub escape_message_hash: BigUint,
-    pub signature_r: BigUint,
-    pub signature_s: BigUint,
+    pub escape_message_hash: String,
+    pub signature_r: String,
+    pub signature_s: String,
 }
 
 fn parse_escape_outputs(
@@ -503,9 +501,9 @@ fn parse_escape_outputs(
             escape_id,
             is_valid,
             escape_type,
-            escape_message_hash: output[(i * 2 + 1) as usize].clone(),
-            signature_r: output[(i * 2 + 2) as usize].clone(),
-            signature_s: output[(i * 2 + 3) as usize].clone(),
+            escape_message_hash: output[(i * 2 + 1) as usize].to_string(),
+            signature_r: output[(i * 2 + 2) as usize].to_string(),
+            signature_s: output[(i * 2 + 3) as usize].to_string(),
         };
 
         escape_outputs.push(escape);
@@ -523,11 +521,11 @@ pub struct PositionEscapeOutput {
     pub is_valid: bool,
     pub escape_value: u64,
     pub recipient: u64,
-    pub escape_message_hash: BigUint,
-    pub signature_a_r: BigUint,
-    pub signature_a_s: BigUint,
-    pub signature_b_r: BigUint,
-    pub signature_b_s: BigUint,
+    pub escape_message_hash: String,
+    pub signature_a_r: String,
+    pub signature_a_s: String,
+    pub signature_b_r: String,
+    pub signature_b_s: String,
 }
 
 fn parse_position_escape_outputs(
@@ -551,11 +549,11 @@ fn parse_position_escape_outputs(
             is_valid,
             escape_value,
             recipient: output[(i * 2 + 1) as usize].to_u64().unwrap(),
-            escape_message_hash: output[(i * 2 + 2) as usize].clone(),
-            signature_a_r: output[(i * 2 + 3) as usize].clone(),
-            signature_a_s: output[(i * 2 + 4) as usize].clone(),
-            signature_b_r: output[(i * 2 + 5) as usize].clone(),
-            signature_b_s: output[(i * 2 + 6) as usize].clone(),
+            escape_message_hash: output[(i * 2 + 2) as usize].to_string(),
+            signature_a_r: output[(i * 2 + 3) as usize].to_string(),
+            signature_a_s: output[(i * 2 + 4) as usize].to_string(),
+            signature_b_r: output[(i * 2 + 5) as usize].to_string(),
+            signature_b_s: output[(i * 2 + 6) as usize].to_string(),
         };
 
         escape_outputs.push(escape);
@@ -574,7 +572,8 @@ pub struct NoteOutput {
     pub token: u32,
     pub hidden_amount: u64,
     pub commitment: String,
-    pub address: String,
+    pub address_x: String,
+    pub address_y: String,
     pub hash: String,
 }
 
@@ -594,16 +593,18 @@ fn parse_note_outputs(output: &[BigUint], num_notes: u32) -> (Vec<NoteOutput>, &
         let index = split_vec[2].to_u64().unwrap();
 
         let commitment = &output[(i * 3 + 1) as usize];
-        let address = &output[(i * 3 + 2) as usize];
+        let address_x = &output[(i * 3 + 2) as usize];
+        let address_y = &output[(i * 3 + 3) as usize];
 
-        let hash = hash_note(token, &commitment, &address).to_string();
+        let hash = hash_note_output(token, &commitment, &address_y).to_string();
 
         let note = NoteOutput {
             index,
             token,
             hidden_amount,
             commitment: commitment.to_string(),
-            address: address.to_string(),
+            address_x: address_x.to_string(),
+            address_y: address_y.to_string(),
             hash,
         };
 
@@ -615,7 +616,7 @@ fn parse_note_outputs(output: &[BigUint], num_notes: u32) -> (Vec<NoteOutput>, &
     return (notes, shifted_output);
 }
 
-fn hash_note(token: u32, commitment: &BigUint, address_x: &BigUint) -> BigUint {
+pub fn hash_note_output(token: u32, commitment: &BigUint, address_x: &BigUint) -> BigUint {
     let token = BigUint::from_u32(token).unwrap();
     let hash_input: Vec<&BigUint> = vec![&address_x, &token, &commitment];
 
@@ -631,16 +632,18 @@ pub struct PerpPositionOutput {
     pub position_size: u64,
     pub order_side: OrderSide,
     pub entry_price: u64,
-    pub liquidation_price: u64,
+    pub margin: u64,
     pub last_funding_idx: u32,
     pub allow_partial_liquidations: bool,
+    pub vlp_token: u32,
+    pub vlp_supply: u64,
     pub index: u64,
     pub public_key: String,
     pub hash: String,
 }
 
-// & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | order_side (8 bits) | allow_partial_liquidations (8 bits) |
-// & format: | entry_price (64 bits) | liquidation_price (64 bits) | last_funding_idx (32 bits) |
+// & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+// & format: | entry_price (64 bits) | margin (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
 // & format: | public key <-> position_address (251 bits) |
 
 fn parse_position_outputs(
@@ -653,36 +656,43 @@ fn parse_position_outputs(
         let batched_position_info_slot1 = output[(i * 3) as usize].clone();
         let batched_position_info_slot2 = output[(i * 3 + 1) as usize].clone();
 
-        // & | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | order_side (8 bits) | allow_partial_liquidations (8 bit)
-        let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 8, 8]);
-        let split_vec_slot2 = split_by_bytes(&batched_position_info_slot2, vec![64, 64, 32]);
+        // & format: | index (64 bits) | synthetic_token (32 bits) | position_size (64 bits) | vlp_token (32 bits) |
+        let split_vec_slot1 = split_by_bytes(&batched_position_info_slot1, vec![64, 32, 64, 32]);
+        // & format: | entry_price (64 bits) | margin (64 bits) | vlp_supply (64 bits) | last_funding_idx (32 bits) | order_side (1 bits) | allow_partial_liquidations (1 bits) |
+        let split_vec_slot2 =
+            split_by_bytes(&batched_position_info_slot2, vec![64, 64, 64, 32, 1, 1]);
 
         let index = split_vec_slot1[0].to_u64().unwrap();
         let synthetic_token = split_vec_slot1[1].to_u32().unwrap();
         let position_size = split_vec_slot1[2].to_u64().unwrap();
-        let order_side = if split_vec_slot1[3] != BigUint::zero() {
+        let vlp_token = split_vec_slot1[3].to_u32().unwrap();
+
+        let entry_price = split_vec_slot2[0].to_u64().unwrap();
+        let margin = split_vec_slot2[1].to_u64().unwrap();
+        let vlp_supply = split_vec_slot2[2].to_u64().unwrap();
+        let last_funding_idx = split_vec_slot2[3].to_u32().unwrap();
+        let order_side = if split_vec_slot2[4] != BigUint::zero() {
             OrderSide::Long
         } else {
             OrderSide::Short
         };
-        let allow_partial_liquidations = split_vec_slot1[4] != BigUint::zero();
+        let allow_partial_liquidations = split_vec_slot2[5] != BigUint::zero();
 
-        let entry_price = split_vec_slot2[0].to_u64().unwrap();
-        let liquidation_price = split_vec_slot2[1].to_u64().unwrap();
-        let last_funding_idx = split_vec_slot2[2].to_u32().unwrap();
-
+        // & format: | public key <-> position_address (251 bits) |
         let public_key = &output[(i * 3 + 2) as usize];
 
-        let hash = _hash_position(
+        let hash = hash_position_output(
             synthetic_token,
             public_key,
             allow_partial_liquidations,
+            vlp_token,
             //
             &order_side,
             position_size,
             entry_price,
-            liquidation_price,
+            margin,
             last_funding_idx,
+            vlp_supply,
         )
         .to_string();
 
@@ -691,9 +701,11 @@ fn parse_position_outputs(
             position_size,
             order_side,
             entry_price,
-            liquidation_price,
+            margin,
             last_funding_idx,
             allow_partial_liquidations,
+            vlp_supply,
+            vlp_token,
             index,
             public_key: public_key.to_string(),
             hash,
@@ -707,35 +719,48 @@ fn parse_position_outputs(
     return (positions, shifted_output);
 }
 
-fn _hash_position(
+pub fn hash_position_output(
     synthetic_token: u32,
     position_address: &BigUint,
     allow_partial_liquidations: bool,
+    vlp_token: u32,
     //
     order_side: &OrderSide,
     position_size: u64,
     entry_price: u64,
-    liquidation_price: u64,
+    margin: u64,
     current_funding_idx: u32,
+    vlp_supply: u64,
 ) -> BigUint {
-    // & header_hash = H({allow_partial_liquidations, synthetic_token, position_address })
+    let liquidation_price = get_liquidation_price(
+        entry_price,
+        margin,
+        position_size,
+        &order_side,
+        synthetic_token,
+        allow_partial_liquidations,
+    );
+
+    // & header_hash = H({allow_partial_liquidations, synthetic_token, position_address, vlp_token})
     let allow_partial_liquidations =
         BigUint::from_u8(if allow_partial_liquidations { 1 } else { 0 }).unwrap();
     let synthetic_token = BigUint::from_u32(synthetic_token).unwrap();
+    let vlp_token = BigUint::from_u32(vlp_token).unwrap();
     let hash_inputs = vec![
         &allow_partial_liquidations,
         &synthetic_token,
         position_address,
+        &vlp_token,
     ];
     let header_hash = hash_many(&hash_inputs);
 
-    // & hash = H({header_hash, order_side, position_size, entry_price, liquidation_price, current_funding_idx})
-
+    // & hash = H({header_hash, order_side, position_size, entry_price, liquidation_price, current_funding_idx, vlp_supply})
     let order_side = BigUint::from_u8(if *order_side == OrderSide::Long { 1 } else { 0 }).unwrap();
     let position_size = BigUint::from_u64(position_size).unwrap();
     let entry_price = BigUint::from_u64(entry_price).unwrap();
     let liquidation_price = BigUint::from_u64(liquidation_price).unwrap();
     let current_funding_idx = BigUint::from_u32(current_funding_idx).unwrap();
+    let vlp_supply = BigUint::from_u64(vlp_supply).unwrap();
     let hash_inputs = vec![
         &header_hash,
         &order_side,
@@ -743,6 +768,7 @@ fn _hash_position(
         &entry_price,
         &liquidation_price,
         &current_funding_idx,
+        &vlp_supply,
     ];
 
     let position_hash = hash_many(&hash_inputs);
@@ -782,7 +808,7 @@ fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOu
         let quote_commitment = &output[(i * 4 + 2) as usize];
         let public_key = &output[(i * 4 + 3) as usize];
 
-        let hash = hash_order_tab(
+        let hash = hash_order_tab_output(
             base_token,
             quote_token,
             &public_key,
@@ -811,7 +837,7 @@ fn parse_order_tab_outputs(output: &[BigUint], num_tabs: u16) -> (Vec<OrderTabOu
     return (order_tabs, shifted_output);
 }
 
-fn hash_order_tab(
+pub fn hash_order_tab_output(
     base_token: u32,
     quote_token: u32,
     pub_key: &BigUint,
@@ -894,7 +920,7 @@ pub fn preprocess_cairo_output(program_output: Vec<&str>) -> Vec<BigUint> {
     return arr;
 }
 
-fn split_by_bytes(num: &BigUint, bit_lenghts: Vec<u8>) -> Vec<BigUint> {
+pub fn split_by_bytes(num: &BigUint, bit_lenghts: Vec<u8>) -> Vec<BigUint> {
     // & returns a vector of values split by the bit_lenghts
 
     let mut peaces: Vec<BigUint> = Vec::new();

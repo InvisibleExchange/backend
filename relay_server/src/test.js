@@ -52,7 +52,52 @@ async function getFundingInfo() {
 }
 
 // ===========================
+async function updateInconsistentState() {
+  let invalid_indexes = [
+    "0",
+    "1",
+    "2",
+    "2",
+    "3",
+    "3",
+    "4",
+    "4",
+    "5",
+    "5",
+    "6",
+    "6",
+    "7",
+    "7",
+    "8",
+    "8",
+    "9",
+    "9",
+    "10",
+    "10",
+    "11",
+    "11",
+    "12",
+    "12",
+  ];
+
+  client.update_invalid_state_indexes(
+    {
+      invalid_indexes,
+    },
+    function (err, response) {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log(response);
+      }
+    }
+  );
+}
+
+// ===========================
 
 finalizeBatch();
+
+// updateInconsistentState();
 
 // getStateInfo();

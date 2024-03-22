@@ -5,6 +5,7 @@ use parking_lot::Mutex;
 use starknet::curve::AffinePoint;
 use std::sync::Arc;
 
+use crate::transaction_batch::tx_batch_helpers::CHAIN_IDS;
 use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::crypto_utils::{hash_many, verify, EcPoint, Signature};
@@ -30,13 +31,16 @@ use crate::utils::notes::Note;
 
 pub struct Withdrawal {
     pub transaction_type: String,
-    pub withdrawal_chain_id: u32,
-    pub withdrawal_token: u32,
-    pub withdrawal_amount: u64,
-    pub stark_key: BigUint,
+    pub withdrawal_id: u64,
+    pub chain_id: u32,
+    pub token: u32,
+    pub amount: u64,
+    pub recipient: BigUint,
+    pub max_gas_fee: u64,
     pub notes_in: Vec<Note>,
     pub refund_note: Option<Note>,
     pub signature: Signature,
+    pub execution_gas_fee: u64,
 }
 
 impl Withdrawal {
@@ -49,9 +53,25 @@ impl Withdrawal {
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(), WithdrawalThreadExecutionError> {
         let withdrawal_handle = thread::scope(move |_s| {
+            if self.max_gas_fee < self.execution_gas_fee && self.execution_gas_fee != 0 {
+                return Err(send_withdrawal_error(
+                    "Gas fee exceeds max gas fee".to_string(),
+                    None,
+                ));
+            }
+
+            if !CHAIN_IDS.contains(&self.chain_id) {
+                println!("Invalid withdrawal chain id: {}", self.chain_id);
+
+                return Err(send_withdrawal_error(
+                    "Invalid withdrawal chain id".to_string(),
+                    None,
+                ));
+            }
+
             let mut valid: bool = true;
             let amount_sum = self.notes_in.iter().fold(0u64, |acc, note| {
-                if note.token != self.withdrawal_token {
+                if note.token != self.token {
                     valid = false;
                 }
                 return acc + note.amount;
@@ -69,7 +89,7 @@ impl Withdrawal {
             } else {
                 0
             };
-            if amount_sum != self.withdrawal_amount + refund_amount {
+            if amount_sum != self.amount + refund_amount {
                 return Err(send_withdrawal_error(
                     "Notes do not match withdrawal and refund amount".to_string(),
                     None,
@@ -100,6 +120,10 @@ impl Withdrawal {
                 String::from("withdrawal"),
                 serde_json::to_value(&self).unwrap(),
             );
+            json_map.insert(
+                String::from("execution_gas_fee"),
+                serde_json::to_value(&self.execution_gas_fee).unwrap(),
+            );
 
             let mut swap_output_json = swap_output_json_m.lock();
             swap_output_json.push(json_map);
@@ -117,13 +141,10 @@ impl Withdrawal {
             })?
             .or_else(|err| Err(err))?;
 
+        println!("Withdrawal executed successfully");
+
         // ? Update the database
-        update_db_after_withdrawal(
-            &session,
-            &backup_storage,
-            &self.notes_in,
-            self.refund_note.clone(),
-        );
+        update_db_after_withdrawal(&session, &backup_storage, &self, self.execution_gas_fee);
 
         Ok(())
     }
@@ -173,9 +194,11 @@ impl Withdrawal {
         };
 
         note_hashes.push(&refund_note_hash);
-        note_hashes.push(&self.stark_key);
-        let chain_id = BigUint::from_u32(self.withdrawal_chain_id).unwrap();
+        note_hashes.push(&self.recipient);
+        let chain_id = BigUint::from_u32(self.chain_id).unwrap();
         note_hashes.push(&chain_id);
+        let max_gas_fee = BigUint::from_u64(self.max_gas_fee).unwrap();
+        note_hashes.push(&max_gas_fee);
 
         let withdrawal_hash = hash_many(&note_hashes);
 
@@ -232,10 +255,11 @@ impl Serialize for Withdrawal {
         let mut withdrawal = serializer.serialize_struct("Withdrawal", 9)?;
 
         withdrawal.serialize_field("transaction_type", &self.transaction_type)?;
-        withdrawal.serialize_field("withdrawal_chain", &self.withdrawal_chain_id)?;
-        withdrawal.serialize_field("withdrawal_token", &self.withdrawal_token)?;
-        withdrawal.serialize_field("withdrawal_amount", &self.withdrawal_amount)?;
-        withdrawal.serialize_field("stark_key", &self.stark_key.to_string())?;
+        withdrawal.serialize_field("chain_id", &self.chain_id)?;
+        withdrawal.serialize_field("token", &self.token)?;
+        withdrawal.serialize_field("amount", &self.amount)?;
+        withdrawal.serialize_field("recipient", &self.recipient.to_string())?;
+        withdrawal.serialize_field("max_gas_fee", &self.max_gas_fee)?;
         withdrawal.serialize_field("notes_in", &self.notes_in)?;
         withdrawal.serialize_field("refund_note", &self.refund_note)?;
         withdrawal.serialize_field("signature", &self.signature)?;

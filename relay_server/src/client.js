@@ -16,7 +16,17 @@ const { initServer, initFundingInfo } = require("./helpers/initServer");
 const {
   isDepositValid,
   depositProcessedCallback,
-} = require("./helpers/depositListener");
+} = require("./chainListeners/depositListener");
+const { removeMMAction } = require("./helpers/firebase/firebaseConnection");
+const {
+  isMMRegistrationValid,
+  isMMAddLiquidityValid,
+  isMMRemoveLiquidityValid,
+  isCloseMMValid,
+  mmActionProcessedCallback,
+} = require("./chainListeners/mmRegistryListener");
+const { getGasFeeInToken } = require("./helpers/mmPriceFeeds");
+const { getGasPrice } = require("./chainListeners/initListeners");
 
 const corsOptions = {
   origin: "*",
@@ -84,30 +94,37 @@ function updateFundingInfo(rates, prices) {
   fundingPrices = prices;
 }
 
-initServer(db, updateSpot24hInfo, updatePerp24hInfo, update24HInfo);
+let PRICE_FEEDS = {};
+
+initServer(
+  db,
+  PRICE_FEEDS,
+  updateSpot24hInfo,
+  updatePerp24hInfo,
+  update24HInfo
+);
 initFundingInfo(client, updateFundingInfo);
 
 /// =============================================================================
 
 // * EXECUTE DEPOSIT -----------------------------------------------------------------
 app.post("/execute_deposit", async (req, res) => {
-  // let isValid = await isDepositValid(req.body, db);
+  let isValid = await isDepositValid(req.body, db);
 
-  // if (!isValid) {
-  //   res.send({
-  //     response: { successful: false, error_message: "Invalid deposit" },
-  //   });
-  //   return;
-  // }
+  if (!isValid) {
+    res.send({
+      response: { successful: false, error_message: "Unregistered deposit" },
+    });
+    return;
+  }
 
   client.execute_deposit(req.body, function (err, response) {
     if (err) {
       console.log(err);
     } else {
-      // if (response.successful) {
-      //   console.log("deposit processed", req.body.deposit_id);
-      //   depositProcessedCallback(db, req.body.deposit_id);
-      // }
+      if (response.successful) {
+        depositProcessedCallback(db, req.body.deposit_id);
+      }
 
       res.send({ response: response });
     }
@@ -128,7 +145,22 @@ app.post("/submit_limit_order", (req, res) => {
 });
 
 // * EXECUTE WITHDRAWAL ---------------------------------------------------------------
-app.post("/execute_withdrawal", (req, res) => {
+app.post("/execute_withdrawal", async (req, res) => {
+  let gasPrice = await getGasPrice(req.body.chain_id);
+  let executionGasFee = getGasFeeInToken(req.body.token, gasPrice, PRICE_FEEDS);
+
+  if (executionGasFee > req.body.max_gas_fee && req.body.max_gas_fee != 0) {
+    res.send({
+      response: {
+        successful: false,
+        error_message: "Gas fee exceeds max gas fee",
+      },
+    });
+    return;
+  }
+
+  req.body.execution_gas_fee = executionGasFee;
+
   client.execute_withdrawal(req.body, function (err, response) {
     if (err) {
       console.log(err);
@@ -239,39 +271,6 @@ app.post("/modify_order_tab", (req, res) => {
   });
 });
 
-// *  REGISTER ORDER TAB -----------------------------------------------------------
-app.post("/onchain_register_mm", (req, res) => {
-  client.onchain_register_mm(req.body, function (err, response) {
-    if (err) {
-      console.log(err);
-    } else {
-      res.send({ response: response });
-    }
-  });
-});
-
-// *  ADD LIQUIDITY ORDER TAB -----------------------------------------------------------
-app.post("/add_liquidity_mm", (req, res) => {
-  client.add_liquidity_mm(req.body, function (err, response) {
-    if (err) {
-      console.log(err);
-    } else {
-      res.send({ response: response });
-    }
-  });
-});
-
-// *  REMOVE LIQUIDITY ORDER TAB -----------------------------------------------------------
-app.post("/remove_liquidity_mm", (req, res) => {
-  client.remove_liquidity_mm(req.body, function (err, response) {
-    if (err) {
-      console.log(err);
-    } else {
-      res.send({ response: response });
-    }
-  });
-});
-
 // * GET LIQUIDITY ---------------------------------------------------------------------
 app.post("/get_liquidity", (req, res) => {
   client.get_liquidity(req.body, function (err, response) {
@@ -289,6 +288,114 @@ app.post("/get_orders", (req, res) => {
     if (err) {
       console.log(err);
     } else {
+      res.send({ response: response });
+    }
+  });
+});
+
+// ===================================================================
+
+// *  REGISTER ONCHAIN MM -----------------------------------------------------------
+app.post("/register_onchain_mm", (req, res) => {
+  // let isValid = isMMRegistrationValid(db, req.body);
+  // if (!isValid) {
+  //   res.send({
+  //     response: { successful: false, error_message: "Request is unregistered" },
+  //   });
+  //   return;
+  // }
+
+  client.register_onchain_mm(req.body, function (err, response) {
+    if (err) {
+      console.log(err);
+    } else {
+      // if (response.successful) {
+      //   mmActionProcessedCallback(db, req.body.mm_action_id);
+      //   removeMMAction(req.body.mm_action_id);
+      // }
+
+      res.send({ response: response });
+    }
+  });
+});
+
+// *  ADD LIQUIDITY ----------------------------------------------------------------
+app.post("/add_liquidity_mm", (req, res) => {
+  client.add_liquidity_mm(req.body, function (err, response) {
+    // let isValid = isMMAddLiquidityValid(db, req.body);
+    // if (!isValid) {
+    //   res.send({
+    //     response: {
+    //       successful: false,
+    //       error_message: "Request is unregistered",
+    //     },
+    //   });
+    //   return;
+    // }
+
+    if (err) {
+      console.log(err);
+    } else {
+      // if (response.successful) {
+      //   mmActionProcessedCallback(db, req.body.mm_action_id);
+      //   removeMMAction(req.body.mm_action_id);
+      // }
+
+      res.send({ response: response });
+    }
+  });
+});
+
+// * REMOVE LIQUIDITY ----------------------------------------------------------------
+app.post("/remove_liquidity_mm", (req, res) => {
+  client.remove_liquidity_mm(req.body, function (err, response) {
+    // let isValid = isMMRemoveLiquidityValid(db, req.body);
+    // if (!isValid) {
+    //   res.send({
+    //     response: {
+    //       successful: false,
+    //       error_message: "Request is unregistered",
+    //     },
+    //   });
+    //   return;
+    // }
+
+    if (err) {
+      console.log(err);
+    } else {
+      console.log(response);
+      // if (response.successful) {
+      //   mmActionProcessedCallback(db, req.body.mm_action_id);
+      //   removeMMAction(req.body.mm_action_id);
+      // }
+
+      res.send({ response: response });
+    }
+  });
+});
+
+// * CLOSE MM ------------------------------------------------------------------------
+app.post("/close_onchain_mm", (req, res) => {
+  client.close_onchain_mm(req.body, function (err, response) {
+    // let isValid = isCloseMMValid(db, req.body);
+    // if (!isValid) {
+    //   res.send({
+    //     response: {
+    //       successful: false,
+    //       error_message: "Request is unregistered",
+    //     },
+    //   });
+    //   return;
+    // }
+
+    if (err) {
+      console.log(err);
+    } else {
+      // if (response.successful) {
+      //   mmActionProcessedCallback(db, req.body.mm_action_id);
+      //   removeMMAction(req.body.mm_action_id);
+      // }
+
       res.send({ response: response });
     }
   });

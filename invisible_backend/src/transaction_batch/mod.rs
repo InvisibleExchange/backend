@@ -49,14 +49,14 @@ use crate::transaction_batch::{
 use self::{
     batch_functions::{
         admin_functions::{_init_inner, _per_minute_funding_updates, _update_index_prices_inner},
-        batch_transition::{_finalize_batch_inner, _transition_state},
+        batch_transition::{_construct_da_output, _finalize_batch_inner, _transition_state},
         state_modifications::{
             _change_position_margin_inner, _execute_order_tab_modification_inner,
             _execute_sc_mm_modification_inner, _split_notes_inner,
         },
     },
     escapes::verify_escapes::{_execute_forced_escape_inner, _get_position_close_escape_info},
-    restore_state_helpers::_restore_state_inner,
+    restore_state::_restore_state_inner,
 };
 
 // TODO: This could be weighted sum of different transactions (e.g. 5 for swaps, 1 for deposits, 1 for withdrawals)
@@ -68,14 +68,11 @@ use self::{
 
 pub mod batch_functions;
 pub mod escapes;
-pub mod restore_state_helpers;
+pub mod restore_state;
 pub mod tx_batch_helpers;
 pub mod tx_batch_structs;
 
-// { ETH Mainnet: 9090909, Starknet: 7878787, ZkSync: 5656565 }
-pub const CHAIN_IDS: [u32; 3] = [9090909, 7878787, 5656565];
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum LeafNodeType {
     Note,
     Position,
@@ -390,6 +387,7 @@ impl TransactionBatch {
             &self.state_tree,
             &self.updated_state_hashes,
             &self.firebase_session,
+            &self.main_storage,
             &self.backup_storage,
             &self.swap_output_json,
             scmm_action_message,
@@ -404,16 +402,20 @@ impl TransactionBatch {
             &escape_message,
         );
 
-        _execute_forced_escape_inner(
+        if let Err(e) = _execute_forced_escape_inner(
             &self.state_tree,
             &self.updated_state_hashes,
             &self.firebase_session,
+            &self.main_storage,
             &self.backup_storage,
             &self.swap_output_json,
             escape_message,
             &swap_funding_info,
             index_price,
-        );
+        ) {
+            println!("Error executing forced escape: {}", e);
+            return;
+        }
 
         if let Some(funding_info) = swap_funding_info {
             let mut min_funding_idxs_m = self.min_funding_idxs.lock();
@@ -447,8 +449,24 @@ impl TransactionBatch {
 
         // * =================================================================
 
+        // let main_storage_m = self.main_storage.lock();
+        // let batch_transition_info = main_storage_m
+        //     .read_batch_transition_info(main_storage_m.latest_batch)
+        //     .unwrap();
+        // drop(main_storage_m);
+
         // TODO: This requires spinning up a spot instances on aws to handle the load
         _transition_state(&self.main_storage, batch_transition_info)?;
+
+        // * =================================================================
+
+        let tx_batch_index = self.main_storage.lock().latest_batch - 1;
+        _construct_da_output(
+            &self.main_storage,
+            &self.funding_rates,
+            &self.funding_prices,
+            tx_batch_index,
+        );
 
         Ok(())
     }

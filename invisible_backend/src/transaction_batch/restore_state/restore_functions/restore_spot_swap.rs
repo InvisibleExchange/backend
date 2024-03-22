@@ -8,7 +8,7 @@ use crate::{
     transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree, utils::notes::Note,
 };
 
-use super::helpers::{rebuild_swap_note, restore_partial_fill_refund_note};
+use super::super::helpers::spot_helpers::{rebuild_swap_note, restore_partial_fill_refund_note};
 
 pub fn restore_spot_order_execution(
     tree_m: &Arc<Mutex<SuperficialTree>>,
@@ -182,7 +182,7 @@ fn restore_after_swap_later_fills(
 }
 
 // * =========================================================================================================================
-// *  DEPOSITS/ WITHDRAWALS RESTORE FUNCTIONS ================================================================================
+// *  DEPOSITS/WITHDRAWALS RESTORE FUNCTIONS ================================================================================
 
 pub fn restore_deposit_update(
     tree_m: &Arc<Mutex<SuperficialTree>>,

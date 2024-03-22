@@ -13,7 +13,7 @@ pub mod state_updates;
 
 #[derive(Debug, Clone)]
 pub struct OrderTab {
-    pub tab_idx: u32,
+    pub tab_idx: u64,
     //
     pub tab_header: TabHeader,
     pub base_amount: u64,
@@ -197,7 +197,7 @@ impl<'de> Deserialize<'de> for OrderTab {
     {
         #[derive(DeserializeTrait)]
         struct Helper {
-            tab_idx: u32,
+            tab_idx: u64,
             tab_header: TabHeader,
             base_amount: u64,
             quote_amount: u64,

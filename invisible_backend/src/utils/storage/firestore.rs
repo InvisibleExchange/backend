@@ -7,12 +7,14 @@ use std::{
 };
 
 use firestore_db_and_auth::{documents, Credentials, ServiceSession};
+use num_bigint::BigUint;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     order_tab::OrderTab,
     perpetual::perp_position::PerpPosition,
+    transaction_batch::tx_batch_helpers::CHAIN_IDS,
     transactions::transaction_helpers::transaction_output::{FillInfo, PerpFillInfo},
     trees::superficial_tree::SuperficialTree,
     utils::notes::Note,
@@ -175,7 +177,6 @@ pub fn start_add_note_thread(
 
     let handle = spawn(move || {
         let session_ = s.lock();
-        // let backup_storage = backup_storage.lock();
 
         // TODO
         store_new_note(&session_, &backup, &note);
@@ -214,12 +215,12 @@ pub fn start_add_position_thread(
     let handle = spawn(move || {
         let session_ = s.lock();
 
-        let valid_indexes: Vec<u32> = vec![0, 1, 10, 2, 3, 7];
+        // let valid_indexes: Vec<u32> = vec![0, 1, 10, 2, 3, 7];
 
         // TODO
-        if valid_indexes.contains(&position.index) {
-            store_new_position(&session_, &backup, &position);
-        }
+        // if valid_indexes.contains(&position.index) {
+        store_new_position(&session_, &backup, &position);
+        // }
 
         store_new_position(&session_, &backup, &position);
         drop(session_);
@@ -319,7 +320,7 @@ pub fn start_add_perp_fill_thread(
     return handle;
 }
 
-// DEPOSITS
+// DEPOSITS / WITHDRAWALS
 
 pub fn start_delete_deposit_thread(
     deposit_id: u64,
@@ -337,10 +338,50 @@ pub fn start_delete_deposit_thread(
     return handle;
 }
 
+pub fn start_add_withdrawal_thread(
+    withdrawal_id: u64,
+    chain_id: u32,
+    amount: u64,
+    token_id: u32,
+    recipient: BigUint,
+    is_automatic: bool,
+    session: &Arc<Mutex<ServiceSession>>,
+) -> JoinHandle<()> {
+    let s = Arc::clone(&session);
+
+    println!("storing withdrawal: {:?}", withdrawal_id);
+
+    let handle = spawn(move || {
+        let session_: &ServiceSession = &s.lock();
+
+        let withdrawal_json = json!(
+            {
+                "amount": amount,
+                "token_id": token_id,
+                "recipient": recipient.to_string(),
+                "is_automatic": is_automatic,
+            }
+        );
+
+        let is_l1 = chain_id == CHAIN_IDS[0];
+        let write_path = format!("withdrawals/{}/pending", if is_l1 { "L1" } else { "L2" },);
+
+        let _res = documents::write(
+            session_,
+            write_path.as_str(),
+            Some(withdrawal_id.to_string()),
+            &withdrawal_json,
+            documents::WriteOptions::default(),
+        );
+    });
+
+    return handle;
+}
+
 // * FIREBASE STORAGE ===============================================================
 
 use reqwest::Client;
-use serde_json::{from_slice, Map, Value};
+use serde_json::{from_slice, json, Map, Value};
 
 // Define a struct to deserialize the response from the Firebase Storage API
 #[derive(Deserialize)]

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, Num};
 use parking_lot::Mutex;
 
 use crate::{
@@ -51,10 +51,9 @@ pub fn verify_position_validity(
 pub fn verfiy_register_mm_sig(
     position: &PerpPosition,
     vlp_token: u32,
-    max_vlp_supply: u64,
     signature: &Signature,
 ) -> bool {
-    // & header_hash = H({position.hash, vlp_token, max_vlp_supply})
+    // & header_hash = H({position.hash, vlp_token})
 
     let mut hash_inputs: Vec<&BigUint> = Vec::new();
 
@@ -62,9 +61,6 @@ pub fn verfiy_register_mm_sig(
 
     let vlp_token = BigUint::from(vlp_token);
     hash_inputs.push(&vlp_token);
-
-    let max_vlp_supply = BigUint::from(max_vlp_supply);
-    hash_inputs.push(&max_vlp_supply);
 
     let hash = hash_many(&hash_inputs);
 
@@ -111,8 +107,17 @@ pub fn verfiy_remove_liquidity_sig(
 
     hash_inputs.push(&position.hash);
 
-    let depositor = BigUint::from_str(depositor).unwrap();
-    hash_inputs.push(&depositor);
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return false;
+    }
+    hash_inputs.push(&depositor_);
 
     let initial_value = BigUint::from_u64(initial_value).unwrap();
     hash_inputs.push(&initial_value);
@@ -158,8 +163,17 @@ pub fn verfiy_pos_add_liquidity_sig(
 
     hash_inputs.push(&position.hash);
 
-    let depositor = BigUint::from_str(&depositor).unwrap();
-    hash_inputs.push(&depositor);
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return false;
+    }
+    hash_inputs.push(&depositor_);
 
     let collateral_amount = BigUint::from_u64(collateral_amount).unwrap();
     hash_inputs.push(&collateral_amount);
@@ -196,4 +210,127 @@ pub fn verfiy_mm_pos_close_sig(
     let valid = verify(&position.position_header.position_address, &hash, signature);
 
     return valid;
+}
+
+// * ----------------------------------------------------------------------------
+
+pub fn get_mm_register_commitment(
+    mm_action_id: u32,
+    synthetic_asset: u32,
+    position_address: &BigUint,
+    vlp_token: u32,
+) -> BigUint {
+    // & hash = H({mm_action_id, synthetic_asset, position_address, vlp_token})
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let mm_action_id = BigUint::from_u32(mm_action_id).unwrap();
+    hash_inputs.push(&mm_action_id);
+
+    let synthetic_asset = BigUint::from_u32(synthetic_asset).unwrap();
+    hash_inputs.push(&synthetic_asset);
+
+    hash_inputs.push(&position_address);
+
+    let vlp_token = BigUint::from_u32(vlp_token).unwrap();
+    hash_inputs.push(&vlp_token);
+
+    let commitment = hash_many(&hash_inputs);
+
+    return commitment;
+}
+
+pub fn get_add_liquidity_commitment(
+    mm_action_id: u32,
+    depositor: &String,
+    position_address: &BigUint,
+    usdc_amount: u64,
+) -> Result<BigUint, String> {
+    // & hash = H({ mm_action_id, depositor, position_address, usdc_amount})
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let mm_action_id = BigUint::from_u32(mm_action_id).unwrap();
+    hash_inputs.push(&mm_action_id);
+
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return Err("Invalid depositor".to_string());
+    }
+    hash_inputs.push(&depositor_);
+
+    hash_inputs.push(&position_address);
+
+    let usdc_amount = BigUint::from_u64(usdc_amount).unwrap();
+    hash_inputs.push(&usdc_amount);
+
+    let commitment = hash_many(&hash_inputs);
+
+    return Ok(commitment);
+}
+
+pub fn get_remove_liquidity_commitment(
+    mm_action_id: u32,
+    depositor: &String,
+    position_address: &BigUint,
+    initial_value: u64,
+    vlp_amount: u64,
+) -> Result<BigUint, String> {
+    // & hash = H({ mm_action_id, depositor, position_address, initial_value, vlp_amount})
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let mm_action_id = BigUint::from_u32(mm_action_id).unwrap();
+    hash_inputs.push(&mm_action_id);
+
+    let depositor = depositor.replace("0x", "");
+
+    let depositor_;
+    if let Ok(dep) = BigUint::from_str(&depositor) {
+        depositor_ = dep;
+    } else if let Ok(dep) = BigUint::from_str_radix(&depositor, 16) {
+        depositor_ = dep;
+    } else {
+        return Err("Invalid depositor".to_string());
+    }
+    hash_inputs.push(&depositor_);
+    hash_inputs.push(&position_address);
+
+    let initial_value = BigUint::from_u64(initial_value).unwrap();
+    hash_inputs.push(&initial_value);
+
+    let vlp_amount = BigUint::from_u64(vlp_amount).unwrap();
+    hash_inputs.push(&vlp_amount);
+
+    let commitment = hash_many(&hash_inputs);
+
+    return Ok(commitment);
+}
+
+pub fn get_close_mm_commitment(
+    mm_action_id: u32,
+    position_address: &BigUint,
+    initial_value_sum: u64,
+    vlp_amount_sum: u64,
+) -> BigUint {
+    // & hash = H({ mm_action_id, position_address, initial_value_sum, vlp_amount_sum})
+    let mut hash_inputs: Vec<&BigUint> = vec![];
+
+    let mm_action_id = BigUint::from_u32(mm_action_id).unwrap();
+    hash_inputs.push(&mm_action_id);
+
+    hash_inputs.push(&position_address);
+
+    let initial_value_sum = BigUint::from_u64(initial_value_sum).unwrap();
+    hash_inputs.push(&initial_value_sum);
+
+    let vlp_amount_sum = BigUint::from_u64(vlp_amount_sum).unwrap();
+    hash_inputs.push(&vlp_amount_sum);
+
+    let commitment = hash_many(&hash_inputs);
+
+    return commitment;
 }

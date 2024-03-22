@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::transaction_batch::{LeafNodeType, CHAIN_IDS};
+use crate::transaction_batch::tx_batch_helpers::CHAIN_IDS;
+use crate::transaction_batch::LeafNodeType;
 use crate::trees::superficial_tree::SuperficialTree;
 use crate::utils::errors::{
     send_deposit_error, DepositThreadExecutionError, TransactionExecutionError,
@@ -12,7 +13,7 @@ use crate::utils::errors::{
 
 use crate::utils::crypto_utils::{hash_many, verify, Signature};
 use crate::utils::storage::backup_storage::BackupStorage;
-use crate::utils::storage::local_storage::MainStorage;
+use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use num_bigint::BigUint;
 use serde_json::Value;
 
@@ -98,20 +99,21 @@ impl Deposit {
                 ));
             }
 
-            // // ? Verify the deposit has not been processed yet
-            // let main_storage_m = main_storage.lock();
-
-            // let is_already_processed = main_storage_m.is_deposit_already_processed(deposit_id);
-            // if is_already_processed {
-            //     return Err(send_deposit_error(
-            //         "deposit has already been processed".to_string(),
-            //         None,
-            //     ));
-            // }
-
-            // // ? store the deposit_id as processed
-            // main_storage_m.store_processed_deposit_id(deposit_id);
-            // drop(main_storage_m);
+            // ? Verify the deposit has been registered
+            let data_commitment = self.get_action_commitment();
+            let main_storage_m = main_storage.lock();
+            if !main_storage_m.does_commitment_exists(
+                OnchainActionType::Deposit,
+                self.deposit_id,
+                &data_commitment,
+            ) {
+                return Err(send_deposit_error(
+                    "deposit not registered".to_string(),
+                    Some(format!("deposit not registered: {}", self.deposit_id)),
+                ));
+            }
+            main_storage_m.remove_onchain_action_commitment(self.deposit_id);
+            drop(main_storage_m);
 
             // * After the deposit is verified to be valid update the state ================ //
 
@@ -180,20 +182,33 @@ impl Deposit {
         }
     }
 
+    fn get_action_commitment(&self) -> BigUint {
+        // & h = H(depositId, starkKey, token, deposit_amount)
+
+        let deposit_commitment = hash_many(&vec![
+            &BigUint::from(self.deposit_id),
+            &self.stark_key,
+            &BigUint::from(self.deposit_token),
+            &BigUint::from(self.deposit_amount),
+        ]);
+
+        deposit_commitment
+    }
+
     fn hash_transaction(&self) -> BigUint {
         let mut note_hashes: Vec<&BigUint> = self.notes.iter().map(|note| &note.hash).collect();
         let deposit_id_bn =
             BigUint::from_str(self.deposit_id.to_string().as_str()).unwrap_or_default();
         note_hashes.push(&deposit_id_bn);
 
-        return hash_many(&note_hashes);
+        hash_many(&note_hashes)
     }
 }
 
 // * Trait Implementation * //
 impl Transaction for Deposit {
     fn transaction_type(&self) -> &str {
-        return self.transaction_type.as_str();
+        self.transaction_type.as_str()
     }
 
     fn execute_transaction(

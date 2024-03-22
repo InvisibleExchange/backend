@@ -7,6 +7,7 @@ use serde_json::Value;
 use firestore_db_and_auth::ServiceSession;
 
 use crate::utils::storage::backup_storage::BackupStorage;
+use crate::utils::storage::local_storage::{MainStorage, OnchainActionType};
 use crate::{
     perpetual::perp_position::PerpPosition, server::grpc::engine_proto::OnChainRemoveLiqReq,
     transaction_batch::LeafNodeType, trees::superficial_tree::SuperficialTree,
@@ -15,6 +16,7 @@ use crate::{
 
 use crate::utils::crypto_utils::Signature;
 
+use super::helpers::mm_helpers::get_remove_liquidity_commitment;
 use super::helpers::{
     json_output::onchain_position_remove_liquidity_json_output,
     mm_helpers::{
@@ -26,6 +28,7 @@ use super::helpers::{
 /// Claim the deposit that was created onchain
 pub fn remove_liquidity_from_order_tab(
     session: &Arc<Mutex<ServiceSession>>,
+    main_storage: &Arc<Mutex<MainStorage>>,
     backup_storage: &Arc<Mutex<BackupStorage>>,
     remove_liquidity_req: OnChainRemoveLiqReq,
     state_tree: &Arc<Mutex<SuperficialTree>>,
@@ -55,8 +58,24 @@ pub fn remove_liquidity_from_order_tab(
         return Err("Invalid Signature".to_string());
     }
 
-    // let is_full_close =
-    //     vlp_amount >= position.vlp_supply - DUST_AMOUNT_PER_ASSET[&COLLATERAL_TOKEN.to_string()];
+    // ? Verify the registration has been registered
+    let data_commitment = get_remove_liquidity_commitment(
+        remove_liquidity_req.mm_action_id,
+        &remove_liquidity_req.depositor,
+        &position.position_header.position_address,
+        remove_liquidity_req.initial_value,
+        remove_liquidity_req.vlp_amount,
+    )?;
+    let main_storage_m = main_storage.lock();
+    if !main_storage_m.does_commitment_exists(
+        OnchainActionType::MMRemoveLiquidity,
+        remove_liquidity_req.mm_action_id as u64,
+        &data_commitment,
+    ) {
+        return Err("MM Registration not registered".to_string());
+    }
+    main_storage_m.remove_onchain_action_commitment(remove_liquidity_req.mm_action_id as u64);
+    drop(main_storage_m);
 
     let return_collateral_amount = get_return_collateral_amount(
         remove_liquidity_req.vlp_amount,
@@ -68,7 +87,7 @@ pub fn remove_liquidity_from_order_tab(
         (return_collateral_amount as i64 - remove_liquidity_req.initial_value as i64) * 20 / 100; // 20% fee
     let mm_fee = std::cmp::max(0, mm_fee) as u64;
 
-    // ? Adding to an existing order tab
+    // ? Remove from an existing order tab
     let prev_position = position;
 
     let mut new_position = prev_position.clone();

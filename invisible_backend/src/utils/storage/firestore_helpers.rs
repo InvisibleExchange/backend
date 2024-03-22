@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use firestore_db_and_auth::{documents, errors::FirebaseError, ServiceSession};
@@ -5,8 +6,14 @@ use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
+use starknet::core::types::FieldElement;
+use starknet::curve::AffinePoint;
 
+use crate::perpetual::perp_position::{
+    get_liquidation_price, PositionHeader, _get_bankruptcy_price, _hash_position,
+};
+use crate::utils::cairo_output::{NoteOutput, OrderTabOutput, PerpPositionOutput};
 use crate::utils::crypto_utils::hash;
 use crate::{order_tab::OrderTab, perpetual::perp_position::PerpPosition, utils::notes::Note};
 
@@ -21,13 +28,11 @@ pub struct FirebaseNoteObject {
     pub hidden_amount: String,
     pub index: String,
     pub token: String,
+    pub hash: String,
 }
 
 impl FirebaseNoteObject {
     pub fn from_note(note: &Note) -> FirebaseNoteObject {
-        // let hash8 = trimHash(yt, 64);
-        // let hiddentAmount = bigInt(amount).xor(hash8).value;
-
         let yt_digits = note.blinding.to_u64_digits();
         let yt_trimmed = if yt_digits.len() == 0 {
             0
@@ -43,6 +48,28 @@ impl FirebaseNoteObject {
             hidden_amount: hidden_amount.to_string(),
             index: note.index.to_string(),
             token: note.token.to_string(),
+            hash: note.hash.to_string(),
+        };
+    }
+
+    pub fn from_note_object(note_output: NoteOutput) -> FirebaseNoteObject {
+        let adddress_point = if note_output.address_x == "0".to_string() {
+            AffinePoint::identity()
+        } else {
+            AffinePoint {
+                x: FieldElement::from_dec_str(&note_output.address_x).unwrap(),
+                y: FieldElement::from_dec_str(&note_output.address_y).unwrap(),
+                infinity: false,
+            }
+        };
+
+        return FirebaseNoteObject {
+            address: [adddress_point.x.to_string(), adddress_point.y.to_string()],
+            commitment: note_output.commitment,
+            hidden_amount: note_output.hidden_amount.to_string(),
+            index: note_output.index.to_string(),
+            token: note_output.token.to_string(),
+            hash: note_output.hash,
         };
     }
 }
@@ -54,14 +81,7 @@ pub fn store_new_note(
 ) {
     let obj = FirebaseNoteObject::from_note(note);
 
-    let write_path = format!("notes");
-    let res = documents::write(
-        session,
-        write_path.as_str(),
-        Some(note.index.to_string()),
-        &obj,
-        documents::WriteOptions::default(),
-    );
+    let res = _store_note_inner(session, obj);
 
     if let Err(e) = res {
         println!("Error storing note in backup storage. ERROR: {:?}", e);
@@ -69,17 +89,38 @@ pub fn store_new_note(
         if let Err(_e) = s.store_note(note) {};
         drop(s);
     }
+}
+
+pub fn store_note_output(session: &ServiceSession, note: NoteOutput) {
+    let obj = FirebaseNoteObject::from_note_object(note);
+
+    let _res = _store_note_inner(session, obj);
+}
+
+fn _store_note_inner(
+    session: &ServiceSession,
+    obj: FirebaseNoteObject,
+) -> Result<documents::WriteResult, FirebaseError> {
+    let write_path = format!("notes");
+    let res = documents::write(
+        session,
+        write_path.as_str(),
+        Some(obj.index.to_string()),
+        &obj,
+        documents::WriteOptions::default(),
+    );
 
     // ? ----------------------------------------
-
-    let write_path = format!("addr2idx/addresses/{}", note.address.x.to_string());
+    let write_path = format!("addr2idx/addresses/{}", obj.address[0].to_string());
     let _res = documents::write(
         session,
         write_path.as_str(),
-        Some(note.index.to_string()),
+        Some(obj.index.to_string()),
         &json!({}),
         documents::WriteOptions::default(),
     );
+
+    return res;
 }
 
 pub fn delete_note_at_address(
@@ -157,6 +198,62 @@ pub fn delete_position_at_address(
     let _r = documents::delete(session, delete_path.as_str(), true);
 }
 
+pub fn store_position_output(
+    session: &ServiceSession,
+    backup_storage: &Arc<Mutex<BackupStorage>>,
+    position_output: PerpPositionOutput,
+) {
+    let position_header = PositionHeader::new(
+        position_output.synthetic_token,
+        position_output.allow_partial_liquidations,
+        BigUint::from_str(&position_output.public_key).unwrap(),
+        position_output.vlp_token,
+    );
+
+    let liquidation_price = get_liquidation_price(
+        position_output.entry_price,
+        position_output.margin,
+        position_output.position_size,
+        &position_output.order_side,
+        position_output.synthetic_token,
+        position_output.allow_partial_liquidations,
+    );
+
+    let bankruptcy_price = _get_bankruptcy_price(
+        position_output.entry_price,
+        position_output.margin,
+        position_output.position_size,
+        &position_output.order_side,
+        position_output.synthetic_token,
+    );
+
+    let hash = _hash_position(
+        &position_header.hash,
+        &position_output.order_side,
+        position_output.position_size,
+        position_output.entry_price,
+        liquidation_price,
+        position_output.last_funding_idx,
+        position_output.vlp_supply,
+    );
+
+    let position = PerpPosition {
+        position_header,
+        margin: position_output.margin,
+        position_size: position_output.position_size,
+        order_side: position_output.order_side.clone(),
+        entry_price: position_output.entry_price,
+        liquidation_price,
+        bankruptcy_price,
+        last_funding_idx: position_output.last_funding_idx,
+        vlp_supply: position_output.vlp_supply,
+        index: position_output.index,
+        hash,
+    };
+
+    store_new_position(session, backup_storage, &position);
+}
+
 pub fn store_new_position(
     session: &ServiceSession,
     backup_storage: &Arc<Mutex<BackupStorage>>,
@@ -228,7 +325,7 @@ pub fn store_new_position(
 // ? Order Tab
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OrderTabObject {
-    pub index: u32,
+    pub index: u64,
     // header
     pub base_token: u32,
     pub quote_token: u32,
@@ -243,9 +340,6 @@ pub struct OrderTabObject {
 
 impl OrderTabObject {
     pub fn from_order_tab(order_tab: &OrderTab) -> Self {
-        // let hash8 = trimHash(yt, 64);
-        // let hiddentAmount = bigInt(amount).xor(hash8).value;
-
         // ? Hide base amount
         let base_yt_digits = order_tab.tab_header.base_blinding.to_u64_digits();
         let base_yt_trimmed = if base_yt_digits.len() == 0 {
@@ -284,6 +378,20 @@ impl OrderTabObject {
             hash: order_tab.hash.to_string(),
         };
     }
+
+    pub fn from_order_tab_output(order_tab_output: OrderTabOutput) -> Self {
+        return OrderTabObject {
+            index: order_tab_output.index,
+            base_token: order_tab_output.base_token,
+            quote_token: order_tab_output.quote_token,
+            pub_key: order_tab_output.public_key,
+            base_commitment: order_tab_output.base_commitment,
+            base_hidden_amount: order_tab_output.base_hidden_amount.to_string(),
+            quote_commitment: order_tab_output.quote_commitment,
+            quote_hidden_amount: order_tab_output.quote_hidden_amount.to_string(),
+            hash: order_tab_output.hash,
+        };
+    }
 }
 
 pub fn store_order_tab(
@@ -293,14 +401,7 @@ pub fn store_order_tab(
 ) {
     let obj = OrderTabObject::from_order_tab(order_tab);
 
-    let write_path = format!("order_tabs",);
-    let res = documents::write(
-        session,
-        write_path.as_str(),
-        Some(order_tab.tab_idx.to_string()),
-        &obj,
-        documents::WriteOptions::default(),
-    );
+    let res = store_order_tab_inner(session, obj);
 
     if let Err(e) = res {
         println!("Error storing note in backup storage. ERROR: {:?}", e);
@@ -308,20 +409,39 @@ pub fn store_order_tab(
         if let Err(_e) = s.store_order_tab(order_tab) {};
         drop(s);
     }
+}
+
+pub fn store_order_tab_output(session: &ServiceSession, order_tab_output: OrderTabOutput) {
+    let obj = OrderTabObject::from_order_tab_output(order_tab_output);
+
+    let _res = store_order_tab_inner(session, obj);
+}
+
+fn store_order_tab_inner(
+    session: &ServiceSession,
+    obj: OrderTabObject,
+) -> Result<documents::WriteResult, FirebaseError> {
+    let write_path = format!("order_tabs",);
+    let res = documents::write(
+        session,
+        write_path.as_str(),
+        Some(obj.index.to_string()),
+        &obj,
+        documents::WriteOptions::default(),
+    );
 
     // ? ----------------------------------------
 
-    let write_path = format!(
-        "addr2idx/addresses/{}",
-        order_tab.tab_header.pub_key.to_string()
-    );
+    let write_path = format!("addr2idx/addresses/{}", obj.pub_key.to_string());
     let _res = documents::write(
         session,
         write_path.as_str(),
-        Some(order_tab.tab_idx.to_string()),
+        Some(obj.index.to_string()),
         &json!({}),
         documents::WriteOptions::default(),
     );
+
+    return res;
 }
 
 pub fn delete_order_tab(

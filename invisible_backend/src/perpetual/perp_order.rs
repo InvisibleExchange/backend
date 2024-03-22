@@ -351,7 +351,7 @@ impl Serialize for OpenOrderFields {
         note.serialize_field("position_address", &self.position_address.to_string())?;
         note.serialize_field(
             "allow_partial_liquidations",
-            &self.allow_partial_liquidations.to_string(),
+            &self.allow_partial_liquidations,
         )?;
 
         return note.end();

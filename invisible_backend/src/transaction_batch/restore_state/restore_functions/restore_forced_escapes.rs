@@ -117,6 +117,7 @@ pub fn restore_forced_position_escape(
     updated_state_hashes.insert(idx, (LeafNodeType::Position, BigUint::zero()));
 
     let new_position_hash = BigUint::from_str(new_position_hash.as_str().unwrap()).unwrap();
+
     state_tree.update_leaf_node(&new_position_hash, new_position_index);
     updated_state_hashes.insert(
         new_position_index,

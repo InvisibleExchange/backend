@@ -63,6 +63,8 @@ function storePerpOrder(db, order_id, orderObject) {
 
 const sqlite3 = require("sqlite3").verbose();
 function initDb() {
+  let promises = [];
+
   const createPerpTableCommand = `
   CREATE TABLE IF NOT EXISTS perpOrders 
     (order_id INTEGER PRIMARY KEY NOT NULL, 
@@ -104,44 +106,83 @@ function initDb() {
     }
   );
 
-  db.run(createSpotTableCommand);
-
-  db.run(createPerpTableCommand);
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createSpotTableCommand, (res, err) => {
+        if (err) {
+          console.log(err);
+          reject(err);
+        }
+        resolve();
+      });
+    })
+  );
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createPerpTableCommand, (res, err) => {
+        if (err) {
+          console.log(err);
+          reject(err);
+        }
+        resolve();
+      });
+    })
+  );
 
   const createSpotLiquidityTableCommand =
     "CREATE TABLE IF NOT EXISTS spotLiquidity (market_id INTEGER PRIMARY KEY UNIQUE NOT NULL, bidQueue TEXT NOT NULL, askQueue TEXT NOT NULL)";
   const createPerpLiquidityTableCommand =
     "CREATE TABLE IF NOT EXISTS perpLiquidity (market_id INTEGER PRIMARY KEY UNIQUE NOT NULL, bidQueue TEXT NOT NULL, askQueue TEXT NOT NULL)";
 
-  db.run(createSpotLiquidityTableCommand, (res, err) => {
-    if (err) {
-      console.log(err);
-    }
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createSpotLiquidityTableCommand, (res, err) => {
+        if (err) {
+          console.log(err);
+        }
 
-    db.run(createPerpLiquidityTableCommand, (res, err) => {
-      if (err) {
-        console.log(err);
-      }
-    });
-  });
+        db.run(createPerpLiquidityTableCommand, (res, err) => {
+          if (err) {
+            console.log(err);
+          }
+
+          resolve();
+        });
+      });
+    })
+  );
 
   const createLiquidationTable =
     "CREATE TABLE IF NOT EXISTS liquidations (position_index INTEGER PRIMARY KEY NOT NULL, position_address TEXT NOT NULL, synthetic_token INTEGER NOT NULL, order_side BIT NOT NULL, liquidation_price INTEGER NOT NULL)";
 
-  db.run(createLiquidationTable, (res, err) => {
-    if (err) {
-      console.log(err);
-    }
-  });
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createLiquidationTable, (res, err) => {
+        if (err) {
+          console.log(err);
+        }
 
-  db.run(
-    `CREATE TABLE IF NOT EXISTS processedDeposits (id INTEGER PRIMARY KEY, pending TEXT, processed TEXT)`,
-    (res, err) => {
-      if (err) {
-        console.log(err);
-      }
-    }
+        resolve();
+      });
+    })
   );
+
+  const createOnchainCommitmentsTable =
+    "CREATE TABLE IF NOT EXISTS onchainCommitments (id INTEGER PRIMARY KEY NOT NULL, action_type INTEGER, data_commitment TEXT, is_processed INTEGER)";
+
+  promises.push(
+    new Promise((resolve, reject) => {
+      db.run(createOnchainCommitmentsTable, (res, err) => {
+        if (err) {
+          console.log(err);
+        }
+
+        resolve();
+      });
+    })
+  );
+
+  Promise.all(promises);
 
   return db;
 }
@@ -201,53 +242,46 @@ function initLiquidity(db) {
   }
 }
 
-function updateStoredDepositIds(db, pendingDeposits, processedDepositIds) {
+function storePendingCommitment(db, commitment) {
   const stmt = db.prepare(
-    "INSERT OR REPLACE INTO processedDeposits (id, pending, processed) VALUES (?, ?, ?)"
+    "INSERT INTO onchainCommitments (id, action_type, data_commitment, is_processed) VALUES ($1, $2, $3, $4)"
   );
 
   stmt.run(
-    1,
-    JSON.stringify(pendingDeposits),
-    JSON.stringify(processedDepositIds)
+    commitment.data_id,
+    commitment.action_type,
+    commitment.data_commitment,
+    0
   );
   stmt.finalize();
 }
 
-async function getProcessedDeposits(db) {
-  let fetching = true;
-  let result = null;
-  db.get(
-    "SELECT pending, processed FROM processedDeposits WHERE id = ?",
-    1,
-    (err, row) => {
+async function getStoredCommitment(db, data_id) {
+  return new Promise((resolve, reject) => {
+    const query = `SELECT * FROM onchainCommitments WHERE id = ${data_id}`;
+
+    db.get(query, [], (err, row) => {
       if (err) {
-        console.error(err.message);
-        result = { pendingDeposits: [], processedDepositIds: [] };
-        fetching = false;
-        return result;
+        reject(err);
+      } else {
+        resolve(row);
       }
-      if (row) {
-        const pendingArray = JSON.parse(row.pending);
-        const processedArray = JSON.parse(row.processed);
+    });
+  });
+}
 
-        result = {
-          pendingDeposits: [...new Set(pendingArray)],
-          processedDepositIds: [...new Set(processedArray)],
-        };
-        fetching = false;
+async function updateStoredCommitment(db, data_id) {
+  return new Promise((resolve, reject) => {
+    const query = `UPDATE onchainCommitments SET is_processed = 1 WHERE id = ${data_id}`;
+
+    db.get(query, [], (err, row) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row);
       }
-
-      fetching = false;
-    }
-  );
-
-  while (fetching) {
-    // sleep for 5 ms
-    await new Promise((r) => setTimeout(r, 5));
-  }
-
-  return result;
+    });
+  });
 }
 
 module.exports = {
@@ -255,6 +289,7 @@ module.exports = {
   initLiquidity,
   storeSpotOrder,
   storePerpOrder,
-  updateStoredDepositIds,
-  getProcessedDeposits,
+  storePendingCommitment,
+  getStoredCommitment,
+  updateStoredCommitment,
 };

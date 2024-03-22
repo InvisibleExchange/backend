@@ -59,11 +59,20 @@ pub fn restore_open_order_tab(
         updated_state_hashes.insert(idx, (LeafNodeType::Note, note_out_hash));
     }
 
+    let add_only = transaction.get("add_only").unwrap().as_bool().unwrap();
+
     // ? Order tab
     let order_tab = transaction.get("order_tab").unwrap();
     let idx: u64 = order_tab.get("tab_idx").unwrap().as_u64().unwrap();
-    let tab_hash = order_tab.get("hash").unwrap().as_str().unwrap();
-    let tab_hash = BigUint::from_str(tab_hash).unwrap();
+
+    let tab_hash;
+    if add_only {
+        let tab_hash_ = transaction.get("updated_tab_hash").unwrap();
+        tab_hash = BigUint::from_str(tab_hash_.as_str().unwrap()).unwrap();
+    } else {
+        let tab_hash_ = order_tab.get("hash").unwrap().as_str().unwrap();
+        tab_hash = BigUint::from_str(tab_hash_).unwrap();
+    }
 
     state_tree.update_leaf_node(&tab_hash, idx);
     updated_state_hashes.insert(idx, (LeafNodeType::OrderTab, tab_hash));
@@ -112,7 +121,11 @@ pub fn restore_close_order_tab(
     // ? Order tab
     let order_tab = transaction.get("order_tab").unwrap();
     let idx: u64 = order_tab.get("tab_idx").unwrap().as_u64().unwrap();
-    let updated_tab_hash = order_tab.get("updated_tab_hash").unwrap().as_str().unwrap();
+    let updated_tab_hash = transaction
+        .get("updated_tab_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
     let updated_tab_hash = BigUint::from_str(updated_tab_hash).unwrap();
 
     state_tree.update_leaf_node(&updated_tab_hash, idx);

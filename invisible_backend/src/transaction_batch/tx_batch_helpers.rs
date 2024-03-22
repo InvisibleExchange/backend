@@ -24,6 +24,9 @@ use super::{
     LeafNodeType,
 };
 
+// { ETH Mainnet: 40161, Arbitrum: 40231 }
+pub const CHAIN_IDS: [u32; 2] = [40161, 40231];
+
 // * HELPERS * //
 
 /// Initialize a map with the default values for all tokens
@@ -84,21 +87,33 @@ pub fn get_final_updated_counts(
 
         match transaction_type {
             "deposit" => {
-                n_deposits += 1;
+                let deposit_id = transaction
+                    .get("deposit")
+                    .unwrap()
+                    .get("deposit_id")
+                    .unwrap()
+                    .as_u64()
+                    .unwrap();
+                let chain_id = (deposit_id / 2u64.pow(32)) as u32;
+
+                if chain_id == CHAIN_IDS[0] {
+                    n_deposits += 1;
+                }
             }
             "withdrawal" => {
-                n_withdrawals += 1;
+                let chain_id = transaction
+                    .get("withdrawal")
+                    .unwrap()
+                    .get("chain_id")
+                    .unwrap()
+                    .as_u64()
+                    .unwrap();
+
+                if chain_id == CHAIN_IDS[0] as u64 {
+                    n_withdrawals += 1;
+                }
             }
-            "onchain_register_mm" => {
-                n_onchain_mm_actions += 1;
-            }
-            "add_liquidity" => {
-                n_onchain_mm_actions += 1;
-            }
-            "remove_liquidity" => {
-                n_onchain_mm_actions += 1;
-            }
-            "close_mm_position" => {
+            "onchain_mm_action" => {
                 n_onchain_mm_actions += 1;
             }
             "forced_escape" => match transaction.get("escape_type").unwrap().as_str().unwrap() {
@@ -303,7 +318,7 @@ pub fn add_margin_state_updates(
     tree.update_leaf_node(&new_position_hash, position_index);
     updated_state_hashes.insert(
         position_index,
-        (LeafNodeType::Note, new_position_hash.clone()),
+        (LeafNodeType::Position, new_position_hash.clone()),
     );
 
     drop(tree);
@@ -399,8 +414,7 @@ pub fn _calculate_funding_rates(
     for t in SYNTHETIC_ASSETS {
         let twap_sum = running_funding_tick_sums.remove(&t).unwrap_or(0);
 
-        // TODO: let funding_premium = twap_sum / 60; // divide by 60 to get the average funding premium
-        let funding_premium = twap_sum / 1;
+        let funding_premium = twap_sum / 60; // divide by 60 to get the average funding premium
         funding_rates.insert(t, funding_premium / 8); // scale to a realization period of 8 hours
     }
 

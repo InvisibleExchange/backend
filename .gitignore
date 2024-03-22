@@ -1,7 +1,6 @@
 node_modules
 
-relay_server/node_modules
-relay_server/napi.txt
+
 
 .vscode
 
@@ -45,6 +44,12 @@ invisible_solidity/todos.txt
 
 relay_server/src/helpers/firebase
 !relay_server/src/helpers/firebase/firebaseConnection.js
+relay_server/src/helpers/firebase/dex_state.json
+relay_server/src/helpers/firebase/db_state.json
+
+relay_server/node_modules
+relay_server/napi.txt
+
 
 relay_server/src/orderBooks.db
 relay_server/src/.env

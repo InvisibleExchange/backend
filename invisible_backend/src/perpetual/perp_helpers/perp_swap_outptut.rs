@@ -36,8 +36,8 @@ impl PerpSwapOutput<'_> {
         prev_position_b: &Option<PerpPosition>,
         new_position_hash_a: &Option<String>,
         new_position_hash_b: &Option<String>,
-        position_index_a: u32,
-        position_index_b: u32,
+        position_index_a: u64,
+        position_index_b: u64,
         new_pfr_idx_a: u64,
         new_pfr_idx_b: u64,
         return_collateral_idx_a: u64,
@@ -173,7 +173,7 @@ pub struct TxExecutionThreadOutput {
     pub new_pfr_info: (Option<Note>, u64, u64), // info about the new partial fill (pfr note, amount_filled, collateral_left)
     pub is_fully_filled: bool,                  // whether the order was fully filled
     pub prev_funding_idx: u32, // Index of the last time funding was applied to this position
-    pub position_index: u32,   // index of the modified position in the perp_state_tree
+    pub position_index: u64,   // index of the modified position in the perp_state_tree
     pub position: Option<PerpPosition>, // The position after being modified
     pub prev_position: Option<PerpPosition>, // The position before being modified
     pub collateral_returned: u64, // amount of collateral returned when closing a position

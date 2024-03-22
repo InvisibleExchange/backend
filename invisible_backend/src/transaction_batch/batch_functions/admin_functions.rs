@@ -91,7 +91,6 @@ pub fn _per_minute_funding_updates(
     *current_funding_count += 1;
 
     // ? 1 hour realization/settlement period
-    // TODO if *current_funding_count == 60 {
     if *current_funding_count == 60 {
         let fundings = _calculate_funding_rates(running_funding_tick_sums);
 
