@@ -104,7 +104,7 @@ pub fn get_final_updated_counts(
                 let chain_id = transaction
                     .get("withdrawal")
                     .unwrap()
-                    .get("withdrawal_chain")
+                    .get("chain_id")
                     .unwrap()
                     .as_u64()
                     .unwrap();

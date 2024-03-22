@@ -1,9 +1,9 @@
-const WebSocket = require("ws");
-// const fetch = require("node-fetch");
 const axios = require("axios");
 
+const ethers = require("ethers");
 const path = require("path");
 const dotenv = require("dotenv");
+
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
 const MM_CONFIG = [
@@ -161,10 +161,49 @@ async function fetchCoinCapPrices(PRICE_FEEDS) {
   //
 }
 
+const exchange_config = require("../../../exchange-config.json");
+
+const DECIMALS_PER_ASSET = exchange_config["DECIMALS_PER_ASSET"];
+const COLLATERAL_TOKEN_DECIMALS = exchange_config["COLLATERAL_TOKEN_DECIMALS"];
+const SYMBOLS_TO_IDS = exchange_config["SYMBOLS_TO_IDS"];
+
+// * Get gas price in token
+function getGasFeeInToken(token, gasPriceGwei, PRICE_FEEDS) {
+  if (token == SYMBOLS_TO_IDS["ETH"]) {
+    let ethFeeWei = BigInt(21000) * BigInt(gasPriceGwei);
+    let ethFee = Number(ethers.formatUnits(ethFeeWei, "ether"));
+
+    let ethDecimals = DECIMALS_PER_ASSET[token];
+    return ethers.parseUnits(ethFee.toFixed(ethDecimals), ethDecimals);
+  } else if (token == SYMBOLS_TO_IDS["BTC"]) {
+    let ethFeeWei = BigInt(100000) * BigInt(gasPriceGwei);
+    let ethFee = Number(ethers.formatUnits(ethFeeWei, "ether"));
+
+    let ethPrice = PRICE_FEEDS["ETH"].price;
+    let btcPrice = PRICE_FEEDS["BTC"].price;
+
+    let btcFee = (ethFee * ethPrice) / btcPrice;
+
+    let btcDecimals = DECIMALS_PER_ASSET[token];
+    return ethers.parseUnits(btcFee.toFixed(btcDecimals), btcDecimals);
+  } else {
+    let ethFeeWei = BigInt(100000) * BigInt(gasPriceGwei);
+    let ethFee = Number(ethers.formatUnits(ethFeeWei, "ether"));
+
+    let ethPrice = PRICE_FEEDS["ETH"].price;
+
+    let usdcFee = ethFee * ethPrice;
+
+    let usdcDecimals = COLLATERAL_TOKEN_DECIMALS;
+    return ethers.parseUnits(usdcFee.toFixed(usdcDecimals), usdcDecimals);
+  }
+}
+
 // fetchCoinmarketCapPrices({});
 // fetchCoinGeckoPrices({});
 // fetchCoinCapPrices({});
 
 module.exports = {
   priceUpdate,
+  getGasFeeInToken,
 };

@@ -11,11 +11,7 @@
     "2413654107": "USDC",
     "277158171": "SOL"
   },
-  "CHAIN_IDS": {
-    "ETH Mainnet": 9090909,
-    "Starknet": 7878787,
-    "ZkSync": 5656565
-  },
+  "CHAIN_IDS": {},
   "DECIMALS_PER_ASSET": {
     "3592681469": 8,
     "453755560": 8,

@@ -204,9 +204,12 @@ impl TryFrom<WithdrawalMessage> for Withdrawal {
 
         let withdrawal = Withdrawal {
             transaction_type: "withdrawal".to_string(),
-            withdrawal_chain_id: req.withdrawal_chain_id,
-            withdrawal_token: req.withdrawal_token,
-            withdrawal_amount: req.withdrawal_amount,
+            withdrawal_id: req.withdrawal_id,
+            chain_id: req.chain_id,
+            token: req.token,
+            amount: req.amount,
+            max_gas_fee: req.max_gas_fee,
+            execution_gas_fee: req.execution_gas_fee,
             notes_in,
             refund_note,
             signature: Signature::try_from(req.signature.ok_or(GrpcMessageError {})?)?,

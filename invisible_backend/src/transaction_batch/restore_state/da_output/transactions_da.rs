@@ -123,9 +123,17 @@ pub fn withdrawal_da_output(
         append_note_output(updated_state_hashes, note_outputs, &refund_note);
     }
 
+    let is_automatic = transaction
+        .get("execution_gas_fee")
+        .unwrap()
+        .as_u64()
+        .unwrap()
+        > 0;
+
     // * Update accumulated withdrawals * //
     _update_output_withdrawals(
         withdrawal,
+        is_automatic,
         withdrawal_outputs,
         accumulated_withdrawal_hashes,
     );

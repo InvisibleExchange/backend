@@ -449,6 +449,12 @@ impl TransactionBatch {
 
         // * =================================================================
 
+        // let main_storage_m = self.main_storage.lock();
+        // let batch_transition_info = main_storage_m
+        //     .read_batch_transition_info(main_storage_m.latest_batch)
+        //     .unwrap();
+        // drop(main_storage_m);
+
         // TODO: This requires spinning up a spot instances on aws to handle the load
         _transition_state(&self.main_storage, batch_transition_info)?;
 

@@ -71,10 +71,10 @@ const escapeVerifierContract = new ethers.Contract(
 
 function initListeners(db) {
   // ? Listen and handle onchain deposits
-  listenForDeposits(db, client, invisibleL1Contract);
+  listenForDeposits(db, client, invisibleL1Contract, true);
 
   // ? Listen and handle L2 onchain deposits
-  listenForDeposits(db, client, invisibleL2Contract);
+  listenForDeposits(db, client, invisibleL2Contract, false);
 
   // ? Listen and handle onchain escapes
   listenForEscapes(db, client, escapeVerifierContract);
@@ -83,6 +83,17 @@ function initListeners(db) {
   listenForMMActions(db, client, invisibleL1Contract);
 }
 
+async function getGasPrice(chainId) {
+  // TODO: This should get somekind of a moving average
+
+  if (chainId == 40161) {
+    return (await provider.getFeeData()).gasPrice;
+  } else if (chainId == 40231) {
+    return (await arbProvider.getFeeData()).gasPrice;
+  }
+}
+
 module.exports = {
   initListeners,
+  getGasPrice,
 };

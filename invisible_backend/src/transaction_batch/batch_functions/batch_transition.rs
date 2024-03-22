@@ -166,7 +166,7 @@ pub fn _transition_state(
     );
 
     // ? Update the merkle trees and get the new roots and preimages
-    let (prev_spot_root, new_spot_root, preimage_json) =
+    let (prev_state_root, new_state_root, preimage_json) =
         update_trees(batch_transition_info.updated_state_hashes)?;
 
     // ? Construct the global state and config
@@ -176,8 +176,8 @@ pub fn _transition_state(
         .as_secs() as u32;
     let global_dex_state: GlobalDexState = GlobalDexState::new(
         batch_transition_info.current_batch_index,
-        &prev_spot_root,
-        &new_spot_root,
+        &prev_state_root,
+        &new_state_root,
         TREE_DEPTH,
         global_expiration_timestamp,
         program_input_counts,
@@ -365,7 +365,7 @@ fn store_da_data_output(
 pub fn update_trees(
     updated_state_hashes: HashMap<u64, (LeafNodeType, BigUint)>,
 ) -> Result<(BigUint, BigUint, Map<String, Value>), BatchFinalizationError> {
-    // * UPDATE SPOT TREES  -------------------------------------------------------------------------------------
+    // * UPDATE STATE TREES  -------------------------------------------------------------------------------------
     let mut updated_root_hashes: HashMap<u64, BigUint> = HashMap::new(); // the new roots of all tree partitions
 
     let mut preimage_json: Map<String, Value> = Map::new();
@@ -388,10 +388,10 @@ pub fn update_trees(
     }
 
     // ? use the newly generated roots to update the state tree
-    let (prev_spot_root, new_spot_root) =
+    let (prev_state_root, new_state_root) =
         tree_partition_update(updated_root_hashes, &mut preimage_json, u32::MAX)?;
 
-    Ok((prev_spot_root, new_spot_root, preimage_json))
+    Ok((prev_state_root, new_state_root, preimage_json))
 }
 
 fn tree_partition_update(

@@ -182,7 +182,7 @@ fn restore_after_swap_later_fills(
 }
 
 // * =========================================================================================================================
-// *  DEPOSITS/ WITHDRAWALS RESTORE FUNCTIONS ================================================================================
+// *  DEPOSITS/WITHDRAWALS RESTORE FUNCTIONS ================================================================================
 
 pub fn restore_deposit_update(
     tree_m: &Arc<Mutex<SuperficialTree>>,

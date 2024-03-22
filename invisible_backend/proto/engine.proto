@@ -110,8 +110,6 @@ message SpotNotesInfoMessage {
     GrpcNote refund_note = 4;
 }
 
-
-
 message OrderResponse {
     bool successful = 1;
     uint64 order_id = 2; // new order id
@@ -155,13 +153,16 @@ message AmendOrderResponse {
 // ------ WITHDRAWAL --------------
 
 message WithdrawalMessage {
-    uint32 withdrawal_chain_id = 1;
-    uint32 withdrawal_token = 2;
-    uint64 withdrawal_amount = 3;
-    string recipient = 4;
-    repeated GrpcNote notes_in = 5;
-    GrpcNote refund_note = 6;
-    Signature signature = 7;
+    uint64 withdrawal_id = 1;
+    uint32 chain_id = 2;
+    uint32 token = 3;
+    uint64 amount = 4;
+    string recipient = 5;
+    uint64 max_gas_fee = 6;
+    repeated GrpcNote notes_in = 7;
+    GrpcNote refund_note = 8;
+    Signature signature = 9;
+    uint64 execution_gas_fee = 10;
 } 
 
 

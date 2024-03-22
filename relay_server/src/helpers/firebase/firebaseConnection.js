@@ -15,7 +15,7 @@ const {
   where,
   query,
 } = require("firebase/firestore/lite");
-const { firebaseConfig } = require("./firebaseAdminConfig");
+const { firebaseConfig, db: adminDb } = require("./firebaseAdminConfig");
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -85,9 +85,93 @@ async function removeMMAction(mmActionId) {
   await deleteDoc(mmActionDoc);
 }
 
+async function updatePendingWithdrawals(isL1) {
+  let withdrawals = adminDb.collection(
+    `withdrawals/${isL1 ? "L1" : "L2"}/pending`
+  );
+  let docs = await withdrawals.listDocuments();
+
+  let manualWithdrawals = {};
+  let futures = [];
+  docs.forEach(async (doc) => {
+    let f = doc.get().then((doc) => {
+      let withdrawalId = doc.id;
+      let withdrawalData = doc.data();
+
+      if (!withdrawalData.is_automatic) {
+        manualWithdrawals[withdrawalId] = withdrawalData;
+      }
+    });
+
+    futures.push(f);
+  });
+
+  await Promise.all(futures);
+
+  deleteCollection(`withdrawals/${isL1 ? "L1" : "L2"}/pending`);
+
+  let historyWithdrawals = adminDb.collection(
+    `withdrawals/${isL1 ? "L1" : "L2"}/history`
+  );
+
+  futures = [];
+  for (const [withdrawalId, withdrawalData] of Object.entries(
+    manualWithdrawals
+  )) {
+    let docRef = historyWithdrawals.doc(withdrawalId);
+
+    let f = docRef.set(withdrawalData);
+    futures.push(f);
+  }
+
+  await Promise.all(futures);
+}
+
+async function deleteCollection(collectionPath) {
+  const collectionRef = adminDb.collection(collectionPath);
+  const documents = await collectionRef.listDocuments();
+
+  const chunks = [];
+  for (let i = 0; i < documents.length; i += 500) {
+    chunks.push(documents.slice(i, i + 500));
+  }
+
+  for (const chunk of chunks) {
+    const batch = adminDb.batch();
+    chunk.forEach((document) => {
+      batch.delete(document);
+    });
+    await batch.commit();
+  }
+}
+
+async function incrementOrSetDocumentField(docRef, fieldToUpdate, incrementBy) {
+  try {
+    const docSnapshot = await docRef.get();
+
+    if (docSnapshot.exists) {
+      // Document exists, increment the field
+      const currentValue = docSnapshot.data()[fieldToUpdate] || 0;
+      await docRef.update({
+        [fieldToUpdate]: currentValue + incrementBy,
+      });
+    } else {
+      // Document doesn't exist, create a new one with the initial value
+      await docRef.set({
+        [fieldToUpdate]: incrementBy,
+      });
+    }
+  } catch (error) {
+    console.error("Error updating or creating document:", error);
+  }
+}
+
 module.exports = {
   getLastDayTrades,
   storeOnchainDeposit,
   storeMMAction,
   removeMMAction,
+  updatePendingWithdrawals,
 };
+
+updatePendingWithdrawals(true);

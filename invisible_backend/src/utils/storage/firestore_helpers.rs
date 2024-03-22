@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use starknet::core::types::FieldElement;
 use starknet::curve::AffinePoint;
 

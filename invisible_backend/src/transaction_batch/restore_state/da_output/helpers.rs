@@ -225,27 +225,17 @@ pub struct WithdrawalRequest {
     pub token_id: u32,
     pub amount: u64,
     pub recipient: String,
+    pub is_automatic: bool,
 }
 pub fn _update_output_withdrawals(
     withdrawal: &Value,
+    is_automatic: bool,
     withdrawal_outputs: &mut HashMap<u32, Vec<WithdrawalRequest>>,
     accumulated_withdrawal_hashes: &mut HashMap<u32, BigUint>,
 ) {
-    let chain_id = withdrawal
-        .get("withdrawal_chain")
-        .unwrap()
-        .as_u64()
-        .unwrap() as u32;
-    let token_id = withdrawal
-        .get("withdrawal_token")
-        .unwrap()
-        .as_u64()
-        .unwrap() as u32;
-    let amount = withdrawal
-        .get("withdrawal_amount")
-        .unwrap()
-        .as_u64()
-        .unwrap();
+    let chain_id = withdrawal.get("chain_id").unwrap().as_u64().unwrap() as u32;
+    let token_id = withdrawal.get("token").unwrap().as_u64().unwrap() as u32;
+    let amount = withdrawal.get("amount").unwrap().as_u64().unwrap();
 
     let recipient = withdrawal.get("recipient").unwrap().as_str().unwrap();
 
@@ -255,6 +245,7 @@ pub fn _update_output_withdrawals(
         token_id,
         amount,
         recipient: recipient.to_string(),
+        is_automatic,
     };
 
     let with_outputs = withdrawal_outputs.get_mut(&chain_id);

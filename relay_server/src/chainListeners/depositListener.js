@@ -7,11 +7,12 @@ const {
 } = require("../helpers/localStorage");
 const {
   storeOnchainDeposit,
+  updatePendingWithdrawals,
 } = require("../helpers/firebase/firebaseConnection");
 
 const { getDepositCommitment } = require("./dataCommitment");
 
-function listenForDeposits(db, client, invisibleContract) {
+function listenForDeposits(db, client, invisibleContract, isL1) {
   invisibleContract.on(
     "DepositEvent",
     async (depositId, pubKey, tokenId, depositAmountScaled, timestamp) => {
@@ -47,7 +48,10 @@ function listenForDeposits(db, client, invisibleContract) {
     }
   );
 
-  // TODO: LISTEN FOR DEPOSIT CANCELLATIONS
+  // * Listen for processed withdrawals
+  invisibleContract.on("ProcessedWithdrawals", async (timestamp, txBatchId) => {
+    await updatePendingWithdrawals(isL1);
+  });
 }
 
 async function isDepositValid(deposit, db) {
@@ -55,7 +59,7 @@ async function isDepositValid(deposit, db) {
 
   let storedCommitment = await getStoredCommitment(
     db,
-    BigInt(deposit.deposit_id) % 2n ** 32n
+    BigInt(deposit.deposit_id)
   );
 
   if (!storedCommitment) return false;
@@ -67,7 +71,7 @@ async function isDepositValid(deposit, db) {
 }
 
 async function depositProcessedCallback(db, depositId) {
-  return updateStoredCommitment(db, BigInt(depositId) % 2n ** 32n);
+  return updateStoredCommitment(db, BigInt(depositId));
 }
 
 module.exports = {
