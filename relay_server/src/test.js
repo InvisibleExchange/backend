@@ -1,6 +1,9 @@
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
 const { getLastDayTrades } = require("./helpers/firebase/firebaseConnection");
+const {
+  fetchAndCompareDbAndBackendStates,
+} = require("./helpers/firebase/compareStates");
 
 const packageDefinition = protoLoader.loadSync(
   "../../invisible_backend/proto/engine.proto",
@@ -53,32 +56,7 @@ async function getFundingInfo() {
 
 // ===========================
 async function updateInconsistentState() {
-  let invalid_indexes = [
-    "0",
-    "1",
-    "2",
-    "2",
-    "3",
-    "3",
-    "4",
-    "4",
-    "5",
-    "5",
-    "6",
-    "6",
-    "7",
-    "7",
-    "8",
-    "8",
-    "9",
-    "9",
-    "10",
-    "10",
-    "11",
-    "11",
-    "12",
-    "12",
-  ];
+  let invalid_indexes = ["0", "4"];
 
   client.update_invalid_state_indexes(
     {
@@ -97,6 +75,8 @@ async function updateInconsistentState() {
 // ===========================
 
 finalizeBatch();
+
+// fetchAndCompareDbAndBackendStates();
 
 // updateInconsistentState();
 
