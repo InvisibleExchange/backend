@@ -53,7 +53,7 @@ impl Withdrawal {
         backup_storage: &Arc<Mutex<BackupStorage>>,
     ) -> Result<(), WithdrawalThreadExecutionError> {
         let withdrawal_handle = thread::scope(move |_s| {
-            if self.max_gas_fee < self.execution_gas_fee && self.execution_gas_fee != 0 {
+            if self.max_gas_fee < self.execution_gas_fee && self.max_gas_fee != 0 {
                 return Err(send_withdrawal_error(
                     "Gas fee exceeds max gas fee".to_string(),
                     None,
@@ -111,6 +111,9 @@ impl Withdrawal {
             drop(tree);
             drop(updated_state_hashes);
 
+            // ? Update the database
+            update_db_after_withdrawal(&session, &backup_storage, &self, self.execution_gas_fee);
+
             let mut json_map = serde_json::map::Map::new();
             json_map.insert(
                 String::from("transaction_type"),
@@ -142,9 +145,6 @@ impl Withdrawal {
             .or_else(|err| Err(err))?;
 
         println!("Withdrawal executed successfully");
-
-        // ? Update the database
-        update_db_after_withdrawal(&session, &backup_storage, &self, self.execution_gas_fee);
 
         Ok(())
     }

@@ -19,13 +19,21 @@ function listenForMMActions(db, client, invisibleL1Contract) {
       mm_owner,
       synthetic_asset,
       position_address,
-      max_vlp_supply,
       vlp_token,
       mmActionId
     ) => {
       mmActionId = mmActionId.toString();
 
+      console.log("newPerpMMRegistration", {
+        mm_owner,
+        synthetic_asset,
+        position_address,
+        vlp_token,
+        mmActionId,
+      });
+
       let storedCommitment = await getStoredCommitment(db, mmActionId);
+      console.log("storedCommitment", storedCommitment);
       if (storedCommitment) return;
 
       let commitment = getRegisterMMCommitment(
@@ -48,7 +56,6 @@ function listenForMMActions(db, client, invisibleL1Contract) {
               mm_owner,
               synthetic_asset,
               position_address,
-              max_vlp_supply,
               vlp_token,
               action_id: mmActionId,
               action_type: "register_mm",
@@ -214,8 +221,8 @@ async function isMMAddLiquidityValid(db, addLiqReq) {
   let commitment = getAddLiquidityCommitment(
     addLiqReq.mm_action_id,
     addLiqReq.depositor,
-    addLiqReq.position_address,
-    addLiqReq.usdc_amount
+    addLiqReq.position.position_header.position_address,
+    addLiqReq.initial_value
   );
 
   return isMMActionCommitmentValid(db, addLiqReq.mm_action_id, commitment);
@@ -225,7 +232,7 @@ async function isMMRemoveLiquidityValid(db, removeLiqReq) {
   let commitment = getRemoveLiquidityCommitment(
     removeLiqReq.mm_action_id,
     removeLiqReq.depositor,
-    removeLiqReq.position_address,
+    removeLiqReq.position.position_header.position_address,
     removeLiqReq.initial_value,
     removeLiqReq.vlp_amount
   );
@@ -236,9 +243,9 @@ async function isMMRemoveLiquidityValid(db, removeLiqReq) {
 async function isCloseMMValid(db, closeMMReq) {
   let commitment = getCloseMMCommitment(
     closeMMReq.mm_action_id,
-    closeMMReq.position_address,
-    removeLiqReq.initial_value_sum,
-    removeLiqReq.vlp_amount_sum
+    closeMMReq.position.position_header.position_address,
+    closeMMReq.initial_value_sum,
+    closeMMReq.vlp_amount_sum
   );
 
   return isMMActionCommitmentValid(db, closeMMReq.mm_action_id, commitment);
