@@ -1,10 +1,8 @@
-# Invisibl3
+# Invisible
 
-![zigzag](https://user-images.githubusercontent.com/57314871/154353264-211a4030-8f5d-4aa8-878f-f654fa242589.png)
+<!-- ![zigzag](https://user-images.githubusercontent.com/57314871/154353264-211a4030-8f5d-4aa8-878f-f654fa242589.png) -->
 
 
-
----
 
 ## **Description**:
 An app specific rollup exchange natively incorporating private transactions, achieving the high throughput and privacy of centralised exchanges while retaining the permissionless and self-custodial nature of Defi.
